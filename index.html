@@ -15,10 +15,11 @@
 <meta name="description" content="Personal training and nutrition tracker">
 
 <!-- App icons -->
-<link rel="apple-touch-icon" sizes="180x180" href="Assets/Divinify_DV%20-%20Gold.png">
-<link rel="apple-touch-icon" href="Assets/Divinify_DV%20-%20Gold.png">
-<link rel="icon" type="image/png" href="Assets/Divinify_DV%20-%20Gold.png">
-<link rel="shortcut icon" href="Assets/Divinify_DV%20-%20Gold.png">
+<link rel="apple-touch-icon" sizes="180x180" href="Assets/app-icon-180.png">
+<link rel="apple-touch-icon" href="Assets/app-icon-180.png">
+<link rel="icon" type="image/png" sizes="32x32" href="Assets/app-icon-32.png">
+<link rel="icon" type="image/png" sizes="512x512" href="Assets/app-icon-512.png">
+<link rel="shortcut icon" href="Assets/app-icon-180.png">
 
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -90,7 +91,7 @@
   --t-bouncy:cubic-bezier(0.34,1.56,0.64,1);
 }
 
-html,body{overscroll-behavior:none}
+html{height:100%}
 body{
   background:var(--bg);
   color:var(--text);
@@ -101,7 +102,11 @@ body{
   font-size:15px;
   letter-spacing:-0.01em;
   transition:background 0.3s var(--t-fast),color 0.3s var(--t-fast);
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior-y:auto;
 }
+/* internal scrollers (e.g. day pills) shouldn't trigger page bounce */
+.pill-tabs{overscroll-behavior-x:contain}
 .serif{font-family:'Instrument Serif',serif;letter-spacing:-0.02em}
 .mono{font-family:'JetBrains Mono',monospace;letter-spacing:-0.02em}
 
@@ -312,11 +317,25 @@ input::placeholder{color:var(--text-4);font-weight:400}
 .pill.active small{color:var(--accent-text);opacity:0.85}
 
 .ex-row{
-  padding:18px 0;
-  border-bottom:1px solid var(--border);
+  background:var(--surface);
+  border:1px solid var(--border-strong);
+  border-radius:var(--r-lg);
+  padding:16px 18px 18px;
+  margin-bottom:12px;
+  background-image:var(--grad-card);
+  box-shadow:var(--shadow-sm);
+  position:relative;
 }
-.ex-row:last-child{border-bottom:none;padding-bottom:0}
-.ex-row:first-child{padding-top:4px}
+.ex-row::before{
+  content:'';
+  position:absolute;
+  left:0;top:18px;bottom:18px;
+  width:3px;
+  background:var(--accent);
+  border-radius:0 3px 3px 0;
+  opacity:0.6;
+}
+.ex-row:last-child{margin-bottom:0}
 .ex-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:6px}
 .ex-name{font-size:16px;font-weight:700;letter-spacing:-0.01em;line-height:1.25;flex:1}
 .ex-rest{
@@ -402,12 +421,16 @@ input::placeholder{color:var(--text-4);font-weight:400}
   font-weight:500;
 }
 .hiit-row{
-  display:flex;gap:14px;align-items:flex-start;
+  display:flex;gap:12px;align-items:center;
   padding:14px 0;
   border-bottom:1px solid var(--border);
+  transition:opacity 0.2s var(--t-fast);
 }
 .hiit-row:last-child{border-bottom:none;padding-bottom:0}
 .hiit-row:first-child{padding-top:0}
+.hiit-row.done .hiit-name{color:var(--text-4);text-decoration:line-through}
+.hiit-row.done .hiit-detail{color:var(--text-4)}
+.hiit-row.done .hiit-num{color:var(--done)}
 .hiit-num{
   font-family:'Instrument Serif',serif;
   font-size:22px;
@@ -968,7 +991,7 @@ const STORAGE_KEY = 'carter_training_v1';
 
 let state = {
   startDate:null,foodLog:{},setLog:{},weights:[],workoutsCompleted:[],prs:{},theme:'dark',
-  customExercises:{},customHiit:{},meals:null
+  customExercises:{},customHiit:{},meals:null,hiitLog:{}
 };
 
 function todayKey(){return new Date().toISOString().split('T')[0]}
@@ -991,6 +1014,7 @@ function load(){
     if(!state.theme) state.theme='dark';
     if(!state.customExercises) state.customExercises={};
     if(!state.customHiit) state.customHiit={};
+    if(!state.hiitLog) state.hiitLog={};
     if(!state.meals||!Array.isArray(state.meals)) state.meals=JSON.parse(JSON.stringify(DEFAULT_MEALS));
     save();
     applyTheme();
@@ -1166,6 +1190,19 @@ function removeHiitItem(dayIdx, idx){
   setDayHiit(dayIdx, current);
   renderWorkoutContent();
 }
+function isHiitDone(dayIdx, name){
+  const dk = todayKey();
+  return !!state.hiitLog?.[dk]?.[dayIdx]?.[name];
+}
+function toggleHiitDone(dayIdx, name){
+  const dk = todayKey();
+  if(!state.hiitLog) state.hiitLog={};
+  if(!state.hiitLog[dk]) state.hiitLog[dk]={};
+  if(!state.hiitLog[dk][dayIdx]) state.hiitLog[dk][dayIdx]={};
+  state.hiitLog[dk][dayIdx][name] = !state.hiitLog[dk][dayIdx][name];
+  save();
+  renderWorkoutContent();
+}
 
 // ----- Meal template editor -----
 let mealEditIdx = null;
@@ -1232,7 +1269,6 @@ function renderWorkoutContent(){
   } else {
     if(day.exercises.length){
       html+=`<div class="section-label" style="margin-bottom:10px">Lifting · ${day.desc}</div>`;
-      html+=`<div class="card">`;
       day.exercises.forEach((ex,ei)=>{
         if(!dayLog[ei]) dayLog[ei]={};
         const currentName = getExName(activeDay, ei);
@@ -1272,7 +1308,6 @@ function renderWorkoutContent(){
         }
         html+=`</div>`;
       });
-      html+=`</div>`;
     }
 
     const dayHiit = getDayHiit(activeDay);
@@ -1285,9 +1320,14 @@ function renderWorkoutContent(){
         html+=`<div style="color:var(--text-4);font-size:13px;padding:8px 0;text-align:center">No HIIT selected for today</div>`;
       } else {
         dayHiit.forEach((h,i)=>{
-          html+=`<div class="hiit-row">
+          const done = isHiitDone(activeDay, h.name);
+          const safeName = h.name.replace(/'/g,"\\'");
+          html+=`<div class="hiit-row ${done?'done':''}">
             <div class="hiit-num">${String(i+1).padStart(2,'0')}</div>
             <div style="flex:1;min-width:0"><div class="hiit-name">${h.name}</div><div class="hiit-detail">${h.detail}</div></div>
+            <button class="set-check ${done?'done':''}" title="Mark complete" onclick="toggleHiitDone(${activeDay},'${safeName}')">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            </button>
             <button class="icon-btn danger" title="Remove" onclick="removeHiitItem(${activeDay},${i})">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
             </button>
