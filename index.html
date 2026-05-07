@@ -524,26 +524,29 @@ input::placeholder{color:var(--text-4);font-weight:400}
 
 /* Editable exercise title */
 .ex-name-wrap{display:flex;align-items:center;gap:6px;flex:1;min-width:0}
+.ex-name-display{
+  flex:1;min-width:0;
+  font-size:16px;font-weight:700;letter-spacing:-0.01em;line-height:1.25;
+  color:var(--text);
+  padding:3px 0;
+  word-break:break-word;
+  font-family:inherit;
+}
+.ex-name-display.customized{color:var(--accent)}
 .ex-name-edit{
   flex:1;min-width:0;
-  background:transparent;
-  border:1px solid transparent;
+  background:var(--surface-2);
+  border:1px solid var(--accent);
   border-radius:6px;
-  padding:3px 6px;margin-left:-6px;
+  padding:3px 8px;margin-left:-8px;
   font-size:16px;font-weight:700;letter-spacing:-0.01em;
   line-height:1.25;color:var(--text);
   font-family:inherit;
-  outline:none;cursor:text;
-  transition:all 0.15s var(--t-fast);
-  width:100%;
-}
-.ex-name-edit:hover{border-color:var(--border)}
-.ex-name-edit:focus{
-  border-color:var(--accent);
-  background:var(--surface-2);
+  outline:none;
   box-shadow:0 0 0 3px var(--accent-glow);
+  width:100%;
+  -webkit-appearance:none;
 }
-.ex-name-edit.customized{color:var(--accent)}
 .icon-btn{
   background:none;border:none;cursor:pointer;
   width:28px;height:28px;
@@ -625,6 +628,38 @@ input::placeholder{color:var(--text-4);font-weight:400}
 .meal-edit-row:last-child{border-bottom:none}
 .meal-edit-grid{display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:10px}
 .meal-edit-grid input{font-family:'Inter',sans-serif;font-weight:500;letter-spacing:-0.01em}
+
+/* Ingredient list editor */
+.ingredient-list{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
+.ingredient-row{display:flex;align-items:center;gap:6px}
+.ingredient-row input{
+  flex:1;min-width:0;
+  padding:9px 12px;font-size:13.5px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:8px;
+  font-family:'Inter',sans-serif;font-weight:500;
+  letter-spacing:-0.01em;
+}
+.ingredient-row input:focus{
+  border-color:var(--accent);
+  background:var(--surface-2);
+  box-shadow:0 0 0 2px var(--accent-glow);
+}
+.add-ingredient-btn{
+  background:transparent;
+  border:1px dashed var(--border-strong);
+  color:var(--text-3);
+  font-family:inherit;font-size:12px;font-weight:600;
+  padding:9px;border-radius:8px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:5px;
+  transition:all 0.15s var(--t-fast);
+  width:100%;
+  letter-spacing:-0.01em;
+}
+.add-ingredient-btn:hover{border-color:var(--accent);color:var(--text-2)}
+.add-ingredient-btn:active{transform:scale(0.99)}
+.add-ingredient-btn svg{width:13px;height:13px;stroke-width:2.5}
 .meal-edit-macros{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
 .macro-input{display:flex;flex-direction:column;gap:4px;min-width:0}
 .macro-input-label{
@@ -1210,6 +1245,7 @@ function logWeight(){
 }
 
 // ----- Exercise name editing -----
+let editingExKey = null;
 function getExName(dayIdx, exIdx){
   const custom = state.customExercises?.[dayIdx]?.[exIdx];
   return (custom && custom.trim()) ? custom : DAYS[dayIdx].exercises[exIdx].name;
@@ -1218,7 +1254,15 @@ function isExCustomized(dayIdx, exIdx){
   const c = state.customExercises?.[dayIdx]?.[exIdx];
   return !!(c && c.trim() && c.trim() !== DAYS[dayIdx].exercises[exIdx].name);
 }
-function saveExName(dayIdx, exIdx, value){
+function startEditExName(dayIdx, exIdx){
+  editingExKey = `${dayIdx}-${exIdx}`;
+  renderWorkoutContent();
+  setTimeout(()=>{
+    const input = document.querySelector(`[data-ex-edit="${dayIdx}-${exIdx}"]`);
+    if(input){ input.focus(); input.select(); }
+  }, 30);
+}
+function finishEditExName(dayIdx, exIdx, value){
   const trimmed = (value||'').trim();
   if(!state.customExercises) state.customExercises={};
   if(!state.customExercises[dayIdx]) state.customExercises[dayIdx]={};
@@ -1229,10 +1273,53 @@ function saveExName(dayIdx, exIdx, value){
     state.customExercises[dayIdx][exIdx] = trimmed;
   }
   save();
+  editingExKey = null;
+  renderWorkoutContent();
 }
 function resetExName(dayIdx, exIdx){
   if(state.customExercises?.[dayIdx]) delete state.customExercises[dayIdx][exIdx];
   save(); renderWorkoutContent(); toast('Reset');
+}
+
+// ----- Meal ingredient list helpers -----
+function parseItems(str){
+  if(!str) return [];
+  return str.split(/\s*·\s*/).map(s=>s.trim()).filter(Boolean);
+}
+function joinItems(arr){
+  return arr.map(s=>s.trim()).filter(Boolean).join(' · ');
+}
+function addIngredientRow(containerId){
+  const c = document.getElementById(containerId);
+  if(!c) return;
+  const row = document.createElement('div');
+  row.className = 'ingredient-row';
+  row.innerHTML = `<input type="text" class="ingredient-input" placeholder="Ingredient" autocapitalize="none">
+    <button type="button" class="icon-btn danger" onclick="this.parentElement.remove()">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+    </button>`;
+  c.appendChild(row);
+  row.querySelector('input').focus();
+}
+function collectIngredients(containerId){
+  const c = document.getElementById(containerId);
+  if(!c) return '';
+  return joinItems(Array.from(c.querySelectorAll('.ingredient-input')).map(i=>i.value));
+}
+function renderIngredientList(containerId, items){
+  const list = items && items.length ? items : [''];
+  return `<div id="${containerId}" class="ingredient-list">
+    ${list.map(it=>`<div class="ingredient-row">
+      <input type="text" class="ingredient-input" placeholder="Ingredient" value="${(it||'').replace(/"/g,'&quot;')}" autocapitalize="none">
+      <button type="button" class="icon-btn danger" onclick="this.parentElement.remove()">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>`).join('')}
+  </div>
+  <button type="button" class="add-ingredient-btn" onclick="addIngredientRow('${containerId}')">
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+    Add ingredient
+  </button>`;
 }
 
 // ----- HIIT picker -----
@@ -1290,7 +1377,7 @@ function startEditMeal(idx){ mealEditIdx = idx; mealAddOpen = false; renderNutri
 function cancelEditMeal(){ mealEditIdx = null; renderNutrition(); }
 function saveEditMeal(idx){
   const name = document.getElementById(`m-edit-name-${idx}`).value.trim();
-  const items = document.getElementById(`m-edit-items-${idx}`).value.trim();
+  const items = collectIngredients(`m-edit-items-${idx}`);
   const cal = parseInt(document.getElementById(`m-edit-cal-${idx}`).value)||0;
   const prot = parseInt(document.getElementById(`m-edit-prot-${idx}`).value)||0;
   const carb = parseInt(document.getElementById(`m-edit-carb-${idx}`).value)||0;
@@ -1310,7 +1397,7 @@ function startAddMeal(){ mealAddOpen = true; mealEditIdx = null; renderNutrition
 function cancelAddMeal(){ mealAddOpen = false; renderNutrition(); }
 function saveNewMeal(){
   const name = document.getElementById('m-new-name').value.trim();
-  const items = document.getElementById('m-new-items').value.trim();
+  const items = collectIngredients('m-new-items');
   const cal = parseInt(document.getElementById('m-new-cal').value)||0;
   const prot = parseInt(document.getElementById('m-new-prot').value)||0;
   const carb = parseInt(document.getElementById('m-new-carb').value)||0;
@@ -1353,16 +1440,20 @@ function renderWorkoutContent(){
         const currentName = getExName(activeDay, ei);
         const customized = isExCustomized(activeDay, ei);
         const safeName = currentName.replace(/"/g,'&quot;');
+        const isEditing = editingExKey === `${activeDay}-${ei}`;
+        const nameUI = isEditing
+          ? `<input class="ex-name-edit" data-ex-edit="${activeDay}-${ei}" type="text" value="${safeName}" spellcheck="false"
+              onblur="finishEditExName(${activeDay},${ei},this.value)"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">`
+          : `<div class="ex-name-display ${customized?'customized':''}">${currentName}</div>
+             <button class="icon-btn" title="Edit exercise" onclick="startEditExName(${activeDay},${ei})">
+               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+             </button>${customized?`<button class="icon-btn" title="Reset to default" onclick="resetExName(${activeDay},${ei})">
+               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+             </button>`:''}`;
         html+=`<div class="ex-row">
           <div class="ex-head">
-            <div class="ex-name-wrap">
-              <input class="ex-name-edit ${customized?'customized':''}" type="text" value="${safeName}" spellcheck="false"
-                onblur="saveExName(${activeDay},${ei},this.value)"
-                onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
-              ${customized?`<button class="icon-btn" title="Reset to default" onclick="resetExName(${activeDay},${ei})">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-              </button>`:''}
-            </div>
+            <div class="ex-name-wrap">${nameUI}</div>
             <span class="ex-rest">${ex.rest}</span>
           </div>
           <div class="ex-meta"><strong>${ex.sets} sets</strong> · ${ex.reps} reps · ${ex.weight}</div>
@@ -1501,8 +1592,10 @@ function renderNutrition(){
       return `<div class="meal-edit-row">
         <div class="meal-edit-grid">
           <input type="text" id="m-edit-name-${i}" placeholder="Meal name" value="${(m.name||'').replace(/"/g,'&quot;')}">
-          <input type="text" id="m-edit-items-${i}" placeholder="Items (e.g. chicken · rice · veggies)" value="${(m.items||'').replace(/"/g,'&quot;')}">
         </div>
+        <div style="font-size:10.5px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:0.08em;margin:6px 0 8px">Ingredients</div>
+        ${renderIngredientList(`m-edit-items-${i}`, parseItems(m.items))}
+        <div style="font-size:10.5px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:0.08em;margin:14px 0 8px">Macros</div>
         <div class="meal-edit-macros">
           <label class="macro-input"><span class="macro-input-label">Cal</span>
             <input type="number" id="m-edit-cal-${i}" value="${m.cal||''}" inputmode="numeric"></label>
@@ -1550,8 +1643,10 @@ function renderNutrition(){
     mhtml += `<div class="meal-edit-row" style="border-top:1px solid var(--border);padding-top:18px;margin-top:6px">
       <div class="meal-edit-grid">
         <input type="text" id="m-new-name" placeholder="Meal name">
-        <input type="text" id="m-new-items" placeholder="Items (e.g. chicken · rice · veggies)">
       </div>
+      <div style="font-size:10.5px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:0.08em;margin:6px 0 8px">Ingredients</div>
+      ${renderIngredientList('m-new-items', [])}
+      <div style="font-size:10.5px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:0.08em;margin:14px 0 8px">Macros</div>
       <div class="meal-edit-macros">
         <label class="macro-input"><span class="macro-input-label">Cal</span>
           <input type="number" id="m-new-cal" inputmode="numeric"></label>
