@@ -514,6 +514,35 @@ input::placeholder{color:var(--text-4);font-weight:400}
 .remove-x{background:none;border:none;color:var(--text-4);cursor:pointer;font-size:18px;padding:0 6px;font-weight:300;transition:color 0.15s}
 .remove-x:active{color:var(--warn)}
 
+/* Workout time meta header */
+.workout-meta{
+  display:flex;justify-content:space-between;align-items:center;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--r-md);
+  padding:14px 16px;
+  margin-bottom:16px;
+  background-image:var(--grad-card);
+  box-shadow:var(--shadow-sm);
+}
+.workout-meta-time{
+  display:flex;align-items:center;gap:8px;
+  font-size:14px;font-weight:500;color:var(--text-2);
+}
+.workout-meta-time svg{width:16px;height:16px;stroke-width:2;color:var(--accent)}
+.workout-meta-time strong{
+  font-family:'Instrument Serif',serif;
+  font-size:24px;font-weight:400;color:var(--text);
+  letter-spacing:-0.02em;
+  font-style:italic;
+  margin-right:1px;
+}
+.workout-meta-info{
+  font-size:11px;font-weight:600;color:var(--text-3);
+  text-transform:uppercase;letter-spacing:0.06em;
+  font-family:'JetBrains Mono',monospace;
+}
+
 .scroll-hint{position:relative}
 .scroll-hint::after{
   content:'';
@@ -684,6 +713,311 @@ input::placeholder{color:var(--text-4);font-weight:400}
 .meal-add-btn:hover{border-color:var(--accent);color:var(--text)}
 .meal-add-btn:active{transform:scale(0.99)}
 .meal-add-btn svg{width:14px;height:14px;stroke-width:2.5}
+
+/* ===== ARTEMIS ===== */
+/* Setup card (no API key) */
+.art-setup{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--r-lg);
+  padding:24px 20px;
+  background-image:var(--grad-card);
+  text-align:center;
+}
+.art-setup-icon{
+  width:54px;height:54px;
+  margin:0 auto 14px;
+  background:var(--accent-soft);
+  border:1px solid var(--accent);
+  border-radius:14px;
+  display:flex;align-items:center;justify-content:center;
+  color:var(--accent);
+}
+.art-setup-icon svg{width:26px;height:26px;stroke-width:2}
+.art-setup h3{
+  font-family:'Instrument Serif',serif;
+  font-size:28px;font-weight:400;letter-spacing:-0.02em;
+  margin-bottom:8px;
+}
+.art-setup p{
+  font-size:13px;color:var(--text-2);line-height:1.55;font-weight:500;
+  margin-bottom:6px;
+}
+.art-setup-link{
+  color:var(--accent);text-decoration:underline;
+  text-underline-offset:3px;font-weight:600;
+}
+.art-setup-form{margin-top:18px;text-align:left}
+.art-setup-form input{
+  font-family:'JetBrains Mono',monospace;font-size:12.5px;
+  letter-spacing:0;
+}
+.art-privacy{
+  font-size:11px;color:var(--text-4);
+  margin-top:10px;line-height:1.5;font-weight:500;
+  display:flex;align-items:flex-start;gap:6px;
+}
+.art-privacy svg{width:12px;height:12px;flex-shrink:0;margin-top:2px;stroke-width:2;color:var(--done)}
+
+/* Stats strip — compact 4-up */
+.art-stats{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:8px;
+  margin-bottom:14px;
+}
+.art-stat{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--r-sm);
+  padding:11px 8px 10px;
+  text-align:center;
+  background-image:var(--grad-card);
+}
+.art-stat-label{
+  font-size:9px;color:var(--text-3);font-weight:600;
+  text-transform:uppercase;letter-spacing:0.08em;
+  margin-bottom:4px;
+}
+.art-stat-val{
+  font-family:'Instrument Serif',serif;
+  font-size:22px;line-height:1;font-weight:400;
+  letter-spacing:-0.02em;font-style:italic;
+  color:var(--text);
+}
+.art-stat-val.accent{color:var(--accent)}
+.art-stat-sub{
+  font-size:10px;color:var(--text-4);font-weight:500;
+  margin-top:3px;
+}
+
+/* Coach style picker */
+.art-section-label{
+  font-size:11px;color:var(--text-3);font-weight:600;
+  text-transform:uppercase;letter-spacing:0.08em;
+  margin-bottom:10px;
+}
+.art-section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.coach-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:8px;
+  margin-bottom:18px;
+}
+.coach-tile{
+  background:var(--surface);
+  border:1px solid var(--border-strong);
+  border-radius:var(--r-md);
+  padding:14px 14px 12px;
+  cursor:pointer;
+  text-align:left;
+  transition:all 0.15s var(--t-fast);
+  background-image:var(--grad-card);
+  position:relative;
+  overflow:hidden;
+}
+.coach-tile:active{transform:scale(0.98)}
+.coach-tile.active{
+  border-color:var(--accent);
+  box-shadow:0 0 0 3px var(--accent-glow);
+}
+.coach-tile-icon{
+  width:24px;height:24px;
+  color:var(--text-3);
+  margin-bottom:8px;
+  display:flex;align-items:center;
+}
+.coach-tile.active .coach-tile-icon{color:var(--accent)}
+.coach-tile-icon svg{width:20px;height:20px;stroke-width:2}
+.coach-tile-name{
+  font-size:13.5px;font-weight:700;
+  letter-spacing:-0.01em;margin-bottom:2px;
+}
+.coach-tile-desc{font-size:11px;color:var(--text-2);font-weight:500;line-height:1.4}
+
+/* Daily focus card */
+.art-focus{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--r-lg);
+  padding:18px 20px;
+  margin-bottom:18px;
+  background-image:var(--grad-card);
+  position:relative;
+  overflow:hidden;
+}
+.art-focus::before{
+  content:'';
+  position:absolute;
+  left:0;top:18px;bottom:18px;
+  width:3px;
+  background:var(--accent);
+  border-radius:0 3px 3px 0;
+}
+.art-focus-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.art-focus-label{
+  font-size:10.5px;color:var(--accent);font-weight:700;
+  text-transform:uppercase;letter-spacing:0.1em;
+}
+.art-focus-text{
+  font-size:14px;line-height:1.6;color:var(--text);font-weight:500;
+  letter-spacing:-0.005em;
+  white-space:pre-wrap;
+}
+.art-focus-text.placeholder{color:var(--text-3);font-style:italic}
+.art-focus-skeleton{
+  height:14px;background:var(--surface-3);border-radius:3px;
+  margin-bottom:8px;animation:shimmer 1.6s ease-in-out infinite;
+}
+.art-focus-skeleton:nth-child(2){width:88%}
+.art-focus-skeleton:nth-child(3){width:74%;margin-bottom:0}
+@keyframes shimmer{
+  0%,100%{opacity:0.4}50%{opacity:0.7}
+}
+
+/* Quick prompt buttons */
+.quick-prompts{
+  display:grid;grid-template-columns:1fr 1fr;gap:8px;
+  margin-bottom:18px;
+}
+.quick-prompt{
+  background:var(--surface-2);
+  border:1px solid var(--border);
+  border-radius:var(--r-sm);
+  padding:11px 12px;
+  font-family:inherit;font-size:12.5px;font-weight:600;
+  color:var(--text);text-align:left;
+  cursor:pointer;
+  display:flex;align-items:center;gap:8px;
+  transition:all 0.15s var(--t-fast);
+  letter-spacing:-0.01em;
+  line-height:1.3;
+}
+.quick-prompt:active{transform:scale(0.98);background:var(--surface-3)}
+.quick-prompt svg{width:14px;height:14px;flex-shrink:0;stroke-width:2;color:var(--accent)}
+
+/* Chat thread */
+.chat-section{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--r-lg);
+  padding:18px;
+  background-image:var(--grad-card);
+}
+.chat-thread{
+  display:flex;flex-direction:column;gap:12px;
+  min-height:80px;max-height:55vh;overflow-y:auto;
+  margin-bottom:14px;
+  padding-right:2px;
+}
+.chat-thread::-webkit-scrollbar{width:4px}
+.chat-thread::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:4px}
+.chat-msg{
+  max-width:88%;
+  padding:11px 14px;
+  border-radius:14px;
+  font-size:13.5px;line-height:1.55;font-weight:500;
+  letter-spacing:-0.005em;
+  white-space:pre-wrap;
+  word-wrap:break-word;
+}
+.chat-msg.user{
+  align-self:flex-end;
+  background:var(--accent);
+  color:var(--accent-text);
+  border-bottom-right-radius:4px;
+  font-weight:600;
+}
+.chat-msg.assistant{
+  align-self:flex-start;
+  background:var(--surface-2);
+  color:var(--text);
+  border:1px solid var(--border);
+  border-bottom-left-radius:4px;
+}
+.chat-msg.error{
+  background:rgba(245,158,11,0.1);
+  border-color:var(--warn);
+  color:var(--warn);
+}
+.chat-empty{
+  text-align:center;color:var(--text-4);
+  font-size:13px;font-weight:500;
+  padding:18px 8px;line-height:1.5;
+}
+.chat-typing{
+  align-self:flex-start;
+  background:var(--surface-2);
+  border:1px solid var(--border);
+  border-radius:14px;border-bottom-left-radius:4px;
+  padding:14px 16px;
+  display:flex;gap:4px;
+}
+.chat-typing-dot{
+  width:6px;height:6px;border-radius:50%;
+  background:var(--text-3);
+  animation:typingBounce 1.2s ease-in-out infinite;
+}
+.chat-typing-dot:nth-child(2){animation-delay:0.15s}
+.chat-typing-dot:nth-child(3){animation-delay:0.3s}
+@keyframes typingBounce{
+  0%,80%,100%{opacity:0.3;transform:translateY(0)}
+  40%{opacity:1;transform:translateY(-4px)}
+}
+
+.chat-input-bar{
+  display:flex;gap:8px;align-items:flex-end;
+}
+.chat-input-bar textarea{
+  flex:1;
+  background:var(--surface-2);
+  border:1px solid var(--border-strong);
+  border-radius:var(--r-sm);
+  color:var(--text);
+  font-family:inherit;font-size:14px;font-weight:500;
+  padding:11px 13px;
+  outline:none;resize:none;
+  letter-spacing:-0.01em;
+  min-height:42px;max-height:120px;
+  -webkit-appearance:none;
+  width:100%;
+}
+.chat-input-bar textarea:focus{
+  border-color:var(--accent);
+  box-shadow:0 0 0 3px var(--accent-glow);
+}
+.chat-send{
+  width:42px;height:42px;
+  background:var(--accent);
+  color:var(--accent-text);
+  border:none;border-radius:var(--r-sm);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;
+  flex-shrink:0;
+  transition:all 0.15s var(--t-fast);
+}
+.chat-send:active{transform:scale(0.92)}
+.chat-send:disabled{opacity:0.4;cursor:not-allowed}
+.chat-send svg{width:18px;height:18px;stroke-width:2.5}
+
+.chat-clear{
+  background:none;border:none;
+  color:var(--text-4);font-size:11px;font-weight:500;
+  cursor:pointer;
+  text-decoration:underline;text-underline-offset:2px;
+}
+
+/* Settings dropdown for Artemis */
+.art-settings{
+  background:var(--surface);
+  border:1px solid var(--border-strong);
+  border-radius:var(--r-md);
+  padding:16px;
+  margin-bottom:18px;
+  animation:fadeUp 0.25s var(--t-fast);
+}
+.art-settings-label{
+  font-size:11px;color:var(--text-3);font-weight:600;
+  text-transform:uppercase;letter-spacing:0.08em;
+  margin-bottom:8px;
+}
+.art-settings-actions{display:flex;gap:8px;margin-top:10px}
 
 /* Danger zone — gated reset */
 .danger-toggle{
@@ -895,6 +1229,19 @@ input::placeholder{color:var(--text-4);font-weight:400}
   </div>
 </div>
 
+<!-- ARTEMIS -->
+<div class="page" id="page-artemis">
+  <div class="page-header">
+    <div>
+      <div class="page-eyebrow" id="art-eyebrow">AI coach</div>
+      <h1 class="page-title">Artemis</h1>
+      <div class="page-sub" id="art-sub">Your fitness coach with full context</div>
+    </div>
+    <button class="theme-toggle" onclick="toggleTheme()"><svg id="theme-icon-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"></svg></button>
+  </div>
+  <div id="artemis-content"></div>
+</div>
+
 <!-- PROGRESS -->
 <div class="page" id="page-progress">
   <div class="page-header">
@@ -959,6 +1306,10 @@ input::placeholder{color:var(--text-4);font-weight:400}
     <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-7 0-9 4-9 9 0 1 .5 2 2 2h14c1.5 0 2-1 2-2 0-5-2-9-9-9zM12 8V3M12 3l-2 2M12 3l2 2"/></svg>
     Fuel
   </button>
+  <button class="nav-btn" onclick="showPage('artemis',this)">
+    <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M19 17v4M17 19h4M11 3l2.39 5.42L19 11l-5.61 2.58L11 19l-2.39-5.42L3 11l5.61-2.58L11 3z"/></svg>
+    Artemis
+  </button>
   <button class="nav-btn" onclick="showPage('progress',this)">
     <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 17l6-6 4 4 8-8M21 7v6h-6"/></svg>
     Progress
@@ -973,7 +1324,7 @@ const ICONS = {
 
 function setThemeIcons(){
   const ic = state.theme === 'dark' ? ICONS.sun : ICONS.moon;
-  ['theme-icon','theme-icon-2','theme-icon-3','theme-icon-4'].forEach(id=>{
+  ['theme-icon','theme-icon-2','theme-icon-3','theme-icon-4','theme-icon-5'].forEach(id=>{
     const el = document.getElementById(id); if(el) el.innerHTML = ic;
   });
 }
@@ -1086,7 +1437,8 @@ const STORAGE_KEY = 'carter_training_v1';
 
 let state = {
   startDate:null,foodLog:{},setLog:{},weights:[],workoutsCompleted:[],prs:{},theme:'dark',
-  customExercises:{},customHiit:{},meals:null,hiitLog:{}
+  customExercises:{},customHiit:{},meals:null,hiitLog:{},
+  apiKey:null,coachStyle:'friendly',artemisChat:[],dailyFocus:null,artemisSettingsOpen:false
 };
 
 function todayKey(){return new Date().toISOString().split('T')[0]}
@@ -1110,6 +1462,8 @@ function load(){
     if(!state.customExercises) state.customExercises={};
     if(!state.customHiit) state.customHiit={};
     if(!state.hiitLog) state.hiitLog={};
+    if(!state.coachStyle) state.coachStyle='friendly';
+    if(!Array.isArray(state.artemisChat)) state.artemisChat=[];
     if(!state.meals||!Array.isArray(state.meals)) state.meals=JSON.parse(JSON.stringify(DEFAULT_MEALS));
     save();
     applyTheme();
@@ -1175,6 +1529,7 @@ function showPage(id, btn){
   if(id==='workout') renderWorkout();
   if(id==='nutrition') renderNutrition();
   if(id==='progress') renderProgress();
+  if(id==='artemis') renderArtemis();
   window.scrollTo(0,0);
 }
 
@@ -1242,6 +1597,350 @@ function logWeight(){
   state.weights.push({date:todayKey(),lbs:v});
   document.getElementById('weight-input').value='';
   save(); renderDashboard(); toast('Weight logged');
+}
+
+// ===== ARTEMIS — AI coach =====
+const COACH_STYLES = {
+  direct: {
+    name:'Direct',
+    desc:'Technical · No fluff',
+    icon:'<path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>',
+    prompt:`Tone: direct, technical, zero filler. Skip "great question" or motivational asides. Get to the point. Use short sentences and bullets. Reference exact numbers from the data. If something is off-track, say so without softening. End with the single most important next action.`
+  },
+  friendly: {
+    name:'Friendly',
+    desc:'Warm + motivating',
+    icon:'<circle cx="12" cy="12" r="4"/><path stroke-linecap="round" d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>',
+    prompt:`Tone: warm, encouraging, energetic but grounded. Use Carter's name when natural. Celebrate progress, frame setbacks as learnings. Build momentum without being saccharine. Stay specific to the data, never generic motivation.`
+  },
+  chill: {
+    name:'Chill',
+    desc:'Casual gym friend',
+    icon:'<path stroke-linecap="round" stroke-linejoin="round" d="M2 12c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/><path stroke-linecap="round" stroke-linejoin="round" d="M2 18c2 0 2-2 4-2s2 2 4 2 2-2 4-2 2 2 4 2 2-2 4-2"/>',
+    prompt:`Tone: casual, like a knowledgeable friend at the gym. Laid-back vocabulary, short, slightly informal. Drop corporate fitness language. Keep it real. Don't force slang — just relaxed and direct.`
+  },
+  intense: {
+    name:'Intense',
+    desc:'Hardcore · No excuses',
+    icon:'<path stroke-linecap="round" stroke-linejoin="round" d="M17.657 18.657A8 8 0 016.343 7.343S7 9 9 10c0-2 .5-5 2.986-7C14 5 16.09 5.24 17 7.131 18.367 9.97 18.276 12.59 19 14c.673 1.312 1.657 2.657 1.657 2.657z"/>',
+    prompt:`Tone: intense, demanding, no excuses. Drill-sergeant / Goggins energy. Brief and impactful. Hold Carter accountable, push for more, demand he earn it. Call out weak effort but never insult — intense, not cruel. End with a challenge.`
+  }
+};
+
+function getApiKey(){ return state.apiKey || ''; }
+function setApiKeyFromInput(){
+  const v = document.getElementById('art-key-input')?.value?.trim();
+  if(!v){ toast('Enter a key'); return; }
+  if(!v.startsWith('sk-ant-')){
+    if(!confirm('That does not look like an Anthropic key (should start with "sk-ant-"). Save anyway?')) return;
+  }
+  state.apiKey = v;
+  save(); renderArtemis(); toast('Key saved');
+}
+function clearApiKey(){
+  if(!confirm('Remove your saved API key? Chat history is kept.')) return;
+  state.apiKey = null;
+  state.artemisSettingsOpen = false;
+  save(); renderArtemis();
+}
+function setCoachStyle(style){
+  if(!COACH_STYLES[style]) return;
+  state.coachStyle = style;
+  // Clear cached daily focus since style changed
+  state.dailyFocus = null;
+  save(); renderArtemis();
+}
+function toggleArtemisSettings(){
+  state.artemisSettingsOpen = !state.artemisSettingsOpen;
+  renderArtemis();
+}
+
+// Build the full system prompt with current stats
+function buildArtemisSystemPrompt(){
+  const wk = getWeekNum();
+  const phaseIdx = wk<=4?0:wk<=8?1:wk<=12?2:3;
+  const ph = PHASES[phaseIdx];
+  const dayIdx = getTodayDayIdx();
+  const today = DAYS[dayIdx];
+  const todayWeekday = new Date().toLocaleDateString('en-US',{weekday:'long'});
+  const todayDate = new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+
+  const todayExercises = (today.exercises||[]).map((ex,i)=>
+    `  - ${getExName(dayIdx,i)} (${ex.sets}x${ex.reps}, ${ex.weight}, rest ${ex.rest})`
+  ).join('\n');
+  const todayHiit = getDayHiit(dayIdx).map(h=>`  - ${h.name} (${h.detail})`).join('\n');
+  const todayEst = estimateWorkoutMinutes(dayIdx);
+
+  // Today's set log progress
+  const dk = todayKey();
+  const todaySetLog = state.setLog?.[dk]?.[dayIdx] || {};
+  let setsLogged = 0, setsTotal = 0;
+  (today.exercises||[]).forEach((ex,ei)=>{
+    setsTotal += ex.sets;
+    const exLog = todaySetLog[ei]||{};
+    Object.values(exLog).forEach(s=>{ if(s.done) setsLogged++; });
+  });
+
+  // PRs
+  const prs = Object.entries(state.prs||{})
+    .sort((a,b)=>b[1]-a[1])
+    .map(([n,w])=>`  - ${n}: ${w} lbs`).join('\n') || '  (none yet)';
+
+  // Nutrition today
+  const todayLog = state.foodLog?.[dk]||[];
+  const todayCal = todayLog.reduce((a,b)=>a+(b.cal||0),0);
+  const todayProt = todayLog.reduce((a,b)=>a+(b.prot||0),0);
+  const todayCarb = todayLog.reduce((a,b)=>a+(b.carb||0),0);
+  const todayFat = todayLog.reduce((a,b)=>a+(b.fat||0),0);
+  const todayItems = todayLog.map(f=>`${f.name} (${f.cal}cal, ${f.prot||0}p)`).join('; ') || '(nothing logged yet)';
+
+  // Last 7 days nutrition averages
+  const dates = Object.keys(state.foodLog||{}).sort().slice(-7);
+  let n=0, sumCal=0, sumProt=0;
+  dates.forEach(d=>{
+    const log = state.foodLog[d]||[];
+    if(log.length){
+      sumCal += log.reduce((a,b)=>a+(b.cal||0),0);
+      sumProt += log.reduce((a,b)=>a+(b.prot||0),0);
+      n++;
+    }
+  });
+  const avgCal = n ? Math.round(sumCal/n) : 0;
+  const avgProt = n ? Math.round(sumProt/n) : 0;
+
+  // Weight tracker
+  const weights = state.weights||[];
+  const recentWeights = weights.slice(-5).map(w=>`  - ${w.date}: ${w.lbs} lbs`).join('\n') || '  (no weights logged)';
+  let weightTrend = '';
+  if(weights.length>=2){
+    const delta = (weights[weights.length-1].lbs - weights[0].lbs).toFixed(1);
+    weightTrend = `  Trend across ${weights.length} entries: ${delta>0?'+':''}${delta} lbs`;
+  }
+  const sessionsTotal = (state.workoutsCompleted||[]).length;
+
+  const style = COACH_STYLES[state.coachStyle] || COACH_STYLES.friendly;
+
+  return `You are Artemis, an expert personal fitness coach with deep knowledge of strength training, hypertrophy, conditioning, nutrition, and recovery. You're coaching Carter through a 16-week training program.
+
+PERSONALITY (always follow):
+${style.prompt}
+
+GROUNDING RULES:
+- Anchor advice in the specific data below. Reference exact numbers, exercises, dates, and patterns.
+- Never invent stats. If something isn't in the data, ask Carter or say you don't have it.
+- Keep responses skimmable on a phone — short paragraphs or bullets, not walls of text.
+- When recommending changes (weight, reps, food), be specific and actionable.
+- Tie advice to where Carter is in the 16-week program.
+- Use plain text formatting only (no markdown like ** or ###). Bullets with "•" or "-" are fine.
+
+PROGRAM STRUCTURE (16-week split: Mon Push / Tue Pull / Wed Rest / Thu Legs / Fri Upper-heavy / Sat HIIT / Sun Rest):
+- W1-4 Foundation: 3 sets x 8-12 reps, 90s rest. Learn working weights, form first.
+- W5-8 Load: 4 sets x 8-12 reps, 90s rest. Add 5 lbs upper / 10 lbs lower at top of range.
+- W9-12 Strength+: 4-5 sets, mix heavy 4-6 + volume 10-12, 2-3 min rest.
+- W13-16 Peak: 5 sets x 4-8 reps, 2-3 min. Deload week 16 (60% weight).
+
+NUTRITION TARGETS:
+3300 cal / 190g protein / 425g carbs / 90g fat per day.
+
+============ CURRENT STATE ============
+Today: ${todayDate}
+Week: ${wk} of 16 — ${ph.label} phase
+Phase guidance: ${ph.note}
+
+TODAY'S PRESCRIBED SESSION (${todayWeekday}): ${today.name}${today.rest?' — REST DAY':''}
+${today.rest ? '(Rest / recovery day)' : `Estimated time: ~${todayEst} min`}
+${todayExercises ? `Lifting:\n${todayExercises}` : ''}
+${todayHiit ? `HIIT:\n${todayHiit}` : ''}
+${!today.rest ? `Sets completed today so far: ${setsLogged} / ${setsTotal}` : ''}
+
+ALL-TIME PRs:
+${prs}
+
+NUTRITION TODAY:
+  ${todayCal} cal / ${todayProt}g protein / ${todayCarb}g carb / ${todayFat}g fat
+  Items: ${todayItems}
+
+LAST 7 DAYS NUTRITION AVERAGES:
+  ${avgCal} cal / ${avgProt}g protein per day (across ${n} logged days)
+
+WEIGHT TRACKER (recent):
+${recentWeights}
+${weightTrend}
+
+TOTAL SESSIONS COMPLETED: ${sessionsTotal}
+=========================================
+
+Respond in character per the personality guidance above.`;
+}
+
+async function callArtemis(userMessage, opts={}){
+  const apiKey = getApiKey();
+  if(!apiKey) throw new Error('No API key set');
+
+  const systemPrompt = buildArtemisSystemPrompt();
+  const history = (state.artemisChat||[])
+    .filter(m=>!m.error)
+    .slice(-20)
+    .map(m=>({role:m.role, content:m.content}));
+
+  const messages = opts.skipHistory ? [] : history.slice();
+  messages.push({role:'user', content:userMessage});
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'x-api-key':apiKey,
+      'anthropic-version':'2023-06-01',
+      'anthropic-dangerous-direct-browser-access':'true'
+    },
+    body:JSON.stringify({
+      model:'claude-sonnet-4-6',
+      max_tokens: opts.maxTokens || 1024,
+      system:[
+        {type:'text', text:systemPrompt, cache_control:{type:'ephemeral'}}
+      ],
+      messages
+    })
+  });
+
+  if(!res.ok){
+    let errMsg = `API error (${res.status})`;
+    try{
+      const err = await res.json();
+      errMsg = err.error?.message || errMsg;
+      if(res.status===401) errMsg = 'API key invalid. Check it in settings.';
+      if(res.status===429) errMsg = 'Rate limit hit. Wait a moment and retry.';
+    }catch{}
+    throw new Error(errMsg);
+  }
+  const data = await res.json();
+  return data.content?.[0]?.text || '';
+}
+
+let artemisSending = false;
+
+async function sendArtemisMessage(prefilled){
+  if(artemisSending) return;
+  const ta = document.getElementById('artemis-input');
+  const msg = (prefilled || ta?.value || '').trim();
+  if(!msg) return;
+  if(!getApiKey()){ toast('Set up API key first'); return; }
+
+  if(!Array.isArray(state.artemisChat)) state.artemisChat = [];
+  state.artemisChat.push({role:'user', content:msg, ts:Date.now()});
+  if(ta && !prefilled) ta.value = '';
+  save();
+  artemisSending = true;
+  renderArtemis();
+  scrollChatToBottom();
+
+  try{
+    const reply = await callArtemis(msg);
+    state.artemisChat.push({role:'assistant', content:reply, ts:Date.now()});
+    save();
+  }catch(e){
+    state.artemisChat.push({role:'assistant', content:e.message||'Something went wrong', ts:Date.now(), error:true});
+    save();
+  }finally{
+    artemisSending = false;
+    renderArtemis();
+    scrollChatToBottom();
+  }
+}
+
+async function refreshDailyFocus(){
+  if(!getApiKey()){ toast('Set up API key first'); return; }
+  const today = todayKey();
+  // Already cached for today + this style?
+  if(state.dailyFocus && state.dailyFocus.date===today && state.dailyFocus.style===state.coachStyle && !arguments[0]){
+    renderArtemis(); return;
+  }
+  state.dailyFocus = {date:today, style:state.coachStyle, text:null, loading:true};
+  renderArtemis();
+  try{
+    const prompt = `In 3-4 sentences max (under 60 words), give me my single most important focus for today based on my current data. Be specific to my exact numbers and today's session. No greeting, no sign-off.`;
+    const reply = await callArtemis(prompt, {skipHistory:true, maxTokens:200});
+    state.dailyFocus = {date:today, style:state.coachStyle, text:reply, loading:false};
+    save();
+  }catch(e){
+    state.dailyFocus = {date:today, style:state.coachStyle, text:`(${e.message})`, loading:false, error:true};
+  }
+  renderArtemis();
+}
+
+function clearArtemisChat(){
+  if(!(state.artemisChat||[]).length) return;
+  if(!confirm('Clear chat history? Coach context (your stats) will still be there.')) return;
+  state.artemisChat = [];
+  save(); renderArtemis(); toast('Chat cleared');
+}
+
+function scrollChatToBottom(){
+  const t = document.getElementById('chat-thread');
+  if(t) t.scrollTop = t.scrollHeight;
+}
+
+function handleArtemisKeydown(e){
+  if(e.key==='Enter' && !e.shiftKey){
+    e.preventDefault();
+    sendArtemisMessage();
+  }
+}
+
+function autoGrowTextarea(el){
+  el.style.height = 'auto';
+  el.style.height = Math.min(120, el.scrollHeight) + 'px';
+}
+
+// ----- Workout time estimation -----
+// Parses rest strings like "90s", "2 min", "2-3 min", "2–3 min" → seconds
+function parseRestSeconds(restStr){
+  if(!restStr) return 90;
+  const s = String(restStr).toLowerCase();
+  const range = s.match(/(\d+)\s*[–\-]\s*(\d+)\s*min/);
+  if(range) return ((parseInt(range[1])+parseInt(range[2]))/2)*60;
+  const min = s.match(/(\d+)\s*min/);
+  if(min) return parseInt(min[1])*60;
+  const sec = s.match(/(\d+)\s*s/);
+  if(sec) return parseInt(sec[1]);
+  return 90;
+}
+// Average work seconds per set based on rep range
+function workSecondsForReps(repStr){
+  if(!repStr) return 35;
+  const m = String(repStr).match(/(\d+)/);
+  const reps = m ? parseInt(m[1]) : 10;
+  // ~3.5s per rep + setup time
+  return Math.round(reps*3.5 + 8);
+}
+function estimateWorkoutMinutes(dayIdx){
+  const day = DAYS[dayIdx];
+  if(day.rest) return 0;
+  let seconds = 0;
+  // Lifting: warmup + working sets + transitions
+  if(day.exercises && day.exercises.length){
+    seconds += 5*60; // warmup
+    day.exercises.forEach(ex=>{
+      const rest = parseRestSeconds(ex.rest);
+      const work = workSecondsForReps(ex.reps);
+      // sets-1 rest periods (no rest after final set before transitioning)
+      seconds += ex.sets*work + Math.max(0,ex.sets-1)*rest;
+      seconds += 45; // transition + setup for next exercise
+    });
+  }
+  // HIIT
+  const hiit = getDayHiit(dayIdx);
+  if(hiit && hiit.length){
+    if(day.fullHiit){
+      // Full conditioning workout: ~50s per movement × 5 rounds + rest between
+      seconds += hiit.length * 5 * 50 + 4 * 90; // 4 rests between rounds
+    } else {
+      // Finisher: ~3 min per movement (work+rest cycles)
+      seconds += hiit.length * 180;
+    }
+  }
+  return Math.max(1, Math.round(seconds/60));
 }
 
 // ----- Exercise name editing -----
@@ -1433,6 +2132,19 @@ function renderWorkoutContent(){
       <div style="color:var(--text-2);font-size:12.5px;line-height:1.6">Recovery is when growth happens.</div>
     </div>`;
   } else {
+    const estMin = estimateWorkoutMinutes(activeDay);
+    const exCount = day.exercises.length;
+    const hiitCount = getDayHiit(activeDay).length;
+    const parts = [];
+    if(exCount) parts.push(`${exCount} exercise${exCount===1?'':'s'}`);
+    if(hiitCount) parts.push(`${hiitCount} HIIT`);
+    html+=`<div class="workout-meta">
+      <div class="workout-meta-time">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <span><strong>~${estMin}</strong> min</span>
+      </div>
+      <div class="workout-meta-info">${parts.join(' · ')}</div>
+    </div>`;
     if(day.exercises.length){
       html+=`<div class="section-label" style="margin-bottom:10px">Lifting · ${day.desc}</div>`;
       day.exercises.forEach((ex,ei)=>{
@@ -1716,6 +2428,204 @@ function logCustomFood(){
 function removeFood(idx){
   state.foodLog[todayKey()].splice(idx,1);
   save(); renderNutrition();
+}
+
+// ===== Artemis rendering =====
+function escapeHtml(s){
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function renderArtemis(){
+  const root = document.getElementById('artemis-content');
+  if(!root) return;
+  if(!getApiKey()){
+    root.innerHTML = renderArtemisSetup();
+    return;
+  }
+  const sub = document.getElementById('art-sub');
+  if(sub) sub.textContent = 'Your fitness coach with full context';
+
+  let html = '';
+  if(state.artemisSettingsOpen){
+    html += renderArtemisSettings();
+  }
+  html += renderArtStats();
+  html += renderCoachStyles();
+  html += renderArtFocus();
+  html += renderQuickPrompts();
+  html += renderChat();
+  root.innerHTML = html;
+
+  const ta = document.getElementById('artemis-input');
+  if(ta){
+    ta.addEventListener('input', ()=>autoGrowTextarea(ta));
+    autoGrowTextarea(ta);
+  }
+  scrollChatToBottom();
+
+  // Auto-load daily focus on first view of the day
+  const td = todayKey();
+  if(!state.dailyFocus || state.dailyFocus.date!==td || state.dailyFocus.style!==state.coachStyle){
+    if(!state.dailyFocus?.loading) refreshDailyFocus();
+  }
+}
+
+function renderArtemisSetup(){
+  return `<div class="art-setup">
+    <div class="art-setup-icon">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M19 17v4M17 19h4M11 3l2.39 5.42L19 11l-5.61 2.58L11 19l-2.39-5.42L3 11l5.61-2.58L11 3z"/></svg>
+    </div>
+    <h3>Meet Artemis</h3>
+    <p>An AI coach that knows your full training history, PRs, nutrition, and weight trends. Powered by Claude.</p>
+    <p style="margin-top:14px"><a href="https://console.anthropic.com/settings/keys" target="_blank" class="art-setup-link">Get an Anthropic API key →</a></p>
+    <div class="art-setup-form">
+      <input type="password" id="art-key-input" placeholder="sk-ant-..." autocomplete="off" autocapitalize="none" spellcheck="false">
+      <button class="btn btn-primary btn-full" style="margin-top:10px" onclick="setApiKeyFromInput()">
+        <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+        Save and start coaching
+      </button>
+      <div class="art-privacy">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+        <span>Your key is stored only on this device. Messages go directly to Anthropic — no third-party servers.</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderArtemisSettings(){
+  return `<div class="art-settings">
+    <div class="art-settings-label">Settings</div>
+    <div style="font-size:12.5px;color:var(--text-2);font-weight:500;margin-bottom:6px">API key is set. Stored on this device only.</div>
+    <div class="art-settings-actions">
+      <button class="btn btn-ghost btn-sm" onclick="toggleArtemisSettings()">Close</button>
+      <button class="btn btn-ghost btn-sm" style="color:var(--warn);border-color:var(--warn)" onclick="clearApiKey()">Remove key</button>
+    </div>
+  </div>`;
+}
+
+function renderArtStats(){
+  const wk = getWeekNum();
+  const phaseIdx = wk<=4?0:wk<=8?1:wk<=12?2:3;
+  const ph = PHASES[phaseIdx];
+  const dayIdx = getTodayDayIdx();
+  const today = DAYS[dayIdx];
+  const dk = todayKey();
+  const todayLog = state.foodLog?.[dk]||[];
+  const todayProt = todayLog.reduce((a,b)=>a+(b.prot||0),0);
+  const sessions = (state.workoutsCompleted||[]).length;
+
+  return `<div class="art-stats">
+    <div class="art-stat">
+      <div class="art-stat-label">Week</div>
+      <div class="art-stat-val accent">${wk}<span style="font-size:13px;color:var(--text-3)">/16</span></div>
+      <div class="art-stat-sub">${ph.label}</div>
+    </div>
+    <div class="art-stat">
+      <div class="art-stat-label">Today</div>
+      <div class="art-stat-val">${today.name}</div>
+      <div class="art-stat-sub">${today.rest?'rest':estimateWorkoutMinutes(dayIdx)+' min'}</div>
+    </div>
+    <div class="art-stat">
+      <div class="art-stat-label">Protein</div>
+      <div class="art-stat-val">${todayProt}<span style="font-size:13px;color:var(--text-3)">g</span></div>
+      <div class="art-stat-sub">/190g</div>
+    </div>
+    <div class="art-stat">
+      <div class="art-stat-label">Sessions</div>
+      <div class="art-stat-val">${sessions}</div>
+      <div class="art-stat-sub">total</div>
+    </div>
+  </div>`;
+}
+
+function renderCoachStyles(){
+  const active = state.coachStyle || 'friendly';
+  const tiles = Object.entries(COACH_STYLES).map(([k,s])=>`
+    <button class="coach-tile ${active===k?'active':''}" onclick="setCoachStyle('${k}')">
+      <div class="coach-tile-icon">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">${s.icon}</svg>
+      </div>
+      <div class="coach-tile-name">${s.name}</div>
+      <div class="coach-tile-desc">${s.desc}</div>
+    </button>
+  `).join('');
+  return `<div class="art-section-head">
+    <div class="art-section-label">Coach style</div>
+    <button class="icon-btn" title="Settings" onclick="toggleArtemisSettings()">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+    </button>
+  </div>
+  <div class="coach-grid">${tiles}</div>`;
+}
+
+function renderArtFocus(){
+  const focus = state.dailyFocus;
+  let body = '';
+  if(focus?.loading){
+    body = `<div><div class="art-focus-skeleton"></div><div class="art-focus-skeleton"></div><div class="art-focus-skeleton"></div></div>`;
+  } else if(focus?.text){
+    body = `<div class="art-focus-text">${escapeHtml(focus.text)}</div>`;
+  } else {
+    body = `<div class="art-focus-text placeholder">Tap refresh to get today's focus.</div>`;
+  }
+  return `<div class="art-focus">
+    <div class="art-focus-head">
+      <div class="art-focus-label">Today's focus</div>
+      <button class="icon-btn" title="Refresh" onclick="refreshDailyFocus(true)" ${focus?.loading?'disabled':''}>
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+      </button>
+    </div>
+    ${body}
+  </div>`;
+}
+
+const QUICK_PROMPTS = [
+  {label:'Plan today', prompt:'Walk me through today\'s session. What should I focus on, what weights should I aim for, and what should I watch out for?', icon:'<path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>'},
+  {label:'Review my week', prompt:'Give me a quick review of my training and nutrition this week. What went well, what needs work?', icon:'<path stroke-linecap="round" stroke-linejoin="round" d="M3 17l6-6 4 4 8-8M21 7v6h-6"/>'},
+  {label:'Hit my macros', prompt:'How am I tracking on calories and protein today? What do I need to eat next to hit my targets?', icon:'<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"/>'},
+  {label:'What to focus on', prompt:'Looking at my data and where I am in the program, what is the single most important thing I should focus on this week?', icon:'<circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="9"/>'},
+];
+function sendQuickPrompt(i){
+  if(QUICK_PROMPTS[i]) sendArtemisMessage(QUICK_PROMPTS[i].prompt);
+}
+function renderQuickPrompts(){
+  const items = QUICK_PROMPTS.map((p,i)=>`
+    <button class="quick-prompt" onclick="sendQuickPrompt(${i})">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">${p.icon}</svg>
+      ${p.label}
+    </button>
+  `).join('');
+  return `<div class="art-section-label">Quick ask</div>
+    <div class="quick-prompts">${items}</div>`;
+}
+
+function renderChat(){
+  const chat = state.artemisChat||[];
+  let thread = '';
+  if(!chat.length){
+    thread = `<div class="chat-empty">Start a conversation, or tap a quick ask above. Artemis sees your full training and nutrition data.</div>`;
+  } else {
+    thread = chat.map(m=>{
+      const cls = m.role==='user' ? 'user' : (m.error ? 'assistant error' : 'assistant');
+      return `<div class="chat-msg ${cls}">${escapeHtml(m.content)}</div>`;
+    }).join('');
+  }
+  if(artemisSending){
+    thread += `<div class="chat-typing"><div class="chat-typing-dot"></div><div class="chat-typing-dot"></div><div class="chat-typing-dot"></div></div>`;
+  }
+  return `<div class="chat-section">
+    <div class="art-section-head">
+      <div class="art-section-label">Chat</div>
+      ${chat.length ? `<button class="chat-clear" onclick="clearArtemisChat()">Clear</button>` : ''}
+    </div>
+    <div class="chat-thread" id="chat-thread">${thread}</div>
+    <div class="chat-input-bar">
+      <textarea id="artemis-input" placeholder="Ask Artemis anything..." rows="1" onkeydown="handleArtemisKeydown(event)"></textarea>
+      <button class="chat-send" onclick="sendArtemisMessage()" ${artemisSending?'disabled':''}>
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+      </button>
+    </div>
+  </div>`;
 }
 
 function renderProgress(){
