@@ -796,9 +796,47 @@ input::placeholder{color:var(--text-4);font-weight:400}
   margin-bottom:10px;
 }
 .art-section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+
+/* Compact coach bar at the top */
+.coach-bar{
+  display:flex;align-items:center;gap:8px;
+  margin-bottom:14px;
+}
+.coach-chip{
+  flex:1;min-width:0;
+  display:flex;align-items:center;gap:8px;
+  background:var(--surface);
+  border:1px solid var(--border-strong);
+  border-radius:var(--r-md);
+  padding:9px 12px;
+  font-family:inherit;font-size:13px;font-weight:600;
+  color:var(--text);
+  cursor:pointer;
+  transition:all 0.15s var(--t-fast);
+  letter-spacing:-0.01em;
+}
+.coach-chip:active{transform:scale(0.99)}
+.coach-chip:hover{border-color:var(--accent)}
+.coach-chip-icon{
+  width:16px;height:16px;flex-shrink:0;
+  color:var(--accent);stroke-width:2;
+}
+.coach-chip-label{
+  font-size:9.5px;color:var(--text-3);font-weight:600;
+  text-transform:uppercase;letter-spacing:0.08em;
+  flex-shrink:0;
+}
+.coach-chip-name{flex:1;font-weight:700}
+.coach-chip-caret{
+  width:13px;height:13px;flex-shrink:0;
+  color:var(--text-3);stroke-width:2.5;
+  transition:transform 0.2s var(--t-fast);
+}
+.coach-chip-caret.open{transform:rotate(180deg)}
 .coach-grid{
   display:grid;grid-template-columns:1fr 1fr;gap:8px;
   margin-bottom:18px;
+  animation:fadeUp 0.2s var(--t-fast);
 }
 .coach-tile{
   background:var(--surface);
@@ -1648,7 +1686,12 @@ function setCoachStyle(style){
   state.coachStyle = style;
   // Clear cached daily focus since style changed
   state.dailyFocus = null;
+  state.coachStyleOpen = false; // auto-collapse after pick
   save(); renderArtemis();
+}
+function toggleCoachStyleOpen(){
+  state.coachStyleOpen = !state.coachStyleOpen;
+  renderArtemis();
 }
 function toggleArtemisSettings(){
   state.artemisSettingsOpen = !state.artemisSettingsOpen;
@@ -2449,8 +2492,8 @@ function renderArtemis(){
   if(state.artemisSettingsOpen){
     html += renderArtemisSettings();
   }
+  html += renderCoachBar();
   html += renderArtStats();
-  html += renderCoachStyles();
   html += renderArtFocus();
   html += renderQuickPrompts();
   html += renderChat();
@@ -2538,24 +2581,34 @@ function renderArtStats(){
   </div>`;
 }
 
-function renderCoachStyles(){
+function renderCoachBar(){
   const active = state.coachStyle || 'friendly';
-  const tiles = Object.entries(COACH_STYLES).map(([k,s])=>`
-    <button class="coach-tile ${active===k?'active':''}" onclick="setCoachStyle('${k}')">
-      <div class="coach-tile-icon">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">${s.icon}</svg>
-      </div>
-      <div class="coach-tile-name">${s.name}</div>
-      <div class="coach-tile-desc">${s.desc}</div>
+  const style = COACH_STYLES[active];
+  const open = !!state.coachStyleOpen;
+  let html = `<div class="coach-bar">
+    <button class="coach-chip" onclick="toggleCoachStyleOpen()" aria-expanded="${open}">
+      <svg class="coach-chip-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">${style.icon}</svg>
+      <span class="coach-chip-label">Coach</span>
+      <span class="coach-chip-name">${style.name}</span>
+      <svg class="coach-chip-caret ${open?'open':''}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
     </button>
-  `).join('');
-  return `<div class="art-section-head">
-    <div class="art-section-label">Coach style</div>
     <button class="icon-btn" title="Settings" onclick="toggleArtemisSettings()">
       <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
     </button>
-  </div>
-  <div class="coach-grid">${tiles}</div>`;
+  </div>`;
+  if(open){
+    const tiles = Object.entries(COACH_STYLES).map(([k,s])=>`
+      <button class="coach-tile ${active===k?'active':''}" onclick="setCoachStyle('${k}')">
+        <div class="coach-tile-icon">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">${s.icon}</svg>
+        </div>
+        <div class="coach-tile-name">${s.name}</div>
+        <div class="coach-tile-desc">${s.desc}</div>
+      </button>
+    `).join('');
+    html += `<div class="coach-grid">${tiles}</div>`;
+  }
+  return html;
 }
 
 function renderArtFocus(){
