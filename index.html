@@ -14,9 +14,11 @@
 <meta name="theme-color" content="#f7f7f5" media="(prefers-color-scheme: light)">
 <meta name="description" content="Personal training and nutrition tracker">
 
-<!-- Apple touch icon (lime square with weight emoji as fallback) -->
-<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%23FFB800'/%3E%3Ctext x='90' y='118' text-anchor='middle' font-family='-apple-system,sans-serif' font-size='100' font-weight='800' fill='%23070707'%3EC%3C/text%3E%3C/svg%3E">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23FFB800'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='-apple-system,sans-serif' font-size='18' font-weight='800' fill='%23070707'%3EC%3C/text%3E%3C/svg%3E">
+<!-- App icons -->
+<link rel="apple-touch-icon" sizes="180x180" href="Assets/Divinify_DV%20-%20Gold.png">
+<link rel="apple-touch-icon" href="Assets/Divinify_DV%20-%20Gold.png">
+<link rel="icon" type="image/png" href="Assets/Divinify_DV%20-%20Gold.png">
+<link rel="shortcut icon" href="Assets/Divinify_DV%20-%20Gold.png">
 
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -493,6 +495,128 @@ input::placeholder{color:var(--text-4);font-weight:400}
   pointer-events:none;
 }
 
+/* Editable exercise title */
+.ex-name-wrap{display:flex;align-items:center;gap:6px;flex:1;min-width:0}
+.ex-name-edit{
+  flex:1;min-width:0;
+  background:transparent;
+  border:1px solid transparent;
+  border-radius:6px;
+  padding:3px 6px;margin-left:-6px;
+  font-size:16px;font-weight:700;letter-spacing:-0.01em;
+  line-height:1.25;color:var(--text);
+  font-family:inherit;
+  outline:none;cursor:text;
+  transition:all 0.15s var(--t-fast);
+  width:100%;
+}
+.ex-name-edit:hover{border-color:var(--border)}
+.ex-name-edit:focus{
+  border-color:var(--accent);
+  background:var(--surface-2);
+  box-shadow:0 0 0 3px var(--accent-glow);
+}
+.ex-name-edit.customized{color:var(--accent)}
+.icon-btn{
+  background:none;border:none;cursor:pointer;
+  width:28px;height:28px;
+  display:inline-flex;align-items:center;justify-content:center;
+  color:var(--text-4);
+  border-radius:8px;flex-shrink:0;
+  transition:all 0.15s var(--t-fast);
+}
+.icon-btn:active{transform:scale(0.88);background:var(--surface-2)}
+.icon-btn svg{width:14px;height:14px;stroke-width:2}
+.icon-btn:hover{color:var(--text-2)}
+.icon-btn.danger:active{color:var(--warn)}
+
+/* HIIT picker */
+.hiit-row .icon-btn{margin-top:-2px}
+.hiit-add-btn{
+  width:100%;
+  margin-top:14px;
+  background:var(--surface-2);
+  border:1px dashed var(--border-strong);
+  border-radius:var(--r-sm);
+  padding:12px;
+  color:var(--text-2);
+  font-family:inherit;font-size:13px;font-weight:600;
+  cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  transition:all 0.15s var(--t-fast);
+}
+.hiit-add-btn:hover{border-color:var(--accent);color:var(--text)}
+.hiit-add-btn:active{transform:scale(0.99)}
+.hiit-add-btn svg{width:14px;height:14px;stroke-width:2.5}
+.hiit-pool{
+  margin-top:12px;
+  padding:12px;
+  background:var(--surface-2);
+  border:1px solid var(--border);
+  border-radius:var(--r-sm);
+  animation:fadeUp 0.25s var(--t-fast);
+}
+.hiit-pool-title{font-size:10.5px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px}
+.hiit-pool-item{
+  display:flex;align-items:center;gap:10px;
+  padding:9px 10px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:8px;
+  margin-bottom:6px;
+  cursor:pointer;
+  transition:all 0.15s var(--t-fast);
+}
+.hiit-pool-item:active{transform:scale(0.99)}
+.hiit-pool-item.selected{
+  background:var(--accent-soft);
+  border-color:var(--accent);
+}
+.hiit-pool-check{
+  width:18px;height:18px;
+  border:1.5px solid var(--border-strong);
+  border-radius:5px;
+  flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  color:transparent;
+  transition:all 0.15s var(--t-fast);
+}
+.hiit-pool-item.selected .hiit-pool-check{
+  background:var(--accent);
+  border-color:var(--accent);
+  color:var(--accent-text);
+}
+.hiit-pool-check svg{width:12px;height:12px;stroke-width:3}
+.hiit-pool-info{flex:1;min-width:0}
+.hiit-pool-name{font-size:13px;font-weight:600;letter-spacing:-0.01em}
+.hiit-pool-detail{font-size:11px;color:var(--text-3);margin-top:2px;font-weight:500}
+
+/* Meal template editor */
+.meal-row .meal-actions{flex-direction:row;align-items:center}
+.meal-row-actions-stack{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0}
+.meal-edit-row{padding:14px 0;border-bottom:1px solid var(--border)}
+.meal-edit-row:last-child{border-bottom:none}
+.meal-edit-grid{display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:10px}
+.meal-edit-grid input{font-family:'Inter',sans-serif;font-weight:500;letter-spacing:-0.01em}
+.meal-edit-macros{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.meal-edit-macros input{padding:9px 10px;font-size:13px;text-align:center;font-family:'JetBrains Mono',monospace}
+.meal-edit-actions{display:flex;gap:8px;margin-top:10px}
+.meal-add-btn{
+  width:100%;margin-top:14px;
+  background:var(--surface-2);
+  border:1px dashed var(--border-strong);
+  border-radius:var(--r-sm);
+  padding:14px;
+  color:var(--text-2);
+  font-family:inherit;font-size:13px;font-weight:600;
+  cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  transition:all 0.15s var(--t-fast);
+}
+.meal-add-btn:hover{border-color:var(--accent);color:var(--text)}
+.meal-add-btn:active{transform:scale(0.99)}
+.meal-add-btn svg{width:14px;height:14px;stroke-width:2.5}
+
 </style>
 </head>
 <body data-theme="dark">
@@ -736,12 +860,31 @@ function setThemeIcons(){
   });
 }
 
-const MEALS = [
+const DEFAULT_MEALS = [
   {name:"Breakfast",items:"4 eggs + 2 whites · Greek yogurt · banana · granola",cal:700,prot:55,carb:70,fat:22},
   {name:"Lunch",items:"Rotisserie chicken · white rice · frozen veggies",cal:850,prot:55,carb:95,fat:20},
   {name:"Pre-workout",items:"Whey shake · whole milk · banana",cal:450,prot:40,carb:55,fat:10},
   {name:"Dinner",items:"Beef / salmon / chicken + rice or potato",cal:900,prot:50,carb:100,fat:28},
   {name:"Before bed",items:"Cottage cheese + peanut butter",cal:300,prot:25,carb:15,fat:12},
+];
+
+const HIIT_POOL = [
+  {name:"Battle ropes",detail:"30s all-out · 30s rest · 4 rounds"},
+  {name:"Box jumps",detail:"10 reps · land soft · reset · 3 rounds"},
+  {name:"Assault bike sprint",detail:"20s max effort · 40s rest · 4 rounds"},
+  {name:"Kettlebell swings",detail:"20 reps · 30s rest · 5 rounds"},
+  {name:"Rowing sprint",detail:"250m all-out · 60s rest · 4 rounds"},
+  {name:"Jump rope",detail:"45s on · 15s rest · 4 rounds"},
+  {name:"Burpees",detail:"10 reps · 30s rest · 5 rounds"},
+  {name:"DB thrusters",detail:"12 reps · 30s rest · 4 rounds"},
+  {name:"Mountain climbers",detail:"40s on · 20s rest · 4 rounds"},
+  {name:"Wall balls",detail:"15 reps · 30s rest · 4 rounds"},
+  {name:"Goblet squat to press",detail:"10 reps · 30s rest · 4 rounds"},
+  {name:"Box step-ups",detail:"15/leg · 45s rest · 3 rounds"},
+  {name:"Prowler push / sled",detail:"20 yards · 60s rest · 4 rounds"},
+  {name:"Treadmill sprint",detail:"30s on · 60s rest · 6 rounds"},
+  {name:"Plank hold",detail:"45s on · 15s rest · 4 rounds"},
+  {name:"Jumping jacks",detail:"60s on · 20s rest · 4 rounds"},
 ];
 
 const DAYS = [
@@ -824,7 +967,8 @@ const PHASES = [
 const STORAGE_KEY = 'carter_training_v1';
 
 let state = {
-  startDate:null,foodLog:{},setLog:{},weights:[],workoutsCompleted:[],prs:{},theme:'dark'
+  startDate:null,foodLog:{},setLog:{},weights:[],workoutsCompleted:[],prs:{},theme:'dark',
+  customExercises:{},customHiit:{},meals:null
 };
 
 function todayKey(){return new Date().toISOString().split('T')[0]}
@@ -843,11 +987,16 @@ function load(){
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
     if(raw){ state = JSON.parse(raw); }
-    if(!state.startDate){ state.startDate = todayKey(); save(); }
+    if(!state.startDate){ state.startDate = todayKey(); }
     if(!state.theme) state.theme='dark';
+    if(!state.customExercises) state.customExercises={};
+    if(!state.customHiit) state.customHiit={};
+    if(!state.meals||!Array.isArray(state.meals)) state.meals=JSON.parse(JSON.stringify(DEFAULT_MEALS));
+    save();
     applyTheme();
   }catch(e){
     state.startDate = todayKey();
+    state.meals = JSON.parse(JSON.stringify(DEFAULT_MEALS));
     applyTheme();
   }
 }
@@ -957,6 +1106,105 @@ function logWeight(){
   save(); renderDashboard(); toast('Weight logged');
 }
 
+// ----- Exercise name editing -----
+function getExName(dayIdx, exIdx){
+  const custom = state.customExercises?.[dayIdx]?.[exIdx];
+  return (custom && custom.trim()) ? custom : DAYS[dayIdx].exercises[exIdx].name;
+}
+function isExCustomized(dayIdx, exIdx){
+  const c = state.customExercises?.[dayIdx]?.[exIdx];
+  return !!(c && c.trim() && c.trim() !== DAYS[dayIdx].exercises[exIdx].name);
+}
+function saveExName(dayIdx, exIdx, value){
+  const trimmed = (value||'').trim();
+  if(!state.customExercises) state.customExercises={};
+  if(!state.customExercises[dayIdx]) state.customExercises[dayIdx]={};
+  const original = DAYS[dayIdx].exercises[exIdx].name;
+  if(!trimmed || trimmed === original){
+    delete state.customExercises[dayIdx][exIdx];
+  } else {
+    state.customExercises[dayIdx][exIdx] = trimmed;
+  }
+  save();
+}
+function resetExName(dayIdx, exIdx){
+  if(state.customExercises?.[dayIdx]) delete state.customExercises[dayIdx][exIdx];
+  save(); renderWorkoutContent(); toast('Reset');
+}
+
+// ----- HIIT picker -----
+function getDayHiit(dayIdx){
+  const c = state.customHiit?.[dayIdx];
+  if(Array.isArray(c)) return c;
+  return DAYS[dayIdx].hiit || [];
+}
+function setDayHiit(dayIdx, list){
+  if(!state.customHiit) state.customHiit={};
+  state.customHiit[dayIdx] = list;
+  save();
+}
+let hiitPickerOpen = {};
+function toggleHiitPicker(dayIdx){
+  hiitPickerOpen[dayIdx] = !hiitPickerOpen[dayIdx];
+  renderWorkoutContent();
+}
+function toggleHiitItem(dayIdx, name){
+  const current = getDayHiit(dayIdx).slice();
+  const idx = current.findIndex(h=>h.name===name);
+  if(idx>=0){
+    current.splice(idx,1);
+  } else {
+    const pool = HIIT_POOL.find(h=>h.name===name);
+    if(pool) current.push({name:pool.name, detail:pool.detail});
+  }
+  setDayHiit(dayIdx, current);
+  renderWorkoutContent();
+}
+function removeHiitItem(dayIdx, idx){
+  const current = getDayHiit(dayIdx).slice();
+  current.splice(idx,1);
+  setDayHiit(dayIdx, current);
+  renderWorkoutContent();
+}
+
+// ----- Meal template editor -----
+let mealEditIdx = null;
+let mealAddOpen = false;
+function startEditMeal(idx){ mealEditIdx = idx; mealAddOpen = false; renderNutrition(); }
+function cancelEditMeal(){ mealEditIdx = null; renderNutrition(); }
+function saveEditMeal(idx){
+  const name = document.getElementById(`m-edit-name-${idx}`).value.trim();
+  const items = document.getElementById(`m-edit-items-${idx}`).value.trim();
+  const cal = parseInt(document.getElementById(`m-edit-cal-${idx}`).value)||0;
+  const prot = parseInt(document.getElementById(`m-edit-prot-${idx}`).value)||0;
+  const carb = parseInt(document.getElementById(`m-edit-carb-${idx}`).value)||0;
+  const fat = parseInt(document.getElementById(`m-edit-fat-${idx}`).value)||0;
+  if(!name){ toast('Name required'); return; }
+  state.meals[idx] = {name, items, cal, prot, carb, fat};
+  mealEditIdx = null;
+  save(); renderNutrition(); toast('Updated');
+}
+function removeMealTemplate(idx){
+  if(!confirm(`Remove "${state.meals[idx].name}"?`)) return;
+  state.meals.splice(idx,1);
+  if(mealEditIdx===idx) mealEditIdx = null;
+  save(); renderNutrition(); toast('Removed');
+}
+function startAddMeal(){ mealAddOpen = true; mealEditIdx = null; renderNutrition(); }
+function cancelAddMeal(){ mealAddOpen = false; renderNutrition(); }
+function saveNewMeal(){
+  const name = document.getElementById('m-new-name').value.trim();
+  const items = document.getElementById('m-new-items').value.trim();
+  const cal = parseInt(document.getElementById('m-new-cal').value)||0;
+  const prot = parseInt(document.getElementById('m-new-prot').value)||0;
+  const carb = parseInt(document.getElementById('m-new-carb').value)||0;
+  const fat = parseInt(document.getElementById('m-new-fat').value)||0;
+  if(!name){ toast('Name required'); return; }
+  state.meals.push({name, items, cal, prot, carb, fat});
+  mealAddOpen = false;
+  save(); renderNutrition(); toast('Added');
+}
+
 let activeDay = 0;
 
 function renderWorkout(){
@@ -987,9 +1235,19 @@ function renderWorkoutContent(){
       html+=`<div class="card">`;
       day.exercises.forEach((ex,ei)=>{
         if(!dayLog[ei]) dayLog[ei]={};
+        const currentName = getExName(activeDay, ei);
+        const customized = isExCustomized(activeDay, ei);
+        const safeName = currentName.replace(/"/g,'&quot;');
         html+=`<div class="ex-row">
           <div class="ex-head">
-            <div class="ex-name">${ex.name}</div>
+            <div class="ex-name-wrap">
+              <input class="ex-name-edit ${customized?'customized':''}" type="text" value="${safeName}" spellcheck="false"
+                onblur="saveExName(${activeDay},${ei},this.value)"
+                onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
+              ${customized?`<button class="icon-btn" title="Reset to default" onclick="resetExName(${activeDay},${ei})">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              </button>`:''}
+            </div>
             <span class="ex-rest">${ex.rest}</span>
           </div>
           <div class="ex-meta"><strong>${ex.sets} sets</strong> · ${ex.reps} reps · ${ex.weight}</div>
@@ -1017,17 +1275,46 @@ function renderWorkoutContent(){
       html+=`</div>`;
     }
 
-    if(day.hiit.length){
+    const dayHiit = getDayHiit(activeDay);
+    if(dayHiit.length || !day.rest){
       const title = day.fullHiit ? 'Conditioning · 5 rounds' : 'HIIT finisher · 10 min';
       html+=`<div class="section" style="margin-top:18px"><div class="section-label" style="margin-bottom:10px">${title}</div>
         <div class="card">`;
-      if(!day.fullHiit) html+=`<div class="hiit-note">Pick 2–3 movements. Rotate weekly to avoid plateaus.</div>`;
-      day.hiit.forEach((h,i)=>{
-        html+=`<div class="hiit-row">
-          <div class="hiit-num">${String(i+1).padStart(2,'0')}</div>
-          <div style="flex:1;min-width:0"><div class="hiit-name">${h.name}</div><div class="hiit-detail">${h.detail}</div></div>
-        </div>`;
-      });
+      if(!day.fullHiit) html+=`<div class="hiit-note">Pick movements that match today's session. Rotate weekly to avoid plateaus.</div>`;
+      if(dayHiit.length===0){
+        html+=`<div style="color:var(--text-4);font-size:13px;padding:8px 0;text-align:center">No HIIT selected for today</div>`;
+      } else {
+        dayHiit.forEach((h,i)=>{
+          html+=`<div class="hiit-row">
+            <div class="hiit-num">${String(i+1).padStart(2,'0')}</div>
+            <div style="flex:1;min-width:0"><div class="hiit-name">${h.name}</div><div class="hiit-detail">${h.detail}</div></div>
+            <button class="icon-btn danger" title="Remove" onclick="removeHiitItem(${activeDay},${i})">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>`;
+        });
+      }
+      const open = !!hiitPickerOpen[activeDay];
+      html+=`<button class="hiit-add-btn" onclick="toggleHiitPicker(${activeDay})">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="${open?'M19 9l-7 7-7-7':'M12 6v6m0 0v6m0-6h6m-6 0H6'}"/></svg>
+        ${open?'Close picker':'Add HIIT exercise'}
+      </button>`;
+      if(open){
+        html+=`<div class="hiit-pool"><div class="hiit-pool-title">Pick movements for this session</div>`;
+        HIIT_POOL.forEach(p=>{
+          const sel = dayHiit.some(h=>h.name===p.name);
+          html+=`<div class="hiit-pool-item ${sel?'selected':''}" onclick="toggleHiitItem(${activeDay},'${p.name.replace(/'/g,"\\'")}')">
+            <div class="hiit-pool-check">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            </div>
+            <div class="hiit-pool-info">
+              <div class="hiit-pool-name">${p.name}</div>
+              <div class="hiit-pool-detail">${p.detail}</div>
+            </div>
+          </div>`;
+        });
+        html+=`</div>`;
+      }
       html+=`</div></div>`;
     }
 
@@ -1089,22 +1376,82 @@ function renderNutrition(){
   document.getElementById('nutr-fat-total').textContent=totFat+'g';
   document.getElementById('nutr-bar').style.width=Math.min(100,Math.round(totCal/33))+'%';
 
-  let mhtml = MEALS.map((m,i)=>`
-    <div class="meal-row">
+  const meals = state.meals || [];
+  let mhtml = meals.map((m,i)=>{
+    if(mealEditIdx === i){
+      return `<div class="meal-edit-row">
+        <div class="meal-edit-grid">
+          <input type="text" id="m-edit-name-${i}" placeholder="Meal name" value="${(m.name||'').replace(/"/g,'&quot;')}">
+          <input type="text" id="m-edit-items-${i}" placeholder="Items (e.g. chicken · rice · veggies)" value="${(m.items||'').replace(/"/g,'&quot;')}">
+        </div>
+        <div class="meal-edit-macros">
+          <input type="number" id="m-edit-cal-${i}" placeholder="Cal" value="${m.cal||''}" inputmode="numeric">
+          <input type="number" id="m-edit-prot-${i}" placeholder="P" value="${m.prot||''}" inputmode="numeric">
+          <input type="number" id="m-edit-carb-${i}" placeholder="C" value="${m.carb||''}" inputmode="numeric">
+          <input type="number" id="m-edit-fat-${i}" placeholder="F" value="${m.fat||''}" inputmode="numeric">
+        </div>
+        <div class="meal-edit-actions">
+          <button class="btn btn-primary btn-sm" style="flex:1" onclick="saveEditMeal(${i})">
+            <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            Save
+          </button>
+          <button class="btn btn-ghost btn-sm" style="flex:1" onclick="cancelEditMeal()">Cancel</button>
+        </div>
+      </div>`;
+    }
+    return `<div class="meal-row">
       <div class="meal-info">
         <div class="meal-name">${m.name}</div>
-        <div class="meal-items">${m.items}</div>
+        <div class="meal-items">${m.items||''}</div>
         <div class="meal-macros-row">
-          <span class="meal-macro-pill">${m.prot}p</span>
-          <span class="meal-macro-pill">${m.carb}c</span>
-          <span class="meal-macro-pill">${m.fat}f</span>
+          <span class="meal-macro-pill">${m.prot||0}p</span>
+          <span class="meal-macro-pill">${m.carb||0}c</span>
+          <span class="meal-macro-pill">${m.fat||0}f</span>
         </div>
       </div>
-      <div class="meal-actions">
-        <div class="meal-cal">${m.cal}<small>cal</small></div>
-        <button class="btn btn-ghost btn-sm" onclick="logMeal(${i})">+ Log</button>
+      <div class="meal-row-actions-stack">
+        <div class="meal-cal">${m.cal||0}<small>cal</small></div>
+        <div style="display:flex;gap:4px;align-items:center">
+          <button class="icon-btn" title="Edit" onclick="startEditMeal(${i})">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+          </button>
+          <button class="icon-btn danger" title="Remove" onclick="removeMealTemplate(${i})">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"/></svg>
+          </button>
+          <button class="btn btn-ghost btn-sm" onclick="logMeal(${i})">+ Log</button>
+        </div>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
+  if(mealAddOpen){
+    mhtml += `<div class="meal-edit-row" style="border-top:1px solid var(--border);padding-top:18px;margin-top:6px">
+      <div class="meal-edit-grid">
+        <input type="text" id="m-new-name" placeholder="Meal name">
+        <input type="text" id="m-new-items" placeholder="Items (e.g. chicken · rice · veggies)">
+      </div>
+      <div class="meal-edit-macros">
+        <input type="number" id="m-new-cal" placeholder="Cal" inputmode="numeric">
+        <input type="number" id="m-new-prot" placeholder="P" inputmode="numeric">
+        <input type="number" id="m-new-carb" placeholder="C" inputmode="numeric">
+        <input type="number" id="m-new-fat" placeholder="F" inputmode="numeric">
+      </div>
+      <div class="meal-edit-actions">
+        <button class="btn btn-primary btn-sm" style="flex:1" onclick="saveNewMeal()">
+          <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+          Add template
+        </button>
+        <button class="btn btn-ghost btn-sm" style="flex:1" onclick="cancelAddMeal()">Cancel</button>
+      </div>
+    </div>`;
+  } else {
+    mhtml += `<button class="meal-add-btn" onclick="startAddMeal()">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+      Add meal template
+    </button>`;
+  }
+  if(meals.length===0 && !mealAddOpen){
+    mhtml = `<div style="color:var(--text-4);font-size:13px;text-align:center;padding:12px 0">No meal templates. Add one below.</div>` + mhtml;
+  }
   document.getElementById('meal-template-list').innerHTML=mhtml;
 
   if(log.length){
@@ -1122,9 +1469,10 @@ function renderNutrition(){
 }
 
 function logMeal(idx){
-  const m=MEALS[idx];
+  const m=(state.meals||[])[idx];
+  if(!m) return;
   if(!state.foodLog[todayKey()]) state.foodLog[todayKey()]=[];
-  state.foodLog[todayKey()].push({name:m.name,cal:m.cal,prot:m.prot,carb:m.carb,fat:m.fat});
+  state.foodLog[todayKey()].push({name:m.name,cal:m.cal||0,prot:m.prot||0,carb:m.carb||0,fat:m.fat||0});
   save(); renderNutrition(); toast(m.name+' logged');
 }
 
