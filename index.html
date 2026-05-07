@@ -626,7 +626,13 @@ input::placeholder{color:var(--text-4);font-weight:400}
 .meal-edit-grid{display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:10px}
 .meal-edit-grid input{font-family:'Inter',sans-serif;font-weight:500;letter-spacing:-0.01em}
 .meal-edit-macros{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-.meal-edit-macros input{padding:9px 10px;font-size:13px;text-align:center;font-family:'JetBrains Mono',monospace}
+.macro-input{display:flex;flex-direction:column;gap:4px;min-width:0}
+.macro-input-label{
+  font-size:9.5px;color:var(--text-3);font-weight:600;
+  text-transform:uppercase;letter-spacing:0.08em;
+  text-align:center;
+}
+.macro-input input{padding:9px 6px;font-size:13px;text-align:center;font-family:'JetBrains Mono',monospace;width:100%}
 .meal-edit-actions{display:flex;gap:8px;margin-top:10px}
 .meal-add-btn{
   width:100%;margin-top:14px;
@@ -643,6 +649,47 @@ input::placeholder{color:var(--text-4);font-weight:400}
 .meal-add-btn:hover{border-color:var(--accent);color:var(--text)}
 .meal-add-btn:active{transform:scale(0.99)}
 .meal-add-btn svg{width:14px;height:14px;stroke-width:2.5}
+
+/* Danger zone — gated reset */
+.danger-toggle{
+  background:none;border:none;
+  color:var(--text-4);
+  font-family:inherit;font-size:11px;font-weight:500;
+  letter-spacing:0.04em;
+  cursor:pointer;
+  padding:8px 4px;
+  margin-top:14px;
+  text-decoration:underline;
+  text-underline-offset:3px;
+  text-decoration-color:var(--text-4);
+  text-decoration-thickness:1px;
+  display:inline-flex;align-items:center;gap:5px;
+  transition:color 0.15s var(--t-fast);
+}
+.danger-toggle:active{color:var(--text-3)}
+.danger-zone{
+  margin-top:12px;
+  padding:14px;
+  background:transparent;
+  border:1px solid rgba(245,158,11,0.3);
+  border-radius:var(--r-sm);
+  animation:fadeUp 0.25s var(--t-fast);
+}
+.danger-zone-title{
+  font-size:11px;color:var(--warn);
+  font-weight:700;text-transform:uppercase;letter-spacing:0.08em;
+  margin-bottom:8px;
+  display:flex;align-items:center;gap:6px;
+}
+.danger-zone-title svg{width:14px;height:14px;stroke-width:2.5}
+.danger-zone-text{font-size:11.5px;color:var(--text-2);line-height:1.55;margin-bottom:10px;font-weight:500}
+.btn-danger{
+  background:transparent;
+  color:var(--warn);
+  border:1px solid var(--warn);
+  font-weight:600;
+}
+.btn-danger:active{background:rgba(245,158,11,0.1);transform:scale(0.98)}
 
 </style>
 </head>
@@ -840,17 +887,26 @@ input::placeholder{color:var(--text-4);font-weight:400}
   <div class="section">
     <div class="section-label" style="margin-bottom:10px">Data</div>
     <div class="card">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <button class="btn btn-ghost" onclick="exportData()">
-          <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-          Export
-        </button>
-        <button class="btn btn-ghost" onclick="resetData()">
-          <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-          Reset
+      <button class="btn btn-ghost btn-full" onclick="exportData()">
+        <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+        Export backup
+      </button>
+      <div style="font-size:11px;color:var(--text-4);margin-top:10px;line-height:1.5;font-weight:500">Data saves to this device only. Export regularly to keep a backup.</div>
+      <button class="danger-toggle" onclick="toggleDangerZone()">
+        <span id="danger-toggle-label">Advanced settings</span>
+        <svg id="danger-toggle-caret" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width:11px;height:11px;stroke-width:2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+      </button>
+      <div id="danger-zone" class="danger-zone" hidden>
+        <div class="danger-zone-title">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+          Danger zone
+        </div>
+        <div class="danger-zone-text">This permanently deletes all workout history, food logs, weights, custom meals, and PRs. Export a backup first.</div>
+        <button class="btn btn-danger btn-full" onclick="resetData()">
+          <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"/></svg>
+          Reset all data
         </button>
       </div>
-      <div style="font-size:11px;color:var(--text-4);margin-top:10px;line-height:1.5;font-weight:500">Data saves to this device only. Export to back up. Reset wipes everything.</div>
     </div>
   </div>
 </div>
@@ -1040,9 +1096,28 @@ function exportData(){
   toast('Backup downloaded');
 }
 
+function toggleDangerZone(){
+  const zone = document.getElementById('danger-zone');
+  const caret = document.getElementById('danger-toggle-caret');
+  const label = document.getElementById('danger-toggle-label');
+  if(!zone) return;
+  const isHidden = zone.hasAttribute('hidden');
+  if(isHidden){
+    zone.removeAttribute('hidden');
+    caret.style.transform = 'rotate(180deg)';
+    label.textContent = 'Hide advanced settings';
+  } else {
+    zone.setAttribute('hidden','');
+    caret.style.transform = '';
+    label.textContent = 'Advanced settings';
+  }
+}
+
 function resetData(){
-  if(!confirm('Reset all data? This cannot be undone.')) return;
-  if(!confirm('Are you absolutely sure? Everything will be wiped.')) return;
+  const v = prompt('This wipes ALL data — workouts, meals, weights, PRs.\n\nType RESET (in caps) to confirm:');
+  if(v === null) return;
+  if(v.trim() !== 'RESET'){ toast('Did not match — cancelled'); return; }
+  if(!confirm('Last chance. Permanently delete everything?')) return;
   localStorage.removeItem(STORAGE_KEY);
   location.reload();
 }
@@ -1429,10 +1504,14 @@ function renderNutrition(){
           <input type="text" id="m-edit-items-${i}" placeholder="Items (e.g. chicken · rice · veggies)" value="${(m.items||'').replace(/"/g,'&quot;')}">
         </div>
         <div class="meal-edit-macros">
-          <input type="number" id="m-edit-cal-${i}" placeholder="Cal" value="${m.cal||''}" inputmode="numeric">
-          <input type="number" id="m-edit-prot-${i}" placeholder="P" value="${m.prot||''}" inputmode="numeric">
-          <input type="number" id="m-edit-carb-${i}" placeholder="C" value="${m.carb||''}" inputmode="numeric">
-          <input type="number" id="m-edit-fat-${i}" placeholder="F" value="${m.fat||''}" inputmode="numeric">
+          <label class="macro-input"><span class="macro-input-label">Cal</span>
+            <input type="number" id="m-edit-cal-${i}" value="${m.cal||''}" inputmode="numeric"></label>
+          <label class="macro-input"><span class="macro-input-label">Protein g</span>
+            <input type="number" id="m-edit-prot-${i}" value="${m.prot||''}" inputmode="numeric"></label>
+          <label class="macro-input"><span class="macro-input-label">Carbs g</span>
+            <input type="number" id="m-edit-carb-${i}" value="${m.carb||''}" inputmode="numeric"></label>
+          <label class="macro-input"><span class="macro-input-label">Fat g</span>
+            <input type="number" id="m-edit-fat-${i}" value="${m.fat||''}" inputmode="numeric"></label>
         </div>
         <div class="meal-edit-actions">
           <button class="btn btn-primary btn-sm" style="flex:1" onclick="saveEditMeal(${i})">
@@ -1474,10 +1553,14 @@ function renderNutrition(){
         <input type="text" id="m-new-items" placeholder="Items (e.g. chicken · rice · veggies)">
       </div>
       <div class="meal-edit-macros">
-        <input type="number" id="m-new-cal" placeholder="Cal" inputmode="numeric">
-        <input type="number" id="m-new-prot" placeholder="P" inputmode="numeric">
-        <input type="number" id="m-new-carb" placeholder="C" inputmode="numeric">
-        <input type="number" id="m-new-fat" placeholder="F" inputmode="numeric">
+        <label class="macro-input"><span class="macro-input-label">Cal</span>
+          <input type="number" id="m-new-cal" inputmode="numeric"></label>
+        <label class="macro-input"><span class="macro-input-label">Protein g</span>
+          <input type="number" id="m-new-prot" inputmode="numeric"></label>
+        <label class="macro-input"><span class="macro-input-label">Carbs g</span>
+          <input type="number" id="m-new-carb" inputmode="numeric"></label>
+        <label class="macro-input"><span class="macro-input-label">Fat g</span>
+          <input type="number" id="m-new-fat" inputmode="numeric"></label>
       </div>
       <div class="meal-edit-actions">
         <button class="btn btn-primary btn-sm" style="flex:1" onclick="saveNewMeal()">
