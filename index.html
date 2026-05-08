@@ -1293,7 +1293,7 @@ input::placeholder{color:var(--text-4);font-weight:400}
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 100-15 7.5 7.5 0 000 15z"/></svg>
         <input type="search" id="food-search-input" placeholder="e.g. Oikos mixed berry yogurt" autocomplete="off" autocapitalize="none" spellcheck="false">
       </div>
-      <div id="food-search-results"><div class="food-search-status">Search a brand or food. Macros load per 100 g — set the grams you ate.</div></div>
+      <div id="food-search-results"><div class="food-search-status">Search a brand or food. Macros load automatically — adjust grams to match what you ate.</div></div>
     </div>
   </div>
 
@@ -2560,11 +2560,16 @@ function removeFood(idx){
   save(); renderNutrition();
 }
 
-// ===== Food search (OpenFoodFacts search-a-licious) =====
-// We use https://search.openfoodfacts.org (search-a-licious) instead of the
-// legacy cgi/search.pl endpoint, which routinely takes 15+ seconds and
-// returns 503 after a handful of requests. The new endpoint is sub-1s and
-// indexes per-100g nutriments — so we let users enter quantity in grams.
+// ===== Food search (USDA FoodData Central) =====
+// Why USDA over OpenFoodFacts:
+//   - OFF's cgi/search.pl is rate-limited to ~5 req before returning 503.
+//   - OFF's api/v2/search has CORS but the same overloaded backend (5s+, 503s).
+//   - OFF's search-a-licious is fast but its CORS config omits
+//     Access-Control-Allow-Origin entirely, so browsers block the response.
+//   - USDA FoodData Central: ~800ms, proper CORS (`*`), no transient 503s,
+//     comprehensive Branded foods database with serving sizes.
+// Uses DEMO_KEY by default (30 req/hour per IP — fine for personal use).
+const USDA_API_KEY = 'DEMO_KEY';
 let foodSearchResults = [];
 let foodSearchTimer = null;
 let foodSearchSeq = 0;
@@ -2582,7 +2587,7 @@ function attachFoodSearchListener(){
       foodSearchResults = [];
       lastFoodQuery = '';
       if(foodSearchAbort) foodSearchAbort.abort();
-      renderFoodSearchResults('<div class="food-search-status">Search a brand or food to pull macros automatically.</div>');
+      renderFoodSearchResults('<div class="food-search-status">Search a brand or food. Macros load automatically — adjust grams to match what you ate.</div>');
       return;
     }
     renderFoodSearchResults('<div class="food-search-status">Searching…</div>');
@@ -2590,15 +2595,19 @@ function attachFoodSearchListener(){
   });
 }
 
-async function fetchOFFSearch(q, signal){
-  const url = 'https://search.openfoodfacts.org/search'
-    + '?q=' + encodeURIComponent(q)
-    + '&page_size=20';
+async function fetchUSDA(q, signal){
+  const key = (state.usdaKey && state.usdaKey.trim()) || USDA_API_KEY;
+  const url = 'https://api.nal.usda.gov/fdc/v1/foods/search'
+    + '?api_key=' + encodeURIComponent(key)
+    + '&query=' + encodeURIComponent(q)
+    + '&pageSize=20'
+    + '&dataType=' + encodeURIComponent('Branded,Foundation,SR Legacy');
   const res = await fetch(url, {signal});
+  if(res.status === 429){
+    const e = new Error('rate_limit'); e.status = 429; throw e;
+  }
   if(!res.ok){
-    const e = new Error('http_' + res.status);
-    e.status = res.status;
-    throw e;
+    const e = new Error('http_' + res.status); e.status = res.status; throw e;
   }
   return res.json();
 }
@@ -2610,12 +2619,12 @@ async function runFoodSearch(q, isRetry){
   foodSearchAbort = new AbortController();
   const signal = foodSearchAbort.signal;
   try{
-    const data = await fetchOFFSearch(q, signal);
+    const data = await fetchUSDA(q, signal);
     if(seq !== foodSearchSeq) return;
-    const hits = (data.hits||[])
-      .map(p=>normalizeFoodHit(p))
-      .filter(h=>h && h.cal>0 && h.name);
-    foodSearchResults = hits.slice(0, 12);
+    const hits = (data.foods||[])
+      .map(f=>normalizeFoodHit(f))
+      .filter(h=>h && h.cal>=0 && h.name);
+    foodSearchResults = hits.slice(0, 15);
     if(!foodSearchResults.length){
       renderFoodSearchResults('<div class="food-search-status">No matches. Try a simpler or more specific search.</div>');
       return;
@@ -2623,17 +2632,15 @@ async function runFoodSearch(q, isRetry){
     renderFoodSearchResults(foodSearchResults.map((h,i)=>foodResultCard(h,i)).join(''));
   } catch(err){
     if(err.name === 'AbortError' || seq !== foodSearchSeq) return;
-    // One automatic retry on transient failure (5xx / network blips)
-    if(!isRetry && (err.status>=500 || err.status===429 || !err.status)){
-      setTimeout(()=>{
-        if(seq === foodSearchSeq) runFoodSearch(q, true);
-      }, 1200);
+    if(err.status === 429){
+      renderFoodSearchResults('<div class="food-search-status error">Hit the demo search limit (30/hr). It resets each hour, or get a free key from <a href="https://api.data.gov/signup/" target="_blank" class="today-undo">api.data.gov</a> for 1000/hr.</div>');
       return;
     }
-    const msg = err.status===429 || err.status>=500
-      ? 'Food database is overloaded. <a href="#" class="today-undo" onclick="event.preventDefault();retryFoodSearch()">Try again</a>.'
-      : 'Couldn\'t reach the food database. Check your connection and <a href="#" class="today-undo" onclick="event.preventDefault();retryFoodSearch()">try again</a>.';
-    renderFoodSearchResults(`<div class="food-search-status error">${msg}</div>`);
+    if(!isRetry && (!err.status || err.status>=500)){
+      setTimeout(()=>{ if(seq === foodSearchSeq) runFoodSearch(q, true); }, 1000);
+      return;
+    }
+    renderFoodSearchResults('<div class="food-search-status error">Couldn\'t reach the food database. Check your connection and <a href="#" class="today-undo" onclick="event.preventDefault();retryFoodSearch()">try again</a>.</div>');
   }
 }
 
@@ -2643,48 +2650,84 @@ function retryFoodSearch(){
   runFoodSearch(lastFoodQuery);
 }
 
-function normalizeFoodHit(p){
-  const n = p.nutriments || {};
-  const name = (p.product_name_en || p.product_name || '').trim();
-  if(!name) return null;
-  const brandRaw = p.brands;
-  const brand = Array.isArray(brandRaw)
-    ? (brandRaw[0]||'').trim()
-    : (brandRaw||'').split(',')[0].trim();
+function cleanFoodDescription(desc, brand){
+  if(!desc) return '';
+  const parts = desc.split(',').map(s=>s.trim()).filter(Boolean);
+  const seen = new Set();
+  const brandUp = (brand||'').toUpperCase();
+  const cleaned = [];
+  for(const p of parts){
+    const k = p.toUpperCase();
+    if(seen.has(k)) continue;
+    if(brandUp && k === brandUp) continue;
+    seen.add(k);
+    cleaned.push(p);
+  }
+  return cleaned
+    .map(p => p.toLowerCase().replace(/\b\w/g, c => c.toUpperCase()))
+    .join(', ');
+}
 
-  const num = v => {
-    const x = parseFloat(v);
-    return isFinite(x) && x>=0 ? x : 0;
+function normalizeFoodHit(f){
+  const find = names => {
+    for(const n of f.foodNutrients||[]){
+      if(names.includes(n.nutrientName)) {
+        const v = parseFloat(n.value);
+        if(isFinite(v) && v >= 0) return v;
+      }
+    }
+    return 0;
   };
+  // USDA's foodNutrients for Branded foods are documented as per 100g.
+  const cal100  = find(['Energy', 'Energy (Atwater General Factors)', 'Energy (Atwater Specific Factors)']);
+  const prot100 = find(['Protein']);
+  const carb100 = find(['Carbohydrate, by difference']);
+  const fat100  = find(['Total lipid (fat)']);
+  if(cal100 <= 0 && prot100 <= 0) return null;
 
-  // search-a-licious indexes per-100g nutriments. We log in grams.
-  const cal100  = num(n['energy-kcal_100g']);
-  const prot100 = num(n['proteins_100g']);
-  const carb100 = num(n['carbohydrates_100g']);
-  const fat100  = num(n['fat_100g']);
+  const brand = (f.brandOwner || f.brandName || '').trim();
+  const name = cleanFoodDescription(f.description||'', brand);
+  if(!name) return null;
 
-  // Display values for the result card (per 100 g)
+  const ssRaw = parseFloat(f.servingSize);
+  const ssUnit = (f.servingSizeUnit||'').toLowerCase();
+  const ssGrams = (ssUnit === 'g' || ssUnit === 'grm') && ssRaw > 0 && ssRaw < 2000
+    ? Math.round(ssRaw)
+    : null;
+  const ssLabel = (f.householdServingFullText||'').trim();
+
   return {
     name, brand,
-    code: p.code || null,
+    fdcId: f.fdcId,
     cal: Math.round(cal100),
     prot: Math.round(prot100),
     carb: Math.round(carb100),
     fat: Math.round(fat100),
     cal100, prot100, carb100, fat100,
-    unitLabel: 'per 100 g'
+    servingGrams: ssGrams,
+    servingLabel: ssLabel
   };
 }
 
 function foodResultCard(h, i){
+  const defaultGrams = h.servingGrams || 100;
+  let servingHint;
+  if(h.servingGrams && h.servingLabel){
+    const lab = h.servingLabel.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+    servingHint = `Serving: ${escapeHtml(lab)} (${h.servingGrams} g)`;
+  } else if(h.servingGrams){
+    servingHint = `Serving: ${h.servingGrams} g`;
+  } else {
+    servingHint = 'per 100 g';
+  }
   return `<div class="food-result">
     <div class="food-result-head">
       <div style="flex:1;min-width:0">
         <div class="food-result-name">${escapeHtml(h.name)}</div>
         ${h.brand ? `<div class="food-result-brand">${escapeHtml(h.brand)}</div>` : ''}
-        <div class="food-result-serving">${escapeHtml(h.unitLabel)}</div>
+        <div class="food-result-serving">${servingHint}</div>
       </div>
-      <div class="food-result-cal">${h.cal}<small>cal</small></div>
+      <div class="food-result-cal">${h.cal}<small>/100g</small></div>
     </div>
     <div class="food-result-macros">
       <span class="meal-macro-pill">${h.prot}p</span>
@@ -2693,7 +2736,7 @@ function foodResultCard(h, i){
     </div>
     <div class="food-result-actions">
       <span class="food-qty-label">Grams</span>
-      <input type="number" class="food-qty-input" id="food-qty-${i}" value="100" min="1" step="10" inputmode="numeric">
+      <input type="number" class="food-qty-input" id="food-qty-${i}" value="${defaultGrams}" min="1" step="10" inputmode="numeric">
       <button class="btn btn-primary btn-sm food-add-btn" onclick="addSearchedFood(${i})">
         <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
         Add
@@ -2715,7 +2758,7 @@ function addSearchedFood(idx){
   const k = grams / 100;
   const dk = todayKey();
   if(!state.foodLog[dk]) state.foodLog[dk]=[];
-  const entryName = grams===100 ? h.name : `${h.name} (${Math.round(grams)}g)`;
+  const entryName = `${h.name} (${Math.round(grams)}g)`;
   state.foodLog[dk].push({
     name: entryName,
     cal: Math.round(h.cal100 * k),
