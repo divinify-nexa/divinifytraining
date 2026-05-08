@@ -237,10 +237,51 @@ nav{
   overflow:hidden;
 }
 .today-eyebrow{font-size:11px;color:var(--accent);font-weight:600;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px}
+.today-eyebrow-done{display:inline-flex;align-items:center;gap:6px;background:var(--accent-soft);color:var(--accent);padding:5px 10px;border-radius:999px;border:1px solid var(--accent-glow)}
+.today-check{width:13px;height:13px;stroke-width:3}
+.today-hero-done .today-name{color:var(--text-2)}
+.today-undo{color:var(--text-3);text-decoration:underline;text-underline-offset:2px;font-weight:600}
+.today-undo:hover{color:var(--text-2)}
 .today-name{font-family:'Instrument Serif',serif;font-size:32px;line-height:1;font-weight:400;letter-spacing:-0.03em;margin-bottom:6px}
 .today-desc{font-size:13.5px;color:var(--text-2);font-weight:500;margin-bottom:18px}
 .today-cta{display:flex;justify-content:space-between;align-items:center}
 .today-meta{font-size:12px;color:var(--text-3);font-weight:500}
+
+.food-search-input-wrap{position:relative;margin-bottom:10px}
+.food-search-input-wrap svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--text-3);stroke-width:2;pointer-events:none}
+.food-search-input-wrap input[type=search]{
+  background:var(--surface-2);
+  border:1px solid var(--border-strong);
+  border-radius:var(--r-sm);
+  color:var(--text);
+  font-family:inherit;
+  font-size:14px;
+  padding:11px 13px 11px 34px;
+  width:100%;
+  outline:none;
+  transition:all 0.2s var(--t-fast);
+  -webkit-appearance:none;
+  font-weight:500;
+}
+.food-search-input-wrap input[type=search]:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+.food-search-input-wrap input[type=search]::placeholder{color:var(--text-4);font-weight:400}
+.food-search-input-wrap input[type=search]::-webkit-search-cancel-button{-webkit-appearance:none;height:14px;width:14px;background:var(--text-4);-webkit-mask:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5'><path d='M6 18L18 6M6 6l12 12'/></svg>") center/contain no-repeat;mask:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5'><path d='M6 18L18 6M6 6l12 12'/></svg>") center/contain no-repeat;cursor:pointer}
+.food-search-status{font-size:12.5px;color:var(--text-3);padding:8px 0;text-align:center}
+.food-search-status.error{color:var(--warn)}
+.food-result{display:flex;flex-direction:column;gap:8px;padding:12px 0;border-top:1px solid var(--border)}
+.food-result:first-child{border-top:none;padding-top:6px}
+.food-result-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.food-result-name{font-weight:600;font-size:13.5px;line-height:1.3;flex:1;min-width:0}
+.food-result-brand{font-size:11.5px;color:var(--text-3);font-weight:500;margin-top:2px}
+.food-result-cal{font-family:'Instrument Serif',serif;font-size:22px;color:var(--accent);font-weight:400;line-height:1;white-space:nowrap}
+.food-result-cal small{font-size:10px;color:var(--text-3);font-family:inherit;margin-left:2px}
+.food-result-macros{display:flex;gap:6px;flex-wrap:wrap}
+.food-result-macros .meal-macro-pill{font-size:10.5px;padding:2px 8px}
+.food-result-serving{font-size:11px;color:var(--text-3);font-weight:500}
+.food-result-actions{display:flex;gap:8px;align-items:center}
+.food-qty-input{width:60px;padding:7px 10px;font-size:12.5px;text-align:center}
+.food-qty-label{font-size:11px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:0.06em}
+.food-add-btn{margin-left:auto}
 
 .btn{
   display:inline-flex;align-items:center;justify-content:center;gap:6px;
@@ -1246,6 +1287,17 @@ input::placeholder{color:var(--text-4);font-weight:400}
   <div class="card" id="meal-template-list"></div>
 
   <div class="section">
+    <div class="section-label" style="margin-bottom:10px">Search foods</div>
+    <div class="card">
+      <div class="food-search-input-wrap">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 100-15 7.5 7.5 0 000 15z"/></svg>
+        <input type="search" id="food-search-input" placeholder="e.g. Oikos mixed berry yogurt" autocomplete="off" autocapitalize="none" spellcheck="false">
+      </div>
+      <div id="food-search-results"><div class="food-search-status">Search a brand or food to pull macros automatically.</div></div>
+    </div>
+  </div>
+
+  <div class="section">
     <div class="section-label" style="margin-bottom:10px">Custom food</div>
     <div class="card">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
@@ -1607,18 +1659,47 @@ function renderDashboard(){
 
   const dayIdx = getTodayDayIdx();
   const day = DAYS[dayIdx];
-  let html=`
-    <div class="today-eyebrow">${day.label} · ${day.rest?'Recovery':'Training'}</div>
-    <div class="today-name">${day.name}</div>
-    <div class="today-desc">${day.desc}</div>
-    <div class="today-cta">
-      <div class="today-meta">${day.rest?'Eat your protein.':`${day.exercises.length} exercises${day.hiit.length?' + HIIT':''}`}</div>
-      <button class="btn btn-primary btn-sm" onclick="showPage('workout',document.querySelectorAll('nav .nav-btn')[1])">
-        Start session
-        <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
-      </button>
-    </div>`;
-  document.getElementById('today-session-content').innerHTML=html;
+  const sessionDone = !day.rest && state.workoutsCompleted.includes(todayKey()+'-'+dayIdx);
+  const todayHero = document.getElementById('today-session-content');
+  todayHero.classList.toggle('today-hero-done', sessionDone);
+  let html;
+  if(sessionDone){
+    const dk = todayKey();
+    const dayLog = state.setLog?.[dk]?.[dayIdx] || {};
+    let setsLogged = 0, setsTotal = 0;
+    (day.exercises||[]).forEach((ex,ei)=>{
+      setsTotal += ex.sets;
+      const exLog = dayLog[ei]||{};
+      Object.values(exLog).forEach(s=>{ if(s.done) setsLogged++; });
+    });
+    html=`
+      <div class="today-eyebrow today-eyebrow-done">
+        <svg class="today-check" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+        Session complete · ${day.label}
+      </div>
+      <div class="today-name">${day.name}</div>
+      <div class="today-desc">Logged ${setsLogged}/${setsTotal} sets. Recovery starts now — hit your protein.</div>
+      <div class="today-cta">
+        <div class="today-meta"><a href="#" class="today-undo" onclick="event.preventDefault();unmarkWorkoutDone(${dayIdx})">Undo</a></div>
+        <button class="btn btn-ghost btn-sm" onclick="showPage('workout',document.querySelectorAll('nav .nav-btn')[1])">
+          View session
+          <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+        </button>
+      </div>`;
+  } else {
+    html=`
+      <div class="today-eyebrow">${day.label} · ${day.rest?'Recovery':'Training'}</div>
+      <div class="today-name">${day.name}</div>
+      <div class="today-desc">${day.desc}</div>
+      <div class="today-cta">
+        <div class="today-meta">${day.rest?'Eat your protein.':`${day.exercises.length} exercises${day.hiit.length?' + HIIT':''}`}</div>
+        <button class="btn btn-primary btn-sm" onclick="showPage('workout',document.querySelectorAll('nav .nav-btn')[1])">
+          Start session
+          <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+        </button>
+      </div>`;
+  }
+  todayHero.innerHTML=html;
 
   const wh = state.weights.slice(-5).reverse();
   if(wh.length){
@@ -2327,6 +2408,12 @@ function markWorkoutDone(){
   save(); toast('Session complete');
 }
 
+function unmarkWorkoutDone(dayIdx){
+  const key = todayKey()+'-'+dayIdx;
+  state.workoutsCompleted = (state.workoutsCompleted||[]).filter(k=>k!==key);
+  save(); renderDashboard(); toast('Session reopened');
+}
+
 function renderNutrition(){
   const today = new Date().toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});
   document.getElementById('nutr-date').textContent = today;
@@ -2433,7 +2520,7 @@ function renderNutrition(){
 
   if(log.length){
     let lhtml=log.map((f,i)=>`<div class="log-row">
-      <span style="font-weight:600">${f.name} <span style="color:var(--text-4);font-size:11px;font-weight:500">${f.prot}g</span></span>
+      <span style="font-weight:600">${escapeHtml(f.name)} <span style="color:var(--text-4);font-size:11px;font-weight:500">${f.prot}g</span></span>
       <div style="display:flex;align-items:center;gap:10px">
         <span class="mono" style="font-size:13px;color:var(--accent);font-weight:600">${f.cal}</span>
         <button class="remove-x" onclick="removeFood(${i})">×</button>
@@ -2471,6 +2558,174 @@ function logCustomFood(){
 function removeFood(idx){
   state.foodLog[todayKey()].splice(idx,1);
   save(); renderNutrition();
+}
+
+// ===== Food search (OpenFoodFacts) =====
+let foodSearchResults = [];
+let foodSearchTimer = null;
+let foodSearchSeq = 0;
+
+function attachFoodSearchListener(){
+  const input = document.getElementById('food-search-input');
+  if(!input || input.dataset.bound) return;
+  input.dataset.bound = '1';
+  input.addEventListener('input', e=>{
+    const q = e.target.value.trim();
+    clearTimeout(foodSearchTimer);
+    if(q.length < 2){
+      foodSearchResults = [];
+      renderFoodSearchResults('<div class="food-search-status">Search a brand or food to pull macros automatically.</div>');
+      return;
+    }
+    renderFoodSearchResults('<div class="food-search-status">Searching…</div>');
+    foodSearchTimer = setTimeout(()=>runFoodSearch(q), 350);
+  });
+}
+
+async function runFoodSearch(q){
+  const seq = ++foodSearchSeq;
+  try{
+    const url = 'https://world.openfoodfacts.org/cgi/search.pl'
+      + '?search_terms=' + encodeURIComponent(q)
+      + '&search_simple=1&action=process&json=1&page_size=12'
+      + '&fields=product_name,brands,nutriments,serving_size,serving_quantity';
+    const res = await fetch(url, {headers:{'Accept':'application/json'}});
+    if(!res.ok) throw new Error('Network ' + res.status);
+    const data = await res.json();
+    if(seq !== foodSearchSeq) return; // stale
+    const hits = (data.products||[])
+      .map(p=>normalizeFoodHit(p))
+      .filter(h=>h && h.cal>0 && h.name);
+    foodSearchResults = hits.slice(0, 10);
+    if(!foodSearchResults.length){
+      renderFoodSearchResults('<div class="food-search-status">No matches with macro data. Try a simpler search.</div>');
+      return;
+    }
+    renderFoodSearchResults(foodSearchResults.map((h,i)=>foodResultCard(h,i)).join(''));
+  } catch(err){
+    if(seq !== foodSearchSeq) return;
+    renderFoodSearchResults('<div class="food-search-status error">Couldn\'t reach the food database. Check your connection and try again.</div>');
+  }
+}
+
+function normalizeFoodHit(p){
+  const n = p.nutriments || {};
+  const name = (p.product_name||'').trim();
+  if(!name) return null;
+  const brand = (p.brands||'').split(',')[0].trim();
+  const sq = parseFloat(p.serving_quantity);
+  const hasServing = sq && sq > 0 && sq < 2000;
+  const ss = (p.serving_size||'').trim();
+
+  const num = v => {
+    const x = parseFloat(v);
+    return isFinite(x) && x>=0 ? x : 0;
+  };
+
+  let cal, prot, carb, fat, unitLabel;
+  if(hasServing){
+    cal  = num(n['energy-kcal_serving']) || Math.round(num(n['energy-kcal_100g']) * sq / 100);
+    prot = num(n['proteins_serving'])    || +(num(n['proteins_100g']) * sq / 100).toFixed(1);
+    carb = num(n['carbohydrates_serving'])|| +(num(n['carbohydrates_100g']) * sq / 100).toFixed(1);
+    fat  = num(n['fat_serving'])         || +(num(n['fat_100g']) * sq / 100).toFixed(1);
+    unitLabel = ss ? `1 serving (${ss})` : `1 serving (${sq} g)`;
+  } else {
+    cal  = num(n['energy-kcal_100g']);
+    prot = num(n['proteins_100g']);
+    carb = num(n['carbohydrates_100g']);
+    fat  = num(n['fat_100g']);
+    unitLabel = 'per 100 g';
+  }
+  return {
+    name, brand,
+    cal: Math.round(cal),
+    prot: Math.round(prot),
+    carb: Math.round(carb),
+    fat: Math.round(fat),
+    unitLabel
+  };
+}
+
+function foodResultCard(h, i){
+  const fullName = h.brand ? `${h.name}` : h.name;
+  return `<div class="food-result">
+    <div class="food-result-head">
+      <div style="flex:1;min-width:0">
+        <div class="food-result-name">${escapeHtml(fullName)}</div>
+        ${h.brand ? `<div class="food-result-brand">${escapeHtml(h.brand)}</div>` : ''}
+        <div class="food-result-serving">${escapeHtml(h.unitLabel)}</div>
+      </div>
+      <div class="food-result-cal">${h.cal}<small>cal</small></div>
+    </div>
+    <div class="food-result-macros">
+      <span class="meal-macro-pill">${h.prot}p</span>
+      <span class="meal-macro-pill">${h.carb}c</span>
+      <span class="meal-macro-pill">${h.fat}f</span>
+    </div>
+    <div class="food-result-actions">
+      <span class="food-qty-label">Qty</span>
+      <input type="number" class="food-qty-input" id="food-qty-${i}" value="1" min="0.25" step="0.25" inputmode="decimal">
+      <button class="btn btn-primary btn-sm food-add-btn" onclick="addSearchedFood(${i})">
+        <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+        Add
+      </button>
+    </div>
+  </div>`;
+}
+
+function renderFoodSearchResults(html){
+  const el = document.getElementById('food-search-results');
+  if(el) el.innerHTML = html;
+}
+
+function addSearchedFood(idx){
+  const h = foodSearchResults[idx];
+  if(!h) return;
+  const qtyEl = document.getElementById('food-qty-'+idx);
+  const qty = Math.max(0.25, parseFloat(qtyEl?.value) || 1);
+  const dk = todayKey();
+  if(!state.foodLog[dk]) state.foodLog[dk]=[];
+  const entryName = qty===1 ? h.name : `${h.name} (×${qty})`;
+  state.foodLog[dk].push({
+    name: entryName,
+    cal: Math.round(h.cal * qty),
+    prot: Math.round(h.prot * qty),
+    carb: Math.round(h.carb * qty),
+    fat: Math.round(h.fat * qty)
+  });
+  save();
+  // Re-render only the totals + log; leave search results intact
+  renderNutritionTotals();
+  toast(h.name + ' logged');
+}
+
+function renderNutritionTotals(){
+  const log = state.foodLog[todayKey()]||[];
+  const totCal=log.reduce((a,b)=>a+b.cal,0);
+  const totProt=log.reduce((a,b)=>a+b.prot,0);
+  const totCarb=log.reduce((a,b)=>a+b.carb,0);
+  const totFat=log.reduce((a,b)=>a+b.fat,0);
+  const set = (id, v) => { const el = document.getElementById(id); if(el) el.textContent = v; };
+  set('nutr-cal-total', totCal);
+  set('nutr-prot-total', totProt+'g');
+  set('nutr-carb-total', totCarb+'g');
+  set('nutr-fat-total', totFat+'g');
+  const bar = document.getElementById('nutr-bar');
+  if(bar) bar.style.width = Math.min(100,Math.round(totCal/33))+'%';
+  const list = document.getElementById('food-log-list');
+  if(list){
+    if(log.length){
+      list.innerHTML = log.map((f,i)=>`<div class="log-row">
+        <span style="font-weight:600">${escapeHtml(f.name)} <span style="color:var(--text-4);font-size:11px;font-weight:500">${f.prot}g</span></span>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="mono" style="font-size:13px;color:var(--accent);font-weight:600">${f.cal}</span>
+          <button class="remove-x" onclick="removeFood(${i})">×</button>
+        </div>
+      </div>`).join('');
+    } else {
+      list.innerHTML = `<div style="color:var(--text-4);font-size:13px">Nothing logged yet</div>`;
+    }
+  }
 }
 
 // ===== Artemis rendering =====
@@ -2725,6 +2980,7 @@ function renderProgress(){
 load();
 activeDay = getTodayDayIdx();
 renderDashboard();
+attachFoodSearchListener();
 </script>
 </body>
 </html>
