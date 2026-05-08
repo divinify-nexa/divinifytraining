@@ -277,6 +277,25 @@ nav{
 .food-key-form-actions{display:flex;gap:8px;margin-top:10px}
 .food-key-form-help{font-size:11.5px;color:var(--text-3);margin-top:8px;line-height:1.5}
 .food-key-form-help a{color:var(--text-2);text-decoration:underline;text-underline-offset:2px}
+
+.meal-templates-toggle{
+  display:flex;align-items:center;justify-content:space-between;
+  width:100%;background:none;border:none;padding:0 0 10px;
+  color:var(--text);cursor:pointer;font-family:inherit;
+}
+.meal-templates-toggle svg{width:13px;height:13px;stroke-width:2.5;color:var(--text-3);transition:transform 0.2s var(--t-fast)}
+.meal-templates-toggle[aria-expanded="true"] svg{transform:rotate(180deg)}
+.meal-templates-toggle:active{opacity:0.6}
+
+.log-row-edit{
+  background:var(--surface-2);border:1px solid var(--border-strong);
+  border-radius:var(--r-sm);padding:14px;margin:6px 0;
+}
+.log-row-edit-grid{display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:10px}
+.log-row-edit-macros{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:10px}
+.log-row-edit-actions{display:flex;gap:8px}
+.log-row .icon-btn{padding:4px}
+.log-row .icon-btn svg{width:14px;height:14px;stroke-width:2}
 .food-result{display:flex;flex-direction:column;gap:8px;padding:12px 0;border-top:1px solid var(--border)}
 .food-result:first-child{border-top:none;padding-top:6px}
 .food-result-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
@@ -1292,19 +1311,14 @@ input::placeholder{color:var(--text-4);font-weight:400}
     <div class="metric-bar" style="height:5px;margin-top:14px"><div class="metric-fill" id="nutr-bar" style="width:0%"></div></div>
   </div>
 
-  <div class="section-label" style="margin-bottom:10px">Meal templates</div>
-  <div class="card" id="meal-template-list"></div>
-
-  <div class="section">
-    <div class="section-label" style="margin-bottom:10px">Search foods</div>
-    <div class="card">
-      <div class="food-search-input-wrap">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 100-15 7.5 7.5 0 000 15z"/></svg>
-        <input type="search" id="food-search-input" placeholder="e.g. Oikos mixed berry yogurt" autocomplete="off" autocapitalize="none" spellcheck="false">
-      </div>
-      <div id="food-key-bar"></div>
-      <div id="food-search-results"><div class="food-search-status">Search a brand or food. Macros load automatically — adjust grams to match what you ate.</div></div>
+  <div class="section-label" style="margin-bottom:10px">Search foods</div>
+  <div class="card">
+    <div class="food-search-input-wrap">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 100-15 7.5 7.5 0 000 15z"/></svg>
+      <input type="search" id="food-search-input" placeholder="e.g. Oikos mixed berry yogurt" autocomplete="off" autocapitalize="none" spellcheck="false">
     </div>
+    <div id="food-key-bar"></div>
+    <div id="food-search-results"><div class="food-search-status">Search a brand or food. Macros load automatically — adjust grams to match what you ate.</div></div>
   </div>
 
   <div class="section">
@@ -1321,6 +1335,14 @@ input::placeholder{color:var(--text-4);font-weight:400}
         Add food
       </button>
     </div>
+  </div>
+
+  <div class="section">
+    <button class="meal-templates-toggle" onclick="toggleMealTemplates()" aria-expanded="false">
+      <span class="section-label" style="margin:0">Meal templates</span>
+      <svg id="meal-templates-caret" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+    </button>
+    <div class="card" id="meal-template-list" hidden></div>
   </div>
 
   <div class="section">
@@ -1487,8 +1509,7 @@ const DAYS = [
       {name:"Jump rope",detail:"45s on · 15s rest · 4 rounds"},
     ]
   },
-  {label:"WED",name:"Rest",desc:"Active recovery — 20–30 min walk",exercises:[],hiit:[],rest:true},
-  {label:"THU",name:"Legs",desc:"Quads · Hamstrings · Glutes",
+  {label:"WED",name:"Legs",desc:"Quads · Hamstrings · Glutes",
     exercises:[
       {name:"Barbell squat",sets:4,reps:"6–10",rest:"2–3 min",weight:"start 135 lbs",desc:"Bar on traps. Break parallel. Drive knees out over toes."},
       {name:"Romanian deadlift",sets:3,reps:"8–12",rest:"2 min",weight:"start 115 lbs",desc:"Soft knee bend. Hinge hips back, bar drags down legs."},
@@ -1503,7 +1524,7 @@ const DAYS = [
       {name:"Prowler push / sled",detail:"20 yards · 60s rest · 4 rounds"},
     ]
   },
-  {label:"FRI",name:"Upper",desc:"Heavy compound focus",
+  {label:"THU",name:"Upper",desc:"Heavy compound focus",
     exercises:[
       {name:"Bench press (heavy)",sets:5,reps:"4–6",rest:"3 min",weight:"80–85% max",desc:"Heavy day. Form over weight. 2 warm-up sets first."},
       {name:"Barbell row (heavy)",sets:4,reps:"6–8",rest:"2 min",weight:"80% max",desc:"Heavy pair with bench. Core braced. No jerking."},
@@ -1513,7 +1534,7 @@ const DAYS = [
     ],
     hiit:[]
   },
-  {label:"SAT",name:"HIIT",desc:"Conditioning circuit",exercises:[],
+  {label:"FRI",name:"HIIT",desc:"Conditioning circuit",exercises:[],
     hiit:[
       {name:"Burpees",detail:"10 reps — full body, jump at top"},
       {name:"DB thrusters",detail:"12 reps — squat to press"},
@@ -1523,6 +1544,7 @@ const DAYS = [
     ],
     fullHiit:true
   },
+  {label:"SAT",name:"Rest",desc:"Optional — bonus session if you want it",exercises:[],hiit:[],rest:true},
   {label:"SUN",name:"Rest",desc:"Full rest + meal prep",exercises:[],hiit:[],rest:true}
 ];
 
@@ -1868,7 +1890,7 @@ GROUNDING RULES:
 - Tie advice to where Carter is in the 16-week program.
 - Use plain text formatting only (no markdown like ** or ###). Bullets with "•" or "-" are fine.
 
-PROGRAM STRUCTURE (16-week split: Mon Push / Tue Pull / Wed Rest / Thu Legs / Fri Upper-heavy / Sat HIIT / Sun Rest):
+PROGRAM STRUCTURE (16-week split: Mon Push / Tue Pull / Wed Legs / Thu Upper-heavy / Fri HIIT / Sat Rest (optional bonus) / Sun Rest):
 - W1-4 Foundation: 3 sets x 8-12 reps, 90s rest. Learn working weights, form first.
 - W5-8 Load: 4 sets x 8-12 reps, 90s rest. Add 5 lbs upper / 10 lbs lower at top of range.
 - W9-12 Strength+: 4-5 sets, mix heavy 4-6 + volume 10-12, 2-3 min rest.
@@ -2207,6 +2229,32 @@ function toggleHiitDone(dayIdx, name){
 // ----- Meal template editor -----
 let mealEditIdx = null;
 let mealAddOpen = false;
+let mealTemplatesOpen = false;
+let foodLogEditIdx = null;
+
+function toggleMealTemplates(){
+  mealTemplatesOpen = !mealTemplatesOpen;
+  if(!mealTemplatesOpen){ mealEditIdx = null; mealAddOpen = false; }
+  renderNutrition();
+}
+
+function startEditFoodLog(idx){ foodLogEditIdx = idx; renderNutrition(); }
+function cancelEditFoodLog(){ foodLogEditIdx = null; renderNutrition(); }
+function saveEditFoodLog(idx){
+  const name = document.getElementById(`fl-edit-name-${idx}`).value.trim();
+  const cal  = parseInt(document.getElementById(`fl-edit-cal-${idx}`).value)||0;
+  const prot = parseInt(document.getElementById(`fl-edit-prot-${idx}`).value)||0;
+  const carb = parseInt(document.getElementById(`fl-edit-carb-${idx}`).value)||0;
+  const fat  = parseInt(document.getElementById(`fl-edit-fat-${idx}`).value)||0;
+  if(!name){ toast('Name required'); return; }
+  const dk = todayKey();
+  const log = state.foodLog[dk]||[];
+  if(!log[idx]) return;
+  log[idx] = {name, cal, prot, carb, fat};
+  foodLogEditIdx = null;
+  save(); renderNutrition(); toast('Updated');
+}
+
 function startEditMeal(idx){ mealEditIdx = idx; mealAddOpen = false; renderNutrition(); }
 function cancelEditMeal(){ mealEditIdx = null; renderNutrition(); }
 function saveEditMeal(idx){
@@ -2528,20 +2576,62 @@ function renderNutrition(){
   if(meals.length===0 && !mealAddOpen){
     mhtml = `<div style="color:var(--text-4);font-size:13px;text-align:center;padding:12px 0">No meal templates. Add one below.</div>` + mhtml;
   }
-  document.getElementById('meal-template-list').innerHTML=mhtml;
+  const mealList = document.getElementById('meal-template-list');
+  mealList.innerHTML = mhtml;
+  const toggleBtn = document.querySelector('.meal-templates-toggle');
+  if(toggleBtn) toggleBtn.setAttribute('aria-expanded', mealTemplatesOpen ? 'true' : 'false');
+  if(mealTemplatesOpen) mealList.removeAttribute('hidden');
+  else mealList.setAttribute('hidden', '');
 
-  if(log.length){
-    let lhtml=log.map((f,i)=>`<div class="log-row">
-      <span style="font-weight:600">${escapeHtml(f.name)} <span style="color:var(--text-4);font-size:11px;font-weight:500">${f.prot}g</span></span>
-      <div style="display:flex;align-items:center;gap:10px">
-        <span class="mono" style="font-size:13px;color:var(--accent);font-weight:600">${f.cal}</span>
-        <button class="remove-x" onclick="removeFood(${i})">×</button>
+  renderFoodLogList(log);
+}
+
+function renderFoodLogRow(f, i){
+  if(foodLogEditIdx === i){
+    return `<div class="log-row-edit">
+      <div class="log-row-edit-grid">
+        <input type="text" id="fl-edit-name-${i}" placeholder="Name" value="${(f.name||'').replace(/"/g,'&quot;')}">
       </div>
-    </div>`).join('');
-    document.getElementById('food-log-list').innerHTML=lhtml;
-  } else {
-    document.getElementById('food-log-list').innerHTML=`<div style="color:var(--text-4);font-size:13px">Nothing logged yet</div>`;
+      <div class="log-row-edit-macros">
+        <label class="macro-input"><span class="macro-input-label">Cal</span>
+          <input type="number" id="fl-edit-cal-${i}" value="${f.cal||0}" inputmode="numeric"></label>
+        <label class="macro-input"><span class="macro-input-label">Protein g</span>
+          <input type="number" id="fl-edit-prot-${i}" value="${f.prot||0}" inputmode="numeric"></label>
+        <label class="macro-input"><span class="macro-input-label">Carbs g</span>
+          <input type="number" id="fl-edit-carb-${i}" value="${f.carb||0}" inputmode="numeric"></label>
+        <label class="macro-input"><span class="macro-input-label">Fat g</span>
+          <input type="number" id="fl-edit-fat-${i}" value="${f.fat||0}" inputmode="numeric"></label>
+      </div>
+      <div class="log-row-edit-actions">
+        <button class="btn btn-primary btn-sm" style="flex:1" onclick="saveEditFoodLog(${i})">
+          <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+          Save
+        </button>
+        <button class="btn btn-ghost btn-sm" style="flex:1" onclick="cancelEditFoodLog()">Cancel</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--warn);border-color:var(--warn)" onclick="removeFood(${i})">Remove</button>
+      </div>
+    </div>`;
   }
+  return `<div class="log-row">
+    <span style="font-weight:600;flex:1;min-width:0">${escapeHtml(f.name)} <span style="color:var(--text-4);font-size:11px;font-weight:500">${f.prot}g</span></span>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span class="mono" style="font-size:13px;color:var(--accent);font-weight:600">${f.cal}</span>
+      <button class="icon-btn" title="Edit" onclick="startEditFoodLog(${i})">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+      </button>
+      <button class="remove-x" onclick="removeFood(${i})">×</button>
+    </div>
+  </div>`;
+}
+
+function renderFoodLogList(log){
+  const list = document.getElementById('food-log-list');
+  if(!list) return;
+  if(!log || !log.length){
+    list.innerHTML = `<div style="color:var(--text-4);font-size:13px">Nothing logged yet</div>`;
+    return;
+  }
+  list.innerHTML = log.map((f,i)=>renderFoodLogRow(f,i)).join('');
 }
 
 function logMeal(idx){
@@ -2569,6 +2659,8 @@ function logCustomFood(){
 
 function removeFood(idx){
   state.foodLog[todayKey()].splice(idx,1);
+  if(foodLogEditIdx === idx) foodLogEditIdx = null;
+  else if(foodLogEditIdx !== null && foodLogEditIdx > idx) foodLogEditIdx--;
   save(); renderNutrition();
 }
 
@@ -2860,20 +2952,7 @@ function renderNutritionTotals(){
   set('nutr-fat-total', totFat+'g');
   const bar = document.getElementById('nutr-bar');
   if(bar) bar.style.width = Math.min(100,Math.round(totCal/33))+'%';
-  const list = document.getElementById('food-log-list');
-  if(list){
-    if(log.length){
-      list.innerHTML = log.map((f,i)=>`<div class="log-row">
-        <span style="font-weight:600">${escapeHtml(f.name)} <span style="color:var(--text-4);font-size:11px;font-weight:500">${f.prot}g</span></span>
-        <div style="display:flex;align-items:center;gap:10px">
-          <span class="mono" style="font-size:13px;color:var(--accent);font-weight:600">${f.cal}</span>
-          <button class="remove-x" onclick="removeFood(${i})">×</button>
-        </div>
-      </div>`).join('');
-    } else {
-      list.innerHTML = `<div style="color:var(--text-4);font-size:13px">Nothing logged yet</div>`;
-    }
-  }
+  renderFoodLogList(log);
 }
 
 // ===== Artemis rendering =====
