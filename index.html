@@ -4189,6 +4189,12 @@ const Cards = {
 
   // ===== Base layout helpers =====
   PAD: 96,
+  // Instagram Story safe area: IG covers the top ~250px (progress bars + username)
+  // and bottom ~250px (message bar) of the 9:16 frame with its own UI. All readable
+  // content must live between SAFE_TOP and SAFE_BOTTOM. Backgrounds (photo, gradient)
+  // can still extend full-bleed — IG's UI sits over those bleed zones cleanly.
+  SAFE_TOP: 250,
+  SAFE_BOTTOM: 1670,
   ACCENT: '#FFB800',
   ACCENT_SOFT: 'rgba(255,184,0,0.14)',
   TEXT: '#fafafa',
@@ -4226,7 +4232,6 @@ const Cards = {
     const imgRatio = img.width / img.height;
     let dw, dh, dx, dy;
     if(imgRatio > targetRatio){
-      // Image wider than frame — crop horizontally
       dh = this.H;
       dw = dh * imgRatio;
       dx = (this.W - dw) / 2;
@@ -4239,18 +4244,23 @@ const Cards = {
     }
     ctx.drawImage(img, dx, dy, dw, dh);
     // Top gradient (for brand row legibility)
-    const top = ctx.createLinearGradient(0, 0, 0, this.H * 0.22);
-    top.addColorStop(0, 'rgba(0,0,0,0.65)');
+    const topEnd = this.SAFE_TOP + 120;
+    const top = ctx.createLinearGradient(0, 0, 0, topEnd);
+    top.addColorStop(0, 'rgba(0,0,0,0.7)');
+    top.addColorStop(0.6, 'rgba(0,0,0,0.35)');
     top.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = top;
-    ctx.fillRect(0, 0, this.W, this.H * 0.22);
-    // Bottom gradient (for stats legibility) — taller and stronger
-    const bot = ctx.createLinearGradient(0, this.H * 0.45, 0, this.H);
+    ctx.fillRect(0, 0, this.W, topEnd);
+    // Bottom gradient: starts well above the eyebrow so all overlay text is on dark
+    // (eyebrow lives ~Y=900 once compact hero compresses up).
+    const botStart = this.H * 0.42;
+    const bot = ctx.createLinearGradient(0, botStart, 0, this.H);
     bot.addColorStop(0, 'rgba(0,0,0,0)');
-    bot.addColorStop(0.55, 'rgba(0,0,0,0.55)');
-    bot.addColorStop(1, 'rgba(0,0,0,0.92)');
+    bot.addColorStop(0.4, 'rgba(0,0,0,0.55)');
+    bot.addColorStop(0.75, 'rgba(0,0,0,0.85)');
+    bot.addColorStop(1, 'rgba(0,0,0,0.95)');
     ctx.fillStyle = bot;
-    ctx.fillRect(0, this.H * 0.45, this.W, this.H * 0.55);
+    ctx.fillRect(0, botStart, this.W, this.H - botStart);
   },
 
   drawBrandRow(ctx){
@@ -4259,15 +4269,15 @@ const Cards = {
     ctx.fillStyle = this.TEXT_3;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    ctx.fillText('DIVINIFY', this.PAD, 96);
+    ctx.fillText('DIVINIFY', this.PAD, this.SAFE_TOP);
     ctx.textAlign = 'right';
-    ctx.fillText(date, this.W - this.PAD, 96);
+    ctx.fillText(date, this.W - this.PAD, this.SAFE_TOP);
     // hairline divider
     ctx.strokeStyle = this.BORDER;
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(this.PAD, 156);
-    ctx.lineTo(this.W - this.PAD, 156);
+    ctx.moveTo(this.PAD, this.SAFE_TOP + 60);
+    ctx.lineTo(this.W - this.PAD, this.SAFE_TOP + 60);
     ctx.stroke();
   },
 
@@ -4277,16 +4287,16 @@ const Cards = {
     const phase = PHASES[phaseIdx].label;
     ctx.strokeStyle = this.BORDER;
     ctx.beginPath();
-    ctx.moveTo(this.PAD, this.H - 156);
-    ctx.lineTo(this.W - this.PAD, this.H - 156);
+    ctx.moveTo(this.PAD, this.SAFE_BOTTOM - 80);
+    ctx.lineTo(this.W - this.PAD, this.SAFE_BOTTOM - 80);
     ctx.stroke();
     ctx.font = '600 22px "JetBrains Mono", monospace';
     ctx.fillStyle = this.TEXT_3;
     ctx.textBaseline = 'top';
     ctx.textAlign = 'left';
-    ctx.fillText(`WEEK ${String(wk).padStart(2,'0')} / 16`, this.PAD, this.H - 124);
+    ctx.fillText(`WEEK ${String(wk).padStart(2,'0')} / 16`, this.PAD, this.SAFE_BOTTOM - 48);
     ctx.textAlign = 'right';
-    ctx.fillText(phase.toUpperCase(), this.W - this.PAD, this.H - 124);
+    ctx.fillText(phase.toUpperCase(), this.W - this.PAD, this.SAFE_BOTTOM - 48);
   },
 
   drawEyebrow(ctx, text, y){
@@ -4442,21 +4452,30 @@ const Cards = {
   },
 
   // ===== Compact (photo-mode) hero helper =====
-  // When a photo is loaded, every card collapses to a clean lower-third:
-  //   eyebrow → big number (+ unit) → subline → optional 2-stat row
+  // When a photo is loaded, every card collapses to a clean lower-third anchored
+  // to SAFE_BOTTOM so nothing is clipped by Instagram Story's bottom UI.
+  // Layout (bottom-up): footer stats → subline → big hero → eyebrow.
   drawCompactHero(ctx, eyebrow, hero, sub, stats){
-    const W = this.W, H = this.H, P = this.PAD;
+    const W = this.W, P = this.PAD;
+    const SB = this.SAFE_BOTTOM;
+    // Footer stats baseline anchored to safe bottom
+    const statsValueY = SB - 60;
+    const statsLabelY = SB - 110;
+    const subY = SB - 200;
+    const heroSize = hero.size || 280;
+    // Hero baseline sits above the subline; use cap-height ~70% of font size for rough alignment
+    const heroY = subY - (heroSize * 0.72) - 30;
+    const eyebrowY = heroY - 60;
+
     // Eyebrow
     ctx.font = '700 28px "Inter", sans-serif';
     ctx.fillStyle = this.ACCENT;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    this.fillTextSpaced(ctx, eyebrow.toUpperCase(), P, H * 0.62, 7);
+    this.fillTextSpaced(ctx, eyebrow.toUpperCase(), P, eyebrowY, 7);
     // Big hero
-    const heroSize = hero.size || 280;
     ctx.font = `italic ${heroSize}px "Instrument Serif", serif`;
     ctx.fillStyle = '#fff';
-    const heroY = H * 0.66;
     ctx.fillText(String(hero.value), P, heroY);
     if(hero.unit){
       const w = ctx.measureText(String(hero.value)).width;
@@ -4468,9 +4487,9 @@ const Cards = {
     if(sub){
       ctx.font = '500 32px "Inter", sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,0.85)';
-      ctx.fillText(sub, P, H * 0.86);
+      ctx.fillText(sub, P, subY);
     }
-    // Optional 2-stat row at bottom
+    // Optional 2-stat row anchored to bottom
     if(stats && stats.length){
       const colW = (W - P*2) / stats.length;
       stats.forEach((s, i) => {
@@ -4478,10 +4497,10 @@ const Cards = {
         ctx.font = '700 18px "Inter", sans-serif';
         ctx.fillStyle = 'rgba(255,255,255,0.55)';
         ctx.textAlign = 'left';
-        this.fillTextSpaced(ctx, s.label.toUpperCase(), x, H * 0.91, 4);
+        this.fillTextSpaced(ctx, s.label.toUpperCase(), x, statsLabelY, 4);
         ctx.font = '500 36px "JetBrains Mono", monospace';
         ctx.fillStyle = '#fff';
-        ctx.fillText(`${s.value}${s.unit?' '+s.unit:''}`, x, H * 0.94);
+        ctx.fillText(`${s.value}${s.unit?' '+s.unit:''}`, x, statsValueY);
       });
     }
   },
@@ -4505,10 +4524,10 @@ const Cards = {
       );
       return;
     }
-    this.drawEyebrow(ctx, eyebrow, 280);
+    this.drawEyebrow(ctx, eyebrow, 460);
     if(t.isRest){
-      this.drawHugeNumber(ctx, '—', 380, {size:340});
-      this.drawSubline(ctx, 'recovery day', 800, {weight:500, size:42, color:this.TEXT_2});
+      this.drawHugeNumber(ctx, '—', 560, {size:340});
+      this.drawSubline(ctx, 'recovery day', 980, {weight:500, size:42, color:this.TEXT_2});
       return;
     }
     // Big "X / Y" sets count
@@ -4517,18 +4536,18 @@ const Cards = {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     const a = String(t.setsLogged);
-    ctx.fillText(a, this.PAD, 400);
+    ctx.fillText(a, this.PAD, 580);
     const aw = ctx.measureText(a).width;
     ctx.font = `400 180px "Instrument Serif", serif`;
     ctx.fillStyle = this.TEXT_3;
-    ctx.fillText(`/${t.setsTotal}`, this.PAD + aw + 16, 480);
+    ctx.fillText(`/${t.setsTotal}`, this.PAD + aw + 16, 660);
 
-    this.drawSubline(ctx, `sets · ${t.dayName.toLowerCase()}`, 800, {weight:500, size:42, color:this.TEXT_2});
+    this.drawSubline(ctx, `sets · ${t.dayName.toLowerCase()}`, 980, {weight:500, size:42, color:this.TEXT_2});
 
     this.drawStatGrid(ctx, [
       {label:'Top lift', value: t.topLift.weight ? String(t.topLift.weight) : '—', unit: t.topLift.weight ? 'lbs' : '', accent:true},
       {label:'Total reps', value: String(t.totalReps)},
-    ], this.H - 540);
+    ], this.SAFE_BOTTOM - 320);
   },
 
   drawWorkouts(ctx){
@@ -4555,20 +4574,19 @@ const Cards = {
       return;
     }
 
-    this.drawEyebrow(ctx, `Workouts · ${monthLabel}`, 280);
-    this.drawHugeNumber(ctx, trained, 380);
+    this.drawEyebrow(ctx, `Workouts · ${monthLabel}`, 460);
+    this.drawHugeNumber(ctx, trained, 540);
     ctx.font = `italic 380px "Instrument Serif", serif`;
-    const numH = 380;
-    const subY = 380 + numH - 60;
+    const subY = 540 + 320;
     this.drawSubline(ctx, 'workouts this month', subY, {weight:500, size:38, color:this.TEXT_2});
 
-    const gridY = subY + 110;
-    this.drawDotGrid(ctx, entries, this.PAD, gridY, {cols:7, dotR:18, gap:24, showLabels:true});
+    const gridY = subY + 80;
+    this.drawDotGrid(ctx, entries, this.PAD, gridY, {cols:7, dotR:16, gap:20, showLabels:true});
 
     this.drawStatGrid(ctx, [
       {label:'Current streak', value:String(streak), unit:'days', accent:true},
       {label:'Top lift', value: best ? String(best.weight) : '—', unit: best ? 'lbs' : ''},
-    ], this.H - 540);
+    ], this.SAFE_BOTTOM - 280);
   },
 
   drawMacros(ctx){
@@ -4592,39 +4610,40 @@ const Cards = {
       return;
     }
 
-    this.drawEyebrow(ctx, "Today's fuel", 280);
+    this.drawEyebrow(ctx, "Today's fuel", 460);
 
     // Big calorie number
-    ctx.font = `italic 360px "Instrument Serif", serif`;
+    ctx.font = `italic 320px "Instrument Serif", serif`;
     ctx.fillStyle = this.ACCENT;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    ctx.fillText(String(cal), this.PAD, 380);
+    ctx.fillText(String(cal), this.PAD, 540);
     const w = ctx.measureText(String(cal)).width;
-    ctx.font = '500 44px "JetBrains Mono", monospace';
+    ctx.font = '500 42px "JetBrains Mono", monospace';
     ctx.fillStyle = this.TEXT_3;
-    ctx.fillText(`/ ${targets.cal}`, this.PAD + w + 22, 530);
+    ctx.fillText(`/ ${targets.cal}`, this.PAD + w + 22, 660);
 
-    this.drawSubline(ctx, 'calories', 760, {weight:500, size:42, color:this.TEXT_2});
+    this.drawSubline(ctx, 'calories', 870, {weight:500, size:38, color:this.TEXT_2});
 
-    // Macro bars
+    // Macro bars (anchored to safe bottom so they never clip)
     const bars = [
       {label:'Protein', val:prot, target:targets.prot, unit:'g', accent:true},
       {label:'Carbs',   val:carb, target:targets.carb, unit:'g'},
       {label:'Fat',     val:fat,  target:targets.fat,  unit:'g'},
     ];
-    let by = 940;
+    const barRowH = 110;
+    let by = this.SAFE_BOTTOM - 200 - bars.length * barRowH;
     bars.forEach(b => {
-      ctx.font = '700 24px "Inter", sans-serif';
+      ctx.font = '700 22px "Inter", sans-serif';
       ctx.fillStyle = this.TEXT_3;
       ctx.textAlign = 'left';
       this.fillTextSpaced(ctx, b.label.toUpperCase(), this.PAD, by, 5);
-      ctx.font = '500 36px "JetBrains Mono", monospace';
+      ctx.font = '500 32px "JetBrains Mono", monospace';
       ctx.fillStyle = this.TEXT;
       ctx.textAlign = 'right';
       ctx.fillText(`${b.val} / ${b.target} ${b.unit}`, this.W - this.PAD, by - 6);
-      this.drawProgressBar(ctx, this.PAD, by + 44, this.W - this.PAD*2, 14, b.val / b.target, {color: b.accent ? this.ACCENT : 'rgba(255,255,255,0.4)'});
-      by += 130;
+      this.drawProgressBar(ctx, this.PAD, by + 38, this.W - this.PAD*2, 12, b.val / b.target, {color: b.accent ? this.ACCENT : 'rgba(255,255,255,0.4)'});
+      by += barRowH;
     });
   },
 
@@ -4644,26 +4663,26 @@ const Cards = {
       return;
     }
 
-    this.drawEyebrow(ctx, 'New PR', 280);
+    this.drawEyebrow(ctx, 'New PR', 460);
     if(!pr){
-      this.drawSubline(ctx, 'No PRs yet — go set one.', 480, {size:42, color:this.TEXT_2});
+      this.drawSubline(ctx, 'No PRs yet — go set one.', 660, {size:42, color:this.TEXT_2});
       return;
     }
-    ctx.font = '600 56px "Inter", sans-serif';
+    ctx.font = '600 52px "Inter", sans-serif';
     ctx.fillStyle = this.TEXT;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     const nameLines = this.wrapText(ctx, pr.name, this.W - this.PAD*2);
-    let ny = 380;
-    nameLines.forEach(line => { ctx.fillText(line, this.PAD, ny); ny += 70; });
+    let ny = 540;
+    nameLines.forEach(line => { ctx.fillText(line, this.PAD, ny); ny += 64; });
 
-    ctx.font = `italic 480px "Instrument Serif", serif`;
+    ctx.font = `italic 400px "Instrument Serif", serif`;
     ctx.fillStyle = this.ACCENT;
-    ctx.fillText(String(pr.weight), this.PAD, ny + 60);
+    ctx.fillText(String(pr.weight), this.PAD, ny + 40);
     const w = ctx.measureText(String(pr.weight)).width;
-    ctx.font = '500 56px "JetBrains Mono", monospace';
+    ctx.font = '500 52px "JetBrains Mono", monospace';
     ctx.fillStyle = this.TEXT_3;
-    ctx.fillText('lbs', this.PAD + w + 24, ny + 380);
+    ctx.fillText('lbs', this.PAD + w + 22, ny + 320);
   },
 
   drawStreak(ctx){
@@ -4678,16 +4697,17 @@ const Cards = {
       return;
     }
 
-    this.drawEyebrow(ctx, 'Current streak', 280);
-    this.drawHugeNumber(ctx, streak, 380, {size: streak >= 100 ? 340 : 420});
+    this.drawEyebrow(ctx, 'Current streak', 460);
+    const streakSize = streak >= 100 ? 320 : 380;
+    this.drawHugeNumber(ctx, streak, 540, {size: streakSize});
 
-    ctx.font = `italic ${streak >= 100 ? 340 : 420}px "Instrument Serif", serif`;
+    ctx.font = `italic ${streakSize}px "Instrument Serif", serif`;
     const numW = ctx.measureText(String(streak)).width;
-    ctx.font = '500 48px "JetBrains Mono", monospace';
+    ctx.font = '500 44px "JetBrains Mono", monospace';
     ctx.fillStyle = this.TEXT_3;
-    ctx.fillText('days', this.PAD + numW + 24, streak >= 100 ? 660 : 720);
+    ctx.fillText('days', this.PAD + numW + 22, 540 + streakSize - 100);
 
-    this.drawSubline(ctx, 'no skipped sessions', streak >= 100 ? 800 : 870, {weight:500, size:38, color:this.TEXT_2});
+    this.drawSubline(ctx, 'no skipped sessions', 540 + streakSize + 30, {weight:500, size:36, color:this.TEXT_2});
 
     const days = 28;
     const today = todayKey();
@@ -4697,7 +4717,8 @@ const Cards = {
       const d = shiftDateKey(start, i);
       entries.push({date:d, status: statsTrainedOn(d)});
     }
-    this.drawDotGrid(ctx, entries, this.PAD, 1130, {cols:7, dotR:22, gap:30, showLabels:true});
+    // Anchor dot grid above safe footer (4 rows × ~50px = ~200px tall + label)
+    this.drawDotGrid(ctx, entries, this.PAD, this.SAFE_BOTTOM - 320, {cols:7, dotR:18, gap:24, showLabels:true});
   },
 
   drawWeek(ctx){
@@ -4719,30 +4740,30 @@ const Cards = {
       return;
     }
 
-    this.drawEyebrow(ctx, `Week ${wk.weekNum} recap`, 280);
-    this.drawSubline(ctx, `${startLabel} → ${endLabel}`, 340, {weight:500, size:30, color:this.TEXT_3});
+    this.drawEyebrow(ctx, `Week ${wk.weekNum} recap`, 460);
+    this.drawSubline(ctx, `${startLabel} → ${endLabel}`, 510, {weight:500, size:28, color:this.TEXT_3});
 
     // Big workouts number
-    ctx.font = `italic 340px "Instrument Serif", serif`;
+    ctx.font = `italic 280px "Instrument Serif", serif`;
     ctx.fillStyle = this.ACCENT;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    ctx.fillText(String(wk.workouts), this.PAD, 440);
+    ctx.fillText(String(wk.workouts), this.PAD, 580);
     const w = ctx.measureText(String(wk.workouts)).width;
-    ctx.font = '500 36px "JetBrains Mono", monospace';
+    ctx.font = '500 34px "JetBrains Mono", monospace';
     ctx.fillStyle = this.TEXT_3;
-    ctx.fillText('sessions', this.PAD + w + 24, 660);
+    ctx.fillText('sessions', this.PAD + w + 24, 760);
 
     // 7-day dot row
     const entries = wk.dates.map(d => ({date:d, status: statsTrainedOn(d)}));
-    this.drawDotGrid(ctx, entries, this.PAD, 880, {cols:7, dotR:24, gap:30, showLabels:true});
+    this.drawDotGrid(ctx, entries, this.PAD, 920, {cols:7, dotR:20, gap:24, showLabels:true});
 
     this.drawStatGrid(ctx, [
       {label:'Sets logged', value:String(wk.totalSets)},
       {label:'Top lift', value: best ? String(best.weight) : '—', unit: best ? 'lbs' : '', accent:true},
       {label:'Protein avg', value:String(wk.proteinAvg), unit:'g/day'},
       {label:'Cal avg', value:String(wk.calAvg)},
-    ], this.H - 720);
+    ], this.SAFE_BOTTOM - 460);
   },
 
   drawMonth(ctx){
@@ -4762,19 +4783,19 @@ const Cards = {
       return;
     }
 
-    this.drawEyebrow(ctx, `${m.monthLabel} recap`, 280);
+    this.drawEyebrow(ctx, `${m.monthLabel} recap`, 460);
 
-    ctx.font = `italic 340px "Instrument Serif", serif`;
+    ctx.font = `italic 280px "Instrument Serif", serif`;
     ctx.fillStyle = this.ACCENT;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    ctx.fillText(String(m.workouts), this.PAD, 380);
+    ctx.fillText(String(m.workouts), this.PAD, 540);
     const w = ctx.measureText(String(m.workouts)).width;
-    ctx.font = '500 36px "JetBrains Mono", monospace';
+    ctx.font = '500 34px "JetBrains Mono", monospace';
     ctx.fillStyle = this.TEXT_3;
-    ctx.fillText('sessions', this.PAD + w + 24, 600);
+    ctx.fillText('sessions', this.PAD + w + 24, 720);
 
-    this.drawSubline(ctx, `${m.monthLabel} ${m.year}`, 800, {weight:500, size:32, color:this.TEXT_2});
+    this.drawSubline(ctx, `${m.monthLabel} ${m.year}`, 880, {weight:500, size:30, color:this.TEXT_2});
 
     const wd = m.weightDelta;
     this.drawStatGrid(ctx, [
@@ -4782,7 +4803,7 @@ const Cards = {
       {label:'Discipline', value:String(disc.score), unit:'/100', accent:true},
       {label:'Protein avg', value:String(m.proteinAvg), unit:'g/day'},
       {label:'Weight Δ', value: wd != null ? (wd > 0 ? '+'+wd : String(wd)) : '—', unit: wd != null ? 'lbs' : ''},
-    ], this.H - 720);
+    ], this.SAFE_BOTTOM - 460);
   },
 
   drawDiscipline(ctx){
@@ -4801,40 +4822,41 @@ const Cards = {
       return;
     }
 
-    this.drawEyebrow(ctx, 'Discipline · 30 days', 280);
+    this.drawEyebrow(ctx, 'Discipline · 30 days', 460);
 
     const cx = this.W / 2;
     const cy = 880;
-    const r = 280;
-    this.drawProgressRing(ctx, cx, cy, r, d.score / 100, {lineWidth:36, color:this.ACCENT});
+    const r = 240;
+    this.drawProgressRing(ctx, cx, cy, r, d.score / 100, {lineWidth:32, color:this.ACCENT});
     // Score number centered in ring
-    ctx.font = `italic 280px "Instrument Serif", serif`;
+    ctx.font = `italic 240px "Instrument Serif", serif`;
     ctx.fillStyle = this.TEXT;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(String(d.score), cx, cy + 12);
-    ctx.font = '500 28px "JetBrains Mono", monospace';
+    ctx.fillText(String(d.score), cx, cy + 8);
+    ctx.font = '500 26px "JetBrains Mono", monospace';
     ctx.fillStyle = this.TEXT_3;
-    ctx.fillText('/ 100', cx, cy + 200);
+    ctx.fillText('/ 100', cx, cy + 170);
 
-    // Two component bars
+    // Two component bars anchored above safe footer
     const components = [
       {label:'Workouts hit', val: d.trainedCount, target: d.trainingTotal, pct: d.workoutHitRate},
       {label:'Protein hit',  val: d.proteinHitDays, target: d.period, pct: d.proteinHitRate},
     ];
-    let by = 1340;
+    const compRowH = 110;
+    let by = this.SAFE_BOTTOM - 220 - components.length * compRowH;
     components.forEach(c => {
       ctx.font = '700 22px "Inter", sans-serif';
       ctx.fillStyle = this.TEXT_3;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
       this.fillTextSpaced(ctx, c.label.toUpperCase(), this.PAD, by, 4);
-      ctx.font = '500 32px "JetBrains Mono", monospace';
+      ctx.font = '500 30px "JetBrains Mono", monospace';
       ctx.fillStyle = this.TEXT;
       ctx.textAlign = 'right';
-      ctx.fillText(`${c.val} / ${c.target}`, this.W - this.PAD, by - 6);
-      this.drawProgressBar(ctx, this.PAD, by + 40, this.W - this.PAD*2, 12, c.pct, {color:this.ACCENT});
-      by += 124;
+      ctx.fillText(`${c.val} / ${c.target}`, this.W - this.PAD, by - 4);
+      this.drawProgressBar(ctx, this.PAD, by + 38, this.W - this.PAD*2, 12, c.pct, {color:this.ACCENT});
+      by += compRowH;
     });
   },
 
