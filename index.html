@@ -203,7 +203,13 @@ body[data-readonly="true"] .editable-only textarea{cursor:not-allowed}
 .share-canvas-wrap canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 .share-canvas-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text-3);font-size:12px;font-weight:500;letter-spacing:0.05em;text-transform:uppercase}
 .share-actions{padding:14px 20px calc(20px + env(safe-area-inset-bottom));display:flex;gap:10px;border-top:1px solid var(--border);background:var(--surface);flex:0 0 auto}
-.share-actions .btn{flex:1}
+.share-actions .btn, .share-actions .share-ig-btn{flex:1}
+.share-ig-btn{height:44px;border-radius:12px;border:none;color:#fff;font-family:inherit;font-size:13.5px;font-weight:700;letter-spacing:-0.005em;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:linear-gradient(45deg,#f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%);box-shadow:0 4px 16px rgba(220,39,67,0.35), 0 1px 2px rgba(0,0,0,0.2);position:relative;overflow:hidden;transition:transform .12s, box-shadow .2s, filter .2s}
+.share-ig-btn::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0));pointer-events:none}
+.share-ig-btn:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(220,39,67,0.45), 0 2px 4px rgba(0,0,0,0.25);filter:brightness(1.05)}
+.share-ig-btn:active{transform:translateY(0);transition:transform .05s;filter:brightness(.96)}
+.share-ig-btn svg{width:16px;height:16px;stroke-width:2;position:relative;z-index:1}
+.share-ig-btn span{position:relative;z-index:1}
 .share-photo-controls{display:flex;gap:8px;width:100%;justify-content:center;align-items:center;margin-top:4px}
 .share-photo-btn{display:flex;align-items:center;gap:7px;padding:8px 14px;border-radius:99px;background:var(--surface-2);border:1px solid var(--border);color:var(--text);font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s}
 .share-photo-btn:hover{background:var(--surface-3)}
@@ -1352,9 +1358,13 @@ input::placeholder{color:var(--text-4);font-weight:400}
       <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
       Save image
     </button>
-    <button class="btn btn-primary" onclick="Cards.share()">
-      <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
-      Share
+    <button class="share-ig-btn" onclick="Cards.shareToInstagram()" aria-label="Share to Instagram Story or save to camera roll">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <rect x="3" y="3" width="18" height="18" rx="5" ry="5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path stroke-linecap="round" stroke-linejoin="round" d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
+        <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" stroke-linecap="round"/>
+      </svg>
+      <span>Instagram</span>
     </button>
   </div>
 </div>
@@ -4877,6 +4887,49 @@ const Cards = {
     a.href = url; a.download = filename; a.click();
     URL.revokeObjectURL(url);
     toast('Saved (sharing not supported on this device)');
+  },
+
+  // Instagram-specific share. On mobile, the iOS/Android native share sheet
+  // surfaces "Instagram" (post to Story) and "Save to Photos" side-by-side —
+  // exactly the two paths the user wants. On desktop or where Web Share doesn't
+  // accept files, we download the PNG and best-effort launch the Instagram app
+  // via the `instagram://` URL scheme. Without Facebook Developer registration
+  // we can't pass the photo into Stories directly, so the user picks it from
+  // their library after IG opens.
+  async shareToInstagram(){
+    const blob = await this.toBlob();
+    if(!blob){ toast('Could not export'); return; }
+    const t = this.TYPES.find(x => x.id === this.current);
+    const filename = `divinify-${t.filename}-${todayKey()}.png`;
+    const file = new File([blob], filename, {type:'image/png'});
+
+    // Mobile path: native share sheet has Instagram + Save to Photos
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      try {
+        await navigator.share({files:[file], title:'Divinify Training'});
+        return;
+      } catch(e){
+        if(e.name === 'AbortError') return;
+        console.warn('Instagram share failed, falling back:', e);
+      }
+    }
+
+    // Desktop / no-Web-Share fallback: save the PNG and try to open IG
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+    toast('Photo saved — open Instagram and pick it from your library');
+
+    // Best-effort: launch Instagram app (no-op if not installed / desktop)
+    setTimeout(() => {
+      const probe = document.createElement('a');
+      probe.href = 'instagram://app';
+      probe.style.display = 'none';
+      document.body.appendChild(probe);
+      probe.click();
+      document.body.removeChild(probe);
+    }, 900);
   }
 };
 
