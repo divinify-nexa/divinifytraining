@@ -25,6 +25,8 @@
 <link rel="shortcut icon" href="Assets/app-icon-180.png?v=3">
 <link rel="manifest" href="manifest.webmanifest?v=3">
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;-webkit-font-smoothing:antialiased}
@@ -156,6 +158,151 @@ nav{
 .page-eyebrow{font-size:11px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px}
 .page-title{font-family:'Instrument Serif',serif;font-size:36px;font-weight:400;letter-spacing:-0.03em;line-height:1;margin-bottom:6px}
 .page-sub{font-size:13px;color:var(--text-2);font-weight:500}
+
+.date-nav{display:flex;align-items:center;gap:8px;margin-bottom:14px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:6px;box-shadow:var(--shadow-sm)}
+.date-nav-arrow{flex:0 0 auto;width:36px;height:36px;border-radius:10px;background:transparent;border:none;color:var(--text);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s,opacity .15s;font-size:18px;font-weight:600;font-family:inherit}
+.date-nav-arrow:hover:not(:disabled){background:var(--surface-2)}
+.date-nav-arrow:disabled{opacity:.3;cursor:not-allowed}
+.date-nav-arrow svg{width:16px;height:16px;stroke-width:2.5}
+.date-nav-label{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:transparent;border:none;color:var(--text);font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;padding:8px;border-radius:10px;letter-spacing:-0.01em}
+.date-nav-label:hover{background:var(--surface-2)}
+.date-nav-today-badge{font-size:9.5px;font-weight:700;padding:2px 7px;background:var(--accent);color:var(--accent-text);border-radius:6px;letter-spacing:0.06em;text-transform:uppercase}
+.date-nav-past-badge{font-size:9.5px;font-weight:700;padding:2px 7px;background:var(--surface-3);color:var(--text-3);border-radius:6px;letter-spacing:0.06em;text-transform:uppercase}
+
+.readonly-banner{display:none;align-items:center;gap:10px;background:var(--surface-2);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:12.5px;color:var(--text-2);font-weight:500;line-height:1.4}
+.readonly-banner svg{flex:0 0 auto;width:14px;height:14px;color:var(--accent);stroke-width:2.5}
+.readonly-banner a{color:var(--accent);font-weight:600;cursor:pointer;text-decoration:none}
+.readonly-banner a:hover{text-decoration:underline}
+body[data-readonly="true"] .readonly-banner{display:flex}
+body[data-readonly="true"] .editable-only{opacity:.55;pointer-events:none}
+body[data-readonly="true"] .editable-only input,
+body[data-readonly="true"] .editable-only button,
+body[data-readonly="true"] .editable-only textarea{cursor:not-allowed}
+
+/* ===== Share / Story-card modal ===== */
+.share-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.65);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);z-index:90;opacity:0;pointer-events:none;transition:opacity .25s ease}
+.share-backdrop.open{opacity:1;pointer-events:auto}
+.share-sheet{position:fixed;left:0;right:0;bottom:0;z-index:91;background:var(--surface);border-top-left-radius:24px;border-top-right-radius:24px;border-top:1px solid var(--border-strong);box-shadow:0 -20px 60px rgba(0,0,0,0.6);transform:translateY(100%);transition:transform .35s cubic-bezier(.16,1,.3,1);max-height:94vh;display:flex;flex-direction:column}
+.share-sheet.open{transform:translateY(0)}
+.share-grabber{width:42px;height:4px;background:var(--border-strong);border-radius:99px;margin:10px auto 0;flex:0 0 auto}
+.share-head{padding:14px 20px 6px;display:flex;justify-content:space-between;align-items:center;flex:0 0 auto}
+.share-head h3{font-family:'Instrument Serif',serif;font-size:24px;font-weight:400;letter-spacing:-0.02em;color:var(--text)}
+.share-close{background:transparent;border:none;color:var(--text-3);cursor:pointer;padding:6px;border-radius:8px;display:flex;align-items:center;justify-content:center}
+.share-close:hover{background:var(--surface-2);color:var(--text)}
+.share-close svg{width:18px;height:18px;stroke-width:2}
+.share-pills{display:flex;gap:6px;padding:10px 20px 4px;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none;flex:0 0 auto}
+.share-pills::-webkit-scrollbar{display:none}
+.share-pill{flex:0 0 auto;padding:8px 14px;border-radius:99px;background:var(--surface-2);border:1px solid var(--border);color:var(--text-2);font-size:12.5px;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap;font-family:inherit}
+.share-pill:hover{background:var(--surface-3);color:var(--text)}
+.share-pill.active{background:var(--accent);color:var(--accent-text);border-color:var(--accent)}
+.share-body{padding:14px 20px;overflow-y:auto;flex:1 1 auto;display:flex;flex-direction:column;align-items:center;gap:12px}
+.share-period{display:flex;gap:6px;width:100%;justify-content:center}
+.share-period-pill{padding:6px 12px;border-radius:8px;background:transparent;border:1px solid var(--border);color:var(--text-3);font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit;letter-spacing:0.04em;text-transform:uppercase}
+.share-period-pill.active{background:var(--surface-2);border-color:var(--border-strong);color:var(--text)}
+.share-canvas-wrap{position:relative;background:#000;border-radius:18px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.5);width:min(320px, 75vw);aspect-ratio:9/16;display:flex;align-items:center;justify-content:center}
+.share-canvas-wrap canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.share-canvas-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text-3);font-size:12px;font-weight:500;letter-spacing:0.05em;text-transform:uppercase}
+.share-actions{padding:14px 20px calc(20px + env(safe-area-inset-bottom));display:flex;gap:10px;border-top:1px solid var(--border);background:var(--surface);flex:0 0 auto}
+.share-actions .btn{flex:1}
+.share-photo-controls{display:flex;gap:8px;width:100%;justify-content:center;align-items:center;margin-top:4px}
+.share-photo-btn{display:flex;align-items:center;gap:7px;padding:8px 14px;border-radius:99px;background:var(--surface-2);border:1px solid var(--border);color:var(--text);font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s}
+.share-photo-btn:hover{background:var(--surface-3)}
+.share-photo-btn svg{width:14px;height:14px;stroke-width:2}
+.share-photo-btn.danger{color:var(--text-3)}
+.share-photo-btn.danger:hover{color:var(--warn);border-color:var(--warn)}
+
+/* ===== Profile wizard (full-screen onboarding) ===== */
+.wiz-overlay{position:fixed;inset:0;background:var(--bg);z-index:9999;display:none;flex-direction:column;animation:wiz-in .3s ease}
+.wiz-overlay.open{display:flex}
+/* While the wizard is open, hide the bottom nav so it can't cover the Continue button */
+body.wiz-open nav{display:none}
+body.wiz-open{overflow:hidden}
+@keyframes wiz-in{from{opacity:0}to{opacity:1}}
+.wiz-top{display:flex;align-items:center;justify-content:space-between;padding:calc(16px + env(safe-area-inset-top)) 20px 12px;flex:0 0 auto;gap:14px}
+.wiz-back, .wiz-skip{background:transparent;border:none;color:var(--text-3);cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;padding:8px 12px;border-radius:8px;display:flex;align-items:center;gap:6px}
+.wiz-back:hover, .wiz-skip:hover{color:var(--text);background:var(--surface-2)}
+.wiz-back svg{width:14px;height:14px;stroke-width:2.5}
+.wiz-back[disabled]{opacity:0;pointer-events:none}
+.wiz-close{background:var(--surface-2);border:1px solid var(--border);color:var(--text-2);cursor:pointer;width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;transition:background .15s,color .15s,border-color .15s;flex-shrink:0}
+.wiz-close:hover{background:var(--surface-3);color:var(--text);border-color:var(--border-strong)}
+.wiz-close svg{width:16px;height:16px;stroke-width:2.5}
+.wiz-dots{flex:1;display:flex;justify-content:center;gap:6px}
+.wiz-dot{width:6px;height:6px;border-radius:50%;background:var(--surface-3);transition:all .25s}
+.wiz-dot.done{background:var(--text-3)}
+.wiz-dot.current{background:var(--accent);width:22px;border-radius:99px}
+.wiz-body{flex:1 1 auto;overflow-y:auto;padding:24px 24px 40px;display:flex;flex-direction:column;gap:24px;max-width:560px;width:100%;margin:0 auto;-webkit-overflow-scrolling:touch}
+.wiz-eyebrow{font-size:11px;color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:0.12em}
+.wiz-title{font-family:'Instrument Serif',serif;font-size:38px;font-weight:400;line-height:1.05;letter-spacing:-0.02em;color:var(--text)}
+.wiz-sub{font-size:14px;color:var(--text-2);font-weight:500;line-height:1.55;margin-top:-12px}
+.wiz-section{display:flex;flex-direction:column;gap:10px}
+.wiz-section-label{font-size:11px;color:var(--text-3);font-weight:700;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:2px}
+.wiz-input{width:100%;background:var(--surface);border:1px solid var(--border-strong);color:var(--text);font-family:inherit;font-size:16px;font-weight:500;padding:14px 16px;border-radius:12px;transition:border-color .15s, box-shadow .15s}
+.wiz-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+.wiz-input::placeholder{color:var(--text-4);font-weight:400}
+.wiz-row{display:grid;gap:10px}
+.wiz-row.cols-2{grid-template-columns:1fr 1fr}
+.wiz-row.cols-3{grid-template-columns:1fr 1fr 1fr}
+.wiz-field{display:flex;flex-direction:column;gap:6px}
+.wiz-field-label{font-size:11px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:0.08em}
+.wiz-input-suffix{position:relative}
+.wiz-input-suffix .wiz-input{padding-right:46px}
+.wiz-input-suffix-text{position:absolute;right:14px;top:50%;transform:translateY(-50%);color:var(--text-4);font-size:13px;font-weight:600;pointer-events:none}
+.wiz-choice{display:flex;align-items:center;gap:14px;padding:16px;background:var(--surface);border:1.5px solid var(--border-strong);border-radius:14px;cursor:pointer;transition:all .15s;text-align:left;font-family:inherit;color:var(--text);width:100%}
+.wiz-choice:hover{border-color:var(--border-active);background:var(--surface-2)}
+.wiz-choice.selected{border-color:var(--accent);background:var(--accent-soft)}
+.wiz-choice-radio{flex:0 0 auto;width:20px;height:20px;border-radius:50%;border:2px solid var(--border-active);display:flex;align-items:center;justify-content:center;transition:all .15s}
+.wiz-choice.selected .wiz-choice-radio{border-color:var(--accent);background:var(--accent)}
+.wiz-choice-radio::after{content:'';width:8px;height:8px;border-radius:50%;background:var(--accent-text);transform:scale(0);transition:transform .15s}
+.wiz-choice.selected .wiz-choice-radio::after{transform:scale(1)}
+.wiz-choice-check{flex:0 0 auto;width:22px;height:22px;border-radius:7px;border:2px solid var(--border-active);display:flex;align-items:center;justify-content:center;transition:all .15s;color:var(--accent-text)}
+.wiz-choice.selected .wiz-choice-check{border-color:var(--accent);background:var(--accent)}
+.wiz-choice-check svg{width:14px;height:14px;stroke-width:3.5;opacity:0;transform:scale(.6);transition:opacity .15s, transform .15s}
+.wiz-choice.selected .wiz-choice-check svg{opacity:1;transform:scale(1)}
+.wiz-choice-body{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}
+.wiz-choice-label{font-size:15px;font-weight:600;letter-spacing:-0.01em}
+.wiz-choice-desc{font-size:12.5px;color:var(--text-3);font-weight:500;line-height:1.4}
+.wiz-chips{display:flex;flex-wrap:wrap;gap:8px}
+.wiz-chip{padding:9px 14px;background:var(--surface);border:1.5px solid var(--border-strong);border-radius:99px;color:var(--text-2);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s}
+.wiz-chip:hover{border-color:var(--border-active);color:var(--text)}
+.wiz-chip.selected{background:var(--accent);color:var(--accent-text);border-color:var(--accent)}
+.wiz-stepper{display:flex;align-items:center;gap:14px;background:var(--surface);border:1.5px solid var(--border-strong);border-radius:14px;padding:8px}
+.wiz-stepper-btn{width:40px;height:40px;border-radius:10px;background:var(--surface-2);border:none;color:var(--text);font-size:18px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit}
+.wiz-stepper-btn:hover{background:var(--surface-3)}
+.wiz-stepper-btn:disabled{opacity:.3;cursor:not-allowed}
+.wiz-stepper-val{flex:1;text-align:center;font-family:'Instrument Serif',serif;font-size:32px;font-weight:400;line-height:1}
+.wiz-stepper-unit{font-size:12px;color:var(--text-3);font-weight:500;margin-left:6px}
+.wiz-foot{position:relative;padding:18px 24px calc(22px + env(safe-area-inset-bottom));background:var(--bg);flex:0 0 auto;display:flex;gap:12px;align-items:center}
+/* Soft fade so scrollable content doesn't bump hard into the CTA */
+.wiz-foot::before{content:'';position:absolute;left:0;right:0;top:-44px;height:44px;background:linear-gradient(to top, var(--bg), rgba(0,0,0,0));pointer-events:none}
+.wiz-continue{flex:1;height:56px;border-radius:16px;background:var(--accent);color:var(--accent-text);border:none;font-family:inherit;font-size:15px;font-weight:700;letter-spacing:-0.005em;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:10px;transition:transform .12s, box-shadow .2s, opacity .2s, filter .2s;box-shadow:0 6px 24px var(--accent-glow), 0 1px 2px rgba(0,0,0,0.25);position:relative;overflow:hidden}
+.wiz-continue::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0));opacity:.7;pointer-events:none}
+.wiz-continue:hover{transform:translateY(-1px);box-shadow:0 10px 32px var(--accent-glow), 0 2px 4px rgba(0,0,0,0.3);filter:brightness(1.04)}
+.wiz-continue:active{transform:translateY(0);transition:transform .05s;filter:brightness(.98)}
+.wiz-continue:disabled{opacity:.35;cursor:not-allowed;transform:none;box-shadow:none;filter:saturate(.4)}
+.wiz-continue svg{width:18px;height:18px;stroke-width:2.5;position:relative;z-index:1;transition:transform .2s}
+.wiz-continue:hover:not(:disabled) svg{transform:translateX(3px)}
+.wiz-continue-label{position:relative;z-index:1}
+.wiz-step-pill{font-size:11px;font-weight:600;color:var(--text-3);font-family:'JetBrains Mono', monospace;letter-spacing:0.04em;padding:0 4px;flex-shrink:0}
+.wiz-done-hero{text-align:center;padding:40px 0;display:flex;flex-direction:column;align-items:center;gap:18px}
+.wiz-done-check{width:88px;height:88px;border-radius:50%;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;animation:check-pop .6s cubic-bezier(.34,1.56,.64,1)}
+.wiz-done-check svg{width:44px;height:44px;color:var(--accent);stroke-width:2.5}
+.wiz-done-summary{display:flex;flex-direction:column;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px 20px;width:100%}
+.wiz-done-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)}
+.wiz-done-row:last-child{border-bottom:none}
+.wiz-done-row-label{font-size:12px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:0.06em}
+.wiz-done-row-val{font-size:14px;color:var(--text);font-weight:600;text-align:right;max-width:60%}
+
+/* ===== Post-workout celebration ===== */
+.session-celebration{padding:48px 24px;text-align:center;background:var(--surface);border:1px solid var(--border);border-radius:18px;margin-top:14px;animation:celebrate-in .5s cubic-bezier(.16,1,.3,1)}
+@keyframes celebrate-in{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:none}}
+.celebration-check{width:72px;height:72px;border-radius:50%;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;margin:0 auto 22px;animation:check-pop .6s cubic-bezier(.34,1.56,.64,1) .15s both}
+@keyframes check-pop{from{transform:scale(0)}to{transform:scale(1)}}
+.celebration-check svg{width:38px;height:38px;color:var(--accent);stroke-width:3}
+.celebration-title{font-family:'Instrument Serif',serif;font-size:42px;line-height:1;font-style:italic;color:var(--text);margin-bottom:10px;letter-spacing:-0.01em}
+.celebration-sub{font-size:13.5px;color:var(--text-2);font-weight:500;margin-bottom:28px;line-height:1.5}
+.celebration-sub strong{color:var(--text);font-weight:600}
+.celebration-actions{display:flex;gap:10px;max-width:340px;margin:0 auto}
+.celebration-actions .btn{flex:1}
 
 .theme-toggle{
   background:var(--surface);
@@ -1173,17 +1320,89 @@ input::placeholder{color:var(--text-4);font-weight:400}
 
 <div class="toast" id="toast"></div>
 
+<div class="share-backdrop" id="share-backdrop" onclick="Cards.close()"></div>
+<div class="share-sheet" id="share-sheet" role="dialog" aria-modal="true" aria-label="Share story card">
+  <div class="share-grabber"></div>
+  <div class="share-head">
+    <h3>Share recap</h3>
+    <button class="share-close" onclick="Cards.close()" aria-label="Close">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="share-pills" id="share-pills"></div>
+  <div class="share-body">
+    <div class="share-canvas-wrap">
+      <div class="share-canvas-loading" id="share-loading">Rendering…</div>
+      <canvas id="share-canvas" width="1080" height="1920"></canvas>
+    </div>
+    <div class="share-photo-controls" id="share-photo-controls">
+      <input type="file" id="share-photo-input" accept="image/*" hidden onchange="Cards.handlePhotoSelect(this.files[0])">
+      <button class="share-photo-btn" id="share-photo-add-btn" onclick="document.getElementById('share-photo-input').click()">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        Add photo
+      </button>
+      <button class="share-photo-btn danger" id="share-photo-remove-btn" onclick="Cards.removePhoto()" hidden>
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        Remove photo
+      </button>
+    </div>
+  </div>
+  <div class="share-actions">
+    <button class="btn btn-ghost" onclick="Cards.download()">
+      <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+      Save image
+    </button>
+    <button class="btn btn-primary" onclick="Cards.share()">
+      <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
+      Share
+    </button>
+  </div>
+</div>
+
+<!-- Profile setup wizard -->
+<div class="wiz-overlay" id="wiz-overlay" role="dialog" aria-modal="true" aria-label="Profile setup">
+  <div class="wiz-top">
+    <button class="wiz-back" id="wiz-back" onclick="Profile.back()">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+      Back
+    </button>
+    <div class="wiz-dots" id="wiz-dots"></div>
+    <button class="wiz-close" id="wiz-close" onclick="Profile.requestClose()" aria-label="Close">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="wiz-body" id="wiz-body"></div>
+  <div class="wiz-foot">
+    <span class="wiz-step-pill" id="wiz-step-pill">1 / 7</span>
+    <button class="wiz-continue" id="wiz-continue" onclick="Profile.next()">
+      <span class="wiz-continue-label">Continue</span>
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M13 5l7 7-7 7"/></svg>
+    </button>
+  </div>
+</div>
+
 <!-- DASHBOARD -->
 <div class="page active" id="page-dashboard">
   <div class="page-header">
     <div>
       <div class="page-eyebrow" id="dash-date"></div>
-      <h1 class="page-title">Hey, Carter</h1>
+      <h1 class="page-title" id="dash-greeting">Hey, Carter</h1>
       <div class="page-sub">Let's build today.</div>
     </div>
-    <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
-      <svg id="theme-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"></svg>
-    </button>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="theme-toggle" onclick="Cards.open()" aria-label="Share story card" title="Share">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width:18px;height:18px;stroke-width:2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M16 8l-4-4m0 0L8 8m4-4v12"/></svg>
+      </button>
+      <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+        <svg id="theme-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="date-nav" id="date-nav-dashboard"></div>
+  <div class="readonly-banner">
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+    <span>Viewing a past day · read-only. <a onclick="goToday()">Jump to today</a> to log new entries.</span>
   </div>
 
   <div class="hero-stat">
@@ -1235,7 +1454,7 @@ input::placeholder{color:var(--text-4);font-weight:400}
 
   <div class="section">
     <div class="section-head">
-      <div class="section-label">Today's session</div>
+      <div class="section-label" id="today-session-label">Today's session</div>
     </div>
     <div class="today-hero" id="today-session-content"></div>
   </div>
@@ -1245,7 +1464,7 @@ input::placeholder{color:var(--text-4);font-weight:400}
       <div class="section-label">Weight tracker</div>
     </div>
     <div class="card">
-      <div style="display:flex;gap:10px;align-items:center">
+      <div class="editable-only" style="display:flex;gap:10px;align-items:center">
         <input type="number" id="weight-input" placeholder="181.5" style="flex:1" step="0.1" inputmode="decimal">
         <button class="btn btn-primary btn-sm" onclick="logWeight()">
           <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
@@ -1268,6 +1487,12 @@ input::placeholder{color:var(--text-4);font-weight:400}
     <button class="theme-toggle" onclick="toggleTheme()"><svg id="theme-icon-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"></svg></button>
   </div>
 
+  <div class="date-nav" id="date-nav-workout"></div>
+  <div class="readonly-banner">
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+    <span>Viewing a past day · read-only. <a onclick="goToday()">Jump to today</a> to log sets.</span>
+  </div>
+
   <div class="scroll-hint">
     <div class="pill-tabs" id="day-pills"></div>
   </div>
@@ -1283,6 +1508,12 @@ input::placeholder{color:var(--text-4);font-weight:400}
       <div class="page-sub">Hit your protein first.</div>
     </div>
     <button class="theme-toggle" onclick="toggleTheme()"><svg id="theme-icon-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"></svg></button>
+  </div>
+
+  <div class="date-nav" id="date-nav-nutrition"></div>
+  <div class="readonly-banner">
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+    <span>Viewing a past day · read-only. <a onclick="goToday()">Jump to today</a> to log meals.</span>
   </div>
 
   <div class="card" style="margin-bottom:14px">
@@ -1311,17 +1542,19 @@ input::placeholder{color:var(--text-4);font-weight:400}
     <div class="metric-bar" style="height:5px;margin-top:14px"><div class="metric-fill" id="nutr-bar" style="width:0%"></div></div>
   </div>
 
-  <div class="section-label" style="margin-bottom:10px">Search foods</div>
-  <div class="card">
-    <div class="food-search-input-wrap">
-      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 100-15 7.5 7.5 0 000 15z"/></svg>
-      <input type="search" id="food-search-input" placeholder="e.g. Oikos mixed berry yogurt" autocomplete="off" autocapitalize="none" spellcheck="false">
+  <div class="section editable-only">
+    <div class="section-label" style="margin-bottom:10px">Search foods</div>
+    <div class="card">
+      <div class="food-search-input-wrap">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 100-15 7.5 7.5 0 000 15z"/></svg>
+        <input type="search" id="food-search-input" placeholder="e.g. Oikos mixed berry yogurt" autocomplete="off" autocapitalize="none" spellcheck="false">
+      </div>
+      <div id="food-key-bar"></div>
+      <div id="food-search-results"><div class="food-search-status">Search a brand or food. Macros load automatically — adjust grams to match what you ate.</div></div>
     </div>
-    <div id="food-key-bar"></div>
-    <div id="food-search-results"><div class="food-search-status">Search a brand or food. Macros load automatically — adjust grams to match what you ate.</div></div>
   </div>
 
-  <div class="section">
+  <div class="section editable-only">
     <div class="section-label" style="margin-bottom:10px">Custom food</div>
     <div class="card">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
@@ -1337,7 +1570,7 @@ input::placeholder{color:var(--text-4);font-weight:400}
     </div>
   </div>
 
-  <div class="section">
+  <div class="section editable-only">
     <button class="meal-templates-toggle" onclick="toggleMealTemplates()" aria-expanded="false">
       <span class="section-label" style="margin:0">Meal templates</span>
       <svg id="meal-templates-caret" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
@@ -1346,7 +1579,7 @@ input::placeholder{color:var(--text-4);font-weight:400}
   </div>
 
   <div class="section">
-    <div class="section-label" style="margin-bottom:10px">Logged today</div>
+    <div class="section-label" id="food-log-section-label" style="margin-bottom:10px">Logged today</div>
     <div class="card" id="food-log-list"><div style="color:var(--text-4);font-size:13px">Nothing logged yet</div></div>
   </div>
 </div>
@@ -1391,6 +1624,10 @@ input::placeholder{color:var(--text-4);font-weight:400}
   <div class="section">
     <div class="section-label" style="margin-bottom:10px">Data</div>
     <div class="card">
+      <button class="btn btn-ghost btn-full" onclick="Profile.open(true)" style="margin-bottom:8px">
+        <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+        Edit profile
+      </button>
       <button class="btn btn-ghost btn-full" onclick="exportData()">
         <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
         Export backup
@@ -1572,9 +1809,355 @@ function getWeekNum(){
 }
 function getTodayDayIdx(){return new Date().getDay() === 0 ? 6 : new Date().getDay()-1}
 
+// ===== Per-day view state — what date are we currently looking at? =====
+// `viewDate` (state.viewDate) drives every per-day render. Defaults to today.
+// Past days are read-only; today is editable. Mutators gate via assertEditable().
+let viewDate = todayKey();
+function viewKey(){ return viewDate; }
+function isViewingToday(){ return viewDate === todayKey(); }
+function getDayIdxFromDate(dateStr){
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.getDay() === 0 ? 6 : d.getDay()-1;
+}
+function getViewDayIdx(){ return getDayIdxFromDate(viewDate); }
+function shiftDateKey(dateStr, deltaDays){
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + deltaDays);
+  return d.toISOString().split('T')[0];
+}
+function formatViewDateLabel(dateStr){
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+}
+function setViewDate(dateStr){
+  if(dateStr > todayKey()) return; // never go past today
+  viewDate = dateStr;
+  // When navigating dates, snap workout view to that date's day-of-week
+  activeDay = getViewDayIdx();
+  applyReadonlyMode();
+  renderActivePage();
+}
+function goPrevDay(){ setViewDate(shiftDateKey(viewDate, -1)); }
+function goNextDay(){ if(!isViewingToday()) setViewDate(shiftDateKey(viewDate, 1)); }
+function goToday(){ setViewDate(todayKey()); }
+function applyReadonlyMode(){
+  document.body.setAttribute('data-readonly', isViewingToday() ? '' : 'true');
+}
+function assertEditable(actionLabel){
+  if(isViewingToday()) return true;
+  toast((actionLabel || 'Editing') + ' is locked on past days');
+  return false;
+}
+function renderActivePage(){
+  const active = document.querySelector('.page.active');
+  if(!active) return;
+  const id = active.id.replace('page-','');
+  if(id==='dashboard') renderDashboard();
+  else if(id==='workout') renderWorkout();
+  else if(id==='nutrition') renderNutrition();
+  else if(id==='progress') renderProgress();
+  else if(id==='artemis') renderArtemis();
+}
+function renderDateNav(slotId){
+  const el = document.getElementById(slotId);
+  if(!el) return;
+  const today = isViewingToday();
+  const label = today ? 'Today · ' + formatViewDateLabel(viewDate) : formatViewDateLabel(viewDate);
+  const badge = today
+    ? '<span class="date-nav-today-badge">Today</span>'
+    : '<span class="date-nav-past-badge">Past</span>';
+  el.innerHTML = `
+    <button class="date-nav-arrow" onclick="goPrevDay()" aria-label="Previous day">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+    </button>
+    <button class="date-nav-label" onclick="goToday()" title="${today ? 'Already on today' : 'Jump to today'}">
+      <span>${label}</span>${badge}
+    </button>
+    <button class="date-nav-arrow" onclick="goNextDay()" aria-label="Next day" ${today ? 'disabled' : ''}>
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+    </button>`;
+}
+
 function save(){
   try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
   catch(e){ console.warn('Save failed:', e); }
+}
+
+// ===== Supabase cloud sync =====
+// localStorage is the primary cache. Supabase is the source of truth across
+// devices/browsers. On first sync (state.syncInitialized falsy) we push local
+// data up so existing entries aren't lost; after that, pulls overwrite local.
+const SUPABASE_URL = 'https://qugurstoyditcfhmmmrs.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_O-GBvsVxNkxxwSh_nuYHNA_oU4w1RzG';
+
+const Sync = {
+  client: null,
+  ready: false,
+
+  init(){
+    if(typeof window.supabase === 'undefined' || !window.supabase.createClient){
+      console.warn('Supabase JS not loaded — running local-only');
+      return;
+    }
+    this.client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    this.ready = true;
+  },
+
+  async pull(){
+    if(!this.ready) return;
+    const c = this.client;
+    const [foods, sets, weights, woComp, hiit, prs, profile] = await Promise.all([
+      c.from('training_food_log').select('*').order('id'),
+      c.from('training_set_log').select('*'),
+      c.from('training_weights').select('*').order('date'),
+      c.from('training_workouts_completed').select('*'),
+      c.from('training_hiit_log').select('*'),
+      c.from('training_prs').select('*'),
+      c.from('training_profile').select('data').eq('id', 1).maybeSingle(),
+    ]);
+    const synced = !!state.syncInitialized;
+
+    if(!profile.error && profile.data?.data){
+      const cloudProfile = profile.data.data;
+      if(synced || (cloudProfile && Object.keys(cloudProfile).length)){
+        state.profile = Object.assign({}, state.profile || {}, cloudProfile);
+        if(state.profile.coachStyle) state.coachStyle = state.profile.coachStyle;
+      }
+    }
+
+    if(!foods.error){
+      const fl = {};
+      foods.data.forEach(r => {
+        if(!fl[r.date]) fl[r.date] = [];
+        fl[r.date].push({name:r.name, cal:+r.cal, prot:+r.prot, carb:+r.carb, fat:+r.fat});
+      });
+      if(synced || Object.keys(fl).length) state.foodLog = fl;
+    }
+    if(!sets.error){
+      const sl = {};
+      sets.data.forEach(r => {
+        if(!sl[r.date]) sl[r.date] = {};
+        if(!sl[r.date][r.day_idx]) sl[r.date][r.day_idx] = {};
+        if(!sl[r.date][r.day_idx][r.ex_idx]) sl[r.date][r.day_idx][r.ex_idx] = {};
+        const e = {};
+        if(r.reps != null) e.reps = +r.reps;
+        if(r.weight != null) e.weight = +r.weight;
+        e.done = !!r.done;
+        sl[r.date][r.day_idx][r.ex_idx][r.set_idx] = e;
+      });
+      if(synced || Object.keys(sl).length) state.setLog = sl;
+    }
+    if(!weights.error){
+      const w = weights.data.map(r => ({date:r.date, lbs:+r.lbs}));
+      if(synced || w.length) state.weights = w;
+    }
+    if(!woComp.error){
+      const wc = woComp.data.map(r => `${r.date}-${r.day_idx}`);
+      if(synced || wc.length) state.workoutsCompleted = wc;
+    }
+    if(!hiit.error){
+      const h = {};
+      hiit.data.forEach(r => {
+        if(!h[r.date]) h[r.date] = {};
+        if(!h[r.date][r.day_idx]) h[r.date][r.day_idx] = {};
+        h[r.date][r.day_idx][r.name] = !!r.done;
+      });
+      if(synced || Object.keys(h).length) state.hiitLog = h;
+    }
+    if(!prs.error){
+      const p = {};
+      prs.data.forEach(r => { p[r.exercise_name] = +r.weight; });
+      if(synced || Object.keys(p).length) state.prs = p;
+    }
+    save();
+  },
+
+  async backfillFromLocal(){
+    if(!this.ready) return [];
+    const tasks = [];
+    // Food log — insert all rows by date
+    Object.entries(state.foodLog || {}).forEach(([date, rows]) => {
+      if(rows && rows.length){
+        tasks.push(this.client.from('training_food_log').insert(
+          rows.map(r => ({date, name:r.name, cal:r.cal||0, prot:r.prot||0, carb:r.carb||0, fat:r.fat||0}))
+        ));
+      }
+    });
+    // Set log
+    const setRows = [];
+    Object.entries(state.setLog || {}).forEach(([date, days]) => {
+      Object.entries(days || {}).forEach(([dayIdx, exs]) => {
+        Object.entries(exs || {}).forEach(([exIdx, sets]) => {
+          Object.entries(sets || {}).forEach(([setIdx, s]) => {
+            setRows.push({
+              date, day_idx:+dayIdx, ex_idx:+exIdx, set_idx:+setIdx,
+              reps: s.reps != null ? s.reps : null,
+              weight: s.weight != null ? s.weight : null,
+              done: !!s.done
+            });
+          });
+        });
+      });
+    });
+    if(setRows.length) tasks.push(this.client.from('training_set_log').upsert(setRows));
+    // Weights — dedupe by date (keep last)
+    const wMap = {};
+    (state.weights || []).forEach(w => { wMap[w.date] = w.lbs; });
+    const wRows = Object.entries(wMap).map(([date, lbs]) => ({date, lbs}));
+    if(wRows.length) tasks.push(this.client.from('training_weights').upsert(wRows));
+    // Workouts completed — parse "YYYY-MM-DD-N" key
+    const wcRows = (state.workoutsCompleted || []).map(k => {
+      const m = /^(\d{4}-\d{2}-\d{2})-(\d+)$/.exec(k);
+      return m ? {date: m[1], day_idx: +m[2]} : null;
+    }).filter(Boolean);
+    if(wcRows.length) tasks.push(this.client.from('training_workouts_completed').upsert(wcRows));
+    // HIIT
+    const hRows = [];
+    Object.entries(state.hiitLog || {}).forEach(([date, days]) => {
+      Object.entries(days || {}).forEach(([dayIdx, names]) => {
+        Object.entries(names || {}).forEach(([name, done]) => {
+          hRows.push({date, day_idx:+dayIdx, name, done: !!done});
+        });
+      });
+    });
+    if(hRows.length) tasks.push(this.client.from('training_hiit_log').upsert(hRows));
+    // PRs
+    const pRows = Object.entries(state.prs || {})
+      .filter(([_, w]) => w != null && !isNaN(+w))
+      .map(([exercise_name, weight]) => ({exercise_name, weight: +weight}));
+    if(pRows.length) tasks.push(this.client.from('training_prs').upsert(pRows));
+    // Profile (single row)
+    if(state.profile && Object.keys(state.profile).length){
+      tasks.push(this.client.from('training_profile').upsert({id:1, data: state.profile, updated_at: new Date().toISOString()}));
+    }
+
+    const results = await Promise.allSettled(tasks);
+    results.forEach(r => {
+      if(r.status === 'rejected') console.warn('Backfill task rejected:', r.reason);
+      else if(r.value?.error) console.warn('Backfill task error:', r.value.error);
+    });
+    return results;
+  },
+
+  pushFoodLog(date){
+    if(!this.ready) return;
+    const rows = state.foodLog[date] || [];
+    (async () => {
+      try {
+        const del = await this.client.from('training_food_log').delete().eq('date', date);
+        if(del.error) throw del.error;
+        if(rows.length){
+          const ins = await this.client.from('training_food_log').insert(
+            rows.map(r => ({date, name:r.name, cal:r.cal||0, prot:r.prot||0, carb:r.carb||0, fat:r.fat||0}))
+          );
+          if(ins.error) throw ins.error;
+        }
+      } catch(e){ console.warn('pushFoodLog failed:', e); }
+    })();
+  },
+
+  pushSet(date, dayIdx, exIdx, setIdx, s){
+    if(!this.ready) return;
+    (async () => {
+      try {
+        const r = await this.client.from('training_set_log').upsert({
+          date, day_idx:dayIdx, ex_idx:exIdx, set_idx:setIdx,
+          reps: s.reps != null ? s.reps : null,
+          weight: s.weight != null ? s.weight : null,
+          done: !!s.done,
+          updated_at: new Date().toISOString()
+        });
+        if(r.error) throw r.error;
+      } catch(e){ console.warn('pushSet failed:', e); }
+    })();
+  },
+
+  pushWeight(date, lbs){
+    if(!this.ready) return;
+    (async () => {
+      try {
+        const r = await this.client.from('training_weights').upsert({date, lbs, updated_at: new Date().toISOString()});
+        if(r.error) throw r.error;
+      } catch(e){ console.warn('pushWeight failed:', e); }
+    })();
+  },
+
+  pushWorkoutDone(date, dayIdx){
+    if(!this.ready) return;
+    (async () => {
+      try {
+        const r = await this.client.from('training_workouts_completed').upsert({date, day_idx:dayIdx});
+        if(r.error) throw r.error;
+      } catch(e){ console.warn('pushWorkoutDone failed:', e); }
+    })();
+  },
+
+  pushWorkoutUndone(date, dayIdx){
+    if(!this.ready) return;
+    (async () => {
+      try {
+        const r = await this.client.from('training_workouts_completed').delete().eq('date', date).eq('day_idx', dayIdx);
+        if(r.error) throw r.error;
+      } catch(e){ console.warn('pushWorkoutUndone failed:', e); }
+    })();
+  },
+
+  pushHiit(date, dayIdx, name, done){
+    if(!this.ready) return;
+    (async () => {
+      try {
+        const r = await this.client.from('training_hiit_log').upsert({date, day_idx:dayIdx, name, done: !!done});
+        if(r.error) throw r.error;
+      } catch(e){ console.warn('pushHiit failed:', e); }
+    })();
+  },
+
+  pushPR(name, weight){
+    if(!this.ready) return;
+    (async () => {
+      try {
+        const r = await this.client.from('training_prs').upsert({
+          exercise_name:name, weight,
+          achieved_on: todayKey(),
+          updated_at: new Date().toISOString()
+        });
+        if(r.error) throw r.error;
+      } catch(e){ console.warn('pushPR failed:', e); }
+    })();
+  },
+
+  pushProfile(profile){
+    if(!this.ready) return;
+    (async () => {
+      try {
+        const r = await this.client.from('training_profile').upsert({
+          id: 1, data: profile || {}, updated_at: new Date().toISOString()
+        });
+        if(r.error) throw r.error;
+      } catch(e){ console.warn('pushProfile failed:', e); }
+    })();
+  }
+};
+
+async function initSync(){
+  Sync.init();
+  if(!Sync.ready) return;
+  try {
+    await Sync.pull();
+    if(!state.syncInitialized){
+      const results = await Sync.backfillFromLocal();
+      const allOk = results.every(r => r.status === 'fulfilled' && !r.value?.error);
+      if(allOk){
+        state.syncInitialized = true;
+        save();
+      } else {
+        console.warn('Backfill incomplete — will retry on next session to avoid data loss');
+      }
+    }
+    renderActivePage();
+  } catch(e){
+    console.warn('initSync failed (continuing with local data):', e);
+  }
 }
 function load(){
   try{
@@ -1664,8 +2247,14 @@ function toast(msg){
 }
 
 function renderDashboard(){
-  const today = new Date().toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});
-  document.getElementById('dash-date').textContent = today;
+  renderDateNav('date-nav-dashboard');
+  const dateLabel = new Date(viewKey() + 'T00:00:00').toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});
+  document.getElementById('dash-date').textContent = dateLabel;
+  const greetEl = document.getElementById('dash-greeting');
+  if(greetEl){
+    const name = state.profile?.name?.trim() || 'Carter';
+    greetEl.textContent = `Hey, ${name}`;
+  }
   const wk = getWeekNum();
   document.getElementById('dash-week').innerHTML=`${wk}<small>/16</small>`;
   let phaseIdx = wk<=4?0:wk<=8?1:wk<=12?2:3;
@@ -1678,7 +2267,7 @@ function renderDashboard(){
   }
   document.getElementById('week-dots').innerHTML=dots;
 
-  const log = state.foodLog[todayKey()]||[];
+  const log = state.foodLog[viewKey()]||[];
   const totCal = log.reduce((a,b)=>a+b.cal,0);
   const totProt = log.reduce((a,b)=>a+b.prot,0);
   document.getElementById('dash-cal').innerHTML=`${totCal}<span class="metric-unit">/3300</span>`;
@@ -1686,18 +2275,23 @@ function renderDashboard(){
   document.getElementById('dash-cal-bar').style.width=Math.min(100,Math.round(totCal/33))+'%';
   document.getElementById('dash-prot-bar').style.width=Math.min(100,Math.round(totProt/1.9))+'%';
 
-  const lastW = state.weights.length ? state.weights[state.weights.length-1].lbs : '—';
+  // Weight metric: show the most recent weight at or before viewDate
+  const weightsUpToView = (state.weights||[]).filter(w => w.date <= viewKey());
+  const lastW = weightsUpToView.length ? weightsUpToView[weightsUpToView.length-1].lbs : '—';
   document.getElementById('dash-weight').innerHTML=`${lastW}<span class="metric-unit">lbs</span>`;
   document.getElementById('dash-workouts').innerHTML=`${state.workoutsCompleted.length}<span class="metric-unit">total</span>`;
 
-  const dayIdx = getTodayDayIdx();
+  const dayIdx = getViewDayIdx();
   const day = DAYS[dayIdx];
-  const sessionDone = !day.rest && state.workoutsCompleted.includes(todayKey()+'-'+dayIdx);
+  const viewingToday = isViewingToday();
+  const sessionDone = !day.rest && state.workoutsCompleted.includes(viewKey()+'-'+dayIdx);
+  const sessionLabel = document.getElementById('today-session-label');
+  if(sessionLabel) sessionLabel.textContent = viewingToday ? "Today's session" : 'Session for ' + formatViewDateLabel(viewKey());
   const todayHero = document.getElementById('today-session-content');
   todayHero.classList.toggle('today-hero-done', sessionDone);
   let html;
   if(sessionDone){
-    const dk = todayKey();
+    const dk = viewKey();
     const dayLog = state.setLog?.[dk]?.[dayIdx] || {};
     let setsLogged = 0, setsTotal = 0;
     (day.exercises||[]).forEach((ex,ei)=>{
@@ -1705,29 +2299,43 @@ function renderDashboard(){
       const exLog = dayLog[ei]||{};
       Object.values(exLog).forEach(s=>{ if(s.done) setsLogged++; });
     });
+    const desc = viewingToday
+      ? `Logged ${setsLogged}/${setsTotal} sets. Recovery starts now — hit your protein.`
+      : `Logged ${setsLogged}/${setsTotal} sets.`;
+    const undoLink = viewingToday
+      ? `<a href="#" class="today-undo" onclick="event.preventDefault();unmarkWorkoutDone(${dayIdx})">Undo</a>`
+      : '';
     html=`
       <div class="today-eyebrow today-eyebrow-done">
         <svg class="today-check" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
         Session complete · ${day.label}
       </div>
       <div class="today-name">${day.name}</div>
-      <div class="today-desc">Logged ${setsLogged}/${setsTotal} sets. Recovery starts now — hit your protein.</div>
+      <div class="today-desc">${desc}</div>
       <div class="today-cta">
-        <div class="today-meta"><a href="#" class="today-undo" onclick="event.preventDefault();unmarkWorkoutDone(${dayIdx})">Undo</a></div>
+        <div class="today-meta">${undoLink}</div>
         <button class="btn btn-ghost btn-sm" onclick="showPage('workout',document.querySelectorAll('nav .nav-btn')[1])">
           View session
           <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
         </button>
       </div>`;
   } else {
+    const eyebrow = viewingToday
+      ? `${day.label} · ${day.rest?'Recovery':'Training'}`
+      : (day.rest ? `${day.label} · Rest day` : `${day.label} · Not logged`);
+    const meta = viewingToday
+      ? (day.rest ? 'Eat your protein.' : `${day.exercises.length} exercises${day.hiit.length?' + HIIT':''}`)
+      : (day.rest ? 'Rest day — nothing to log' : 'No session logged on this day');
+    const ctaLabel = viewingToday ? (day.rest ? 'View plan' : 'Start session') : 'View session';
+    const ctaClass = viewingToday && !day.rest ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
     html=`
-      <div class="today-eyebrow">${day.label} · ${day.rest?'Recovery':'Training'}</div>
+      <div class="today-eyebrow">${eyebrow}</div>
       <div class="today-name">${day.name}</div>
       <div class="today-desc">${day.desc}</div>
       <div class="today-cta">
-        <div class="today-meta">${day.rest?'Eat your protein.':`${day.exercises.length} exercises${day.hiit.length?' + HIIT':''}`}</div>
-        <button class="btn btn-primary btn-sm" onclick="showPage('workout',document.querySelectorAll('nav .nav-btn')[1])">
-          Start session
+        <div class="today-meta">${meta}</div>
+        <button class="${ctaClass}" onclick="showPage('workout',document.querySelectorAll('nav .nav-btn')[1])">
+          ${ctaLabel}
           <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
         </button>
       </div>`;
@@ -1744,11 +2352,15 @@ function renderDashboard(){
 }
 
 function logWeight(){
+  if(!assertEditable('Logging weight')) return;
   const v = parseFloat(document.getElementById('weight-input').value);
   if(!v) return;
-  state.weights.push({date:todayKey(),lbs:v});
+  // Replace any existing entry for today (one weight per day max)
+  const tk = todayKey();
+  state.weights = (state.weights||[]).filter(w => w.date !== tk);
+  state.weights.push({date:tk, lbs:v});
   document.getElementById('weight-input').value='';
-  save(); renderDashboard(); toast('Weight logged');
+  save(); Sync.pushWeight(tk, v); renderDashboard(); toast('Weight logged');
 }
 
 // ===== ARTEMIS — AI coach =====
@@ -1877,17 +2489,56 @@ function buildArtemisSystemPrompt(){
 
   const style = COACH_STYLES[state.coachStyle] || COACH_STYLES.friendly;
 
-  return `You are Artemis, an expert personal fitness coach with deep knowledge of strength training, hypertrophy, conditioning, nutrition, and recovery. You're coaching Carter through a 16-week training program.
+  // Profile facts — only injected if onboarding completed
+  const p = state.profile;
+  let profileBlock = '';
+  if(p && p.completedOnboarding){
+    const goalLabels = {gain_muscle:'build muscle (hypertrophy)',lose_fat:'lose body fat',recomp:'recomp (gain muscle, lose fat)',strength:'get stronger (powerlifting-style)',endurance:'athletic conditioning / endurance',maintain:'maintain'};
+    const styleLabels = {general_strength:'general strength',bodybuilding:'bodybuilding (volume + isolation)',powerlifting:'powerlifting',hybrid:'hybrid (lifting + conditioning)',functional:'functional / athletic'};
+    const expLabels = {beginner:'beginner (<1y)',intermediate:'intermediate (1–3y)',advanced:'advanced (3+y)'};
+    const timeLabels = {morning:'morning',midday:'midday',evening:'evening',late:'late night',flexible:'flexible'};
+    const ft = p.heightInches ? `${Math.floor(p.heightInches/12)}'${p.heightInches%12}"` : null;
+    const lines = [];
+    if(p.name) lines.push(`Preferred name: ${p.name}`);
+    const idBits = [];
+    if(p.age) idBits.push(`${p.age}y`);
+    if(ft) idBits.push(ft);
+    if(p.weightLbs) idBits.push(`${p.weightLbs} lbs`);
+    if(idBits.length) lines.push(`Identity: ${idBits.join(' · ')}`);
+    if(p.goalWeightLbs) lines.push(`Goal weight: ${p.goalWeightLbs} lbs (${p.goalWeightLbs > p.weightLbs ? '+' : ''}${(p.goalWeightLbs - (p.weightLbs||0)).toFixed(1)} from current)`);
+    // Goals — support both new array form and legacy single-value form
+    const goalsArr = Array.isArray(p.primaryGoals) ? p.primaryGoals : (p.primaryGoal ? [p.primaryGoal] : []);
+    if(goalsArr.length) lines.push(`Primary goal${goalsArr.length>1?'s':''}: ${goalsArr.map(g => goalLabels[g] || g).join(', ')}`);
+    const trainBits = [];
+    if(p.trainingStyle) trainBits.push(styleLabels[p.trainingStyle] || p.trainingStyle);
+    if(p.experience) trainBits.push(expLabels[p.experience] || p.experience);
+    if(p.daysPerWeek) trainBits.push(`${p.daysPerWeek} days/week`);
+    if(trainBits.length) lines.push(`Training style: ${trainBits.join(', ')}`);
+    if(p.preferredTime) lines.push(`Preferred training time: ${timeLabels[p.preferredTime] || p.preferredTime}`);
+    if(p.motivations?.length) lines.push(`Motivations: ${p.motivations.join(', ')}`);
+    if(p.struggles?.length) lines.push(`Self-reported struggles: ${p.struggles.join(', ')}`);
+    if(p.struggleNote?.trim()) lines.push(`Personal context: ${p.struggleNote.trim()}`);
+    profileBlock = `\nATHLETE PROFILE:\n${lines.map(l => '  ' + l).join('\n')}\n`;
+  }
+
+  // Use the user's preferred name where available
+  const userName = p?.name?.trim() || 'Carter';
+
+  // Substitute the user's name into the coach-style prompt (which references "Carter" by default)
+  const stylePrompt = style.prompt.replace(/Carter/g, userName);
+
+  return `You are Artemis, an expert personal fitness coach with deep knowledge of strength training, hypertrophy, conditioning, nutrition, and recovery. You're coaching ${userName} through a 16-week training program.
 
 PERSONALITY (always follow):
-${style.prompt}
+${stylePrompt}
 
 GROUNDING RULES:
 - Anchor advice in the specific data below. Reference exact numbers, exercises, dates, and patterns.
-- Never invent stats. If something isn't in the data, ask Carter or say you don't have it.
+- Never invent stats. If something isn't in the data, ask ${userName} or say you don't have it.
 - Keep responses skimmable on a phone — short paragraphs or bullets, not walls of text.
 - When recommending changes (weight, reps, food), be specific and actionable.
-- Tie advice to where Carter is in the 16-week program.
+- Tie advice to where ${userName} is in the 16-week program.
+- Use the athlete profile below to tailor your tone and recommendations to their stated goals, struggles, and motivations.
 - Use plain text formatting only (no markdown like ** or ###). Bullets with "•" or "-" are fine.
 
 PROGRAM STRUCTURE (16-week split: Mon Push / Tue Pull / Wed Legs / Thu Upper-heavy / Fri HIIT / Sat Rest (optional bonus) / Sun Rest):
@@ -1903,6 +2554,7 @@ NUTRITION TARGETS:
 Today: ${todayDate}
 Week: ${wk} of 16 — ${ph.label} phase
 Phase guidance: ${ph.note}
+${profileBlock}
 
 TODAY'S PRESCRIBED SESSION (${todayWeekday}): ${today.name}${today.rest?' — REST DAY':''}
 ${today.rest ? '(Rest / recovery day)' : `Estimated time: ~${todayEst} min`}
@@ -2213,16 +2865,18 @@ function removeHiitItem(dayIdx, idx){
   renderWorkoutContent();
 }
 function isHiitDone(dayIdx, name){
-  const dk = todayKey();
+  const dk = viewKey();
   return !!state.hiitLog?.[dk]?.[dayIdx]?.[name];
 }
 function toggleHiitDone(dayIdx, name){
-  const dk = todayKey();
+  if(!assertEditable('Marking HIIT')) return;
+  const dk = viewKey();
   if(!state.hiitLog) state.hiitLog={};
   if(!state.hiitLog[dk]) state.hiitLog[dk]={};
   if(!state.hiitLog[dk][dayIdx]) state.hiitLog[dk][dayIdx]={};
   state.hiitLog[dk][dayIdx][name] = !state.hiitLog[dk][dayIdx][name];
   save();
+  Sync.pushHiit(dk, dayIdx, name, state.hiitLog[dk][dayIdx][name]);
   renderWorkoutContent();
 }
 
@@ -2241,18 +2895,19 @@ function toggleMealTemplates(){
 function startEditFoodLog(idx){ foodLogEditIdx = idx; renderNutrition(); }
 function cancelEditFoodLog(){ foodLogEditIdx = null; renderNutrition(); }
 function saveEditFoodLog(idx){
+  if(!assertEditable('Editing food')) return;
   const name = document.getElementById(`fl-edit-name-${idx}`).value.trim();
   const cal  = parseInt(document.getElementById(`fl-edit-cal-${idx}`).value)||0;
   const prot = parseInt(document.getElementById(`fl-edit-prot-${idx}`).value)||0;
   const carb = parseInt(document.getElementById(`fl-edit-carb-${idx}`).value)||0;
   const fat  = parseInt(document.getElementById(`fl-edit-fat-${idx}`).value)||0;
   if(!name){ toast('Name required'); return; }
-  const dk = todayKey();
+  const dk = viewKey();
   const log = state.foodLog[dk]||[];
   if(!log[idx]) return;
   log[idx] = {name, cal, prot, carb, fat};
   foodLogEditIdx = null;
-  save(); renderNutrition(); toast('Updated');
+  save(); Sync.pushFoodLog(dk); renderNutrition(); toast('Updated');
 }
 
 function startEditMeal(idx){ mealEditIdx = idx; mealAddOpen = false; renderNutrition(); }
@@ -2293,6 +2948,7 @@ function saveNewMeal(){
 let activeDay = 0;
 
 function renderWorkout(){
+  renderDateNav('date-nav-workout');
   const pills = DAYS.map((d,i)=>`<button class="pill ${i===activeDay?'active':''}" onclick="setDay(${i})">${d.label}<small>${d.name}</small></button>`).join('');
   document.getElementById('day-pills').innerHTML=pills;
   renderWorkoutContent();
@@ -2302,7 +2958,7 @@ function setDay(i){ activeDay=i; renderWorkout(); }
 
 function renderWorkoutContent(){
   const day = DAYS[activeDay];
-  const dateKey = todayKey();
+  const dateKey = viewKey();
   if(!state.setLog[dateKey]) state.setLog[dateKey]={};
   if(!state.setLog[dateKey][activeDay]) state.setLog[dateKey][activeDay]={};
   const dayLog = state.setLog[dateKey][activeDay];
@@ -2362,7 +3018,7 @@ function renderWorkoutContent(){
         for(let s=0;s<ex.sets;s++){
           const sLog = dayLog[ei][s]||{};
           const done = sLog.done||false;
-          html+=`<div class="set-table" style="margin-top:6px">
+          html+=`<div class="set-table editable-only" style="margin-top:6px">
             <div class="set-num">${s+1}</div>
             <input type="number" class="set-input" placeholder="${ex.reps.split('–')[0]}" value="${sLog.reps||''}" inputmode="numeric" onchange="logSet(${activeDay},${ei},${s},'reps',this.value)">
             <input type="number" class="set-input" placeholder="—" value="${sLog.weight||''}" inputmode="numeric" onchange="logSet(${activeDay},${ei},${s},'weight',this.value)">
@@ -2423,7 +3079,7 @@ function renderWorkoutContent(){
       html+=`</div></div>`;
     }
 
-    html+=`<button class="btn btn-primary btn-full" style="margin-top:14px" onclick="markWorkoutDone()">
+    html+=`<button class="btn btn-primary btn-full editable-only" style="margin-top:14px" onclick="markWorkoutDone()">
       <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
       Mark session complete
     </button>`;
@@ -2433,51 +3089,96 @@ function renderWorkoutContent(){
 }
 
 function logSet(dayIdx, exIdx, setIdx, field, value){
-  const dk = todayKey();
+  if(!assertEditable('Logging sets')) return;
+  const dk = viewKey();
   if(!state.setLog[dk]) state.setLog[dk]={};
   if(!state.setLog[dk][dayIdx]) state.setLog[dk][dayIdx]={};
   if(!state.setLog[dk][dayIdx][exIdx]) state.setLog[dk][dayIdx][exIdx]={};
   if(!state.setLog[dk][dayIdx][exIdx][setIdx]) state.setLog[dk][dayIdx][exIdx][setIdx]={};
   state.setLog[dk][dayIdx][exIdx][setIdx][field]=parseFloat(value)||value;
 
+  let prChanged = null;
   if(field==='weight'){
     const exName = DAYS[dayIdx].exercises[exIdx]?.name;
     if(exName){
       if(!state.prs) state.prs={};
       const w = parseFloat(value);
-      if(w && (!state.prs[exName]||w>state.prs[exName])) state.prs[exName]=w;
+      if(w && (!state.prs[exName]||w>state.prs[exName])){
+        state.prs[exName]=w;
+        prChanged = {name: exName, weight: w};
+      }
     }
   }
   save();
+  Sync.pushSet(dk, dayIdx, exIdx, setIdx, state.setLog[dk][dayIdx][exIdx][setIdx]);
+  if(prChanged) Sync.pushPR(prChanged.name, prChanged.weight);
 }
 
 function toggleSet(dayIdx, exIdx, setIdx){
-  const dk = todayKey();
+  if(!assertEditable('Marking sets')) return;
+  const dk = viewKey();
   if(!state.setLog[dk]) state.setLog[dk]={};
   if(!state.setLog[dk][dayIdx]) state.setLog[dk][dayIdx]={};
   if(!state.setLog[dk][dayIdx][exIdx]) state.setLog[dk][dayIdx][exIdx]={};
   if(!state.setLog[dk][dayIdx][exIdx][setIdx]) state.setLog[dk][dayIdx][exIdx][setIdx]={};
   state.setLog[dk][dayIdx][exIdx][setIdx].done=!state.setLog[dk][dayIdx][exIdx][setIdx].done;
-  save(); renderWorkoutContent();
+  save();
+  Sync.pushSet(dk, dayIdx, exIdx, setIdx, state.setLog[dk][dayIdx][exIdx][setIdx]);
+  renderWorkoutContent();
 }
 
 function markWorkoutDone(){
-  const key = todayKey()+'-'+activeDay;
+  if(!assertEditable('Marking session complete')) return;
+  const dk = viewKey();
+  const key = dk+'-'+activeDay;
   if(!state.workoutsCompleted.includes(key)) state.workoutsCompleted.push(key);
-  save(); toast('Session complete');
+  save(); Sync.pushWorkoutDone(dk, activeDay);
+  showSessionCelebration();
+}
+
+function showSessionCelebration(){
+  const day = DAYS[activeDay];
+  const dayLog = state.setLog?.[viewKey()]?.[activeDay] || {};
+  let setsLogged = 0, setsTotal = 0;
+  (day.exercises || []).forEach((ex, ei) => {
+    setsTotal += ex.sets;
+    Object.values(dayLog[ei] || {}).forEach(s => { if(s.done) setsLogged++; });
+  });
+  const html = `
+    <div class="session-celebration">
+      <div class="celebration-check">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+      </div>
+      <div class="celebration-title">${day.name} complete</div>
+      <div class="celebration-sub">Logged <strong>${setsLogged}/${setsTotal}</strong> sets. Recovery starts now — hit your protein.</div>
+      <div class="celebration-actions">
+        <button class="btn btn-primary" onclick="Cards.open('session')">
+          <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M16 8l-4-4m0 0L8 8m4-4v12"/></svg>
+          Share recap
+        </button>
+        <button class="btn btn-ghost" onclick="renderWorkoutContent()">Done</button>
+      </div>
+    </div>`;
+  document.getElementById('workout-content').innerHTML = html;
+  window.scrollTo({top:0, behavior:'smooth'});
 }
 
 function unmarkWorkoutDone(dayIdx){
-  const key = todayKey()+'-'+dayIdx;
+  if(!assertEditable('Reopening session')) return;
+  const dk = viewKey();
+  const key = dk+'-'+dayIdx;
   state.workoutsCompleted = (state.workoutsCompleted||[]).filter(k=>k!==key);
-  save(); renderDashboard(); toast('Session reopened');
+  save(); Sync.pushWorkoutUndone(dk, dayIdx); renderDashboard(); toast('Session reopened');
 }
 
 function renderNutrition(){
-  const today = new Date().toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});
-  document.getElementById('nutr-date').textContent = today;
+  renderDateNav('date-nav-nutrition');
+  const dateLabel = new Date(viewKey() + 'T00:00:00').toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});
+  document.getElementById('nutr-date').textContent = dateLabel;
+  const sectionLabel = document.getElementById('food-log-section-label');
+  if(sectionLabel) sectionLabel.textContent = isViewingToday() ? 'Logged today' : 'Logged on ' + formatViewDateLabel(viewKey());
   renderFoodKeyBar();
-  const log = state.foodLog[todayKey()]||[];
+  const log = state.foodLog[viewKey()]||[];
   const totCal=log.reduce((a,b)=>a+b.cal,0);
   const totProt=log.reduce((a,b)=>a+b.prot,0);
   const totCarb=log.reduce((a,b)=>a+b.carb,0);
@@ -2587,7 +3288,8 @@ function renderNutrition(){
 }
 
 function renderFoodLogRow(f, i){
-  if(foodLogEditIdx === i){
+  const editable = isViewingToday();
+  if(foodLogEditIdx === i && editable){
     return `<div class="log-row-edit">
       <div class="log-row-edit-grid">
         <input type="text" id="fl-edit-name-${i}" placeholder="Name" value="${(f.name||'').replace(/"/g,'&quot;')}">
@@ -2612,14 +3314,15 @@ function renderFoodLogRow(f, i){
       </div>
     </div>`;
   }
-  return `<div class="log-row">
-    <span style="font-weight:600;flex:1;min-width:0">${escapeHtml(f.name)} <span style="color:var(--text-4);font-size:11px;font-weight:500">${f.prot}g</span></span>
-    <div style="display:flex;align-items:center;gap:8px">
-      <span class="mono" style="font-size:13px;color:var(--accent);font-weight:600">${f.cal}</span>
+  const actionButtons = editable ? `
       <button class="icon-btn" title="Edit" onclick="startEditFoodLog(${i})">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
       </button>
-      <button class="remove-x" onclick="removeFood(${i})">×</button>
+      <button class="remove-x" onclick="removeFood(${i})">×</button>` : '';
+  return `<div class="log-row">
+    <span style="font-weight:600;flex:1;min-width:0">${escapeHtml(f.name)} <span style="color:var(--text-4);font-size:11px;font-weight:500">${f.prot}g</span></span>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span class="mono" style="font-size:13px;color:var(--accent);font-weight:600">${f.cal}</span>${actionButtons}
     </div>
   </div>`;
 }
@@ -2635,33 +3338,39 @@ function renderFoodLogList(log){
 }
 
 function logMeal(idx){
+  if(!assertEditable('Logging meals')) return;
   const m=(state.meals||[])[idx];
   if(!m) return;
-  if(!state.foodLog[todayKey()]) state.foodLog[todayKey()]=[];
-  state.foodLog[todayKey()].push({name:m.name,cal:m.cal||0,prot:m.prot||0,carb:m.carb||0,fat:m.fat||0});
-  save(); renderNutrition(); toast(m.name+' logged');
+  const dk = viewKey();
+  if(!state.foodLog[dk]) state.foodLog[dk]=[];
+  state.foodLog[dk].push({name:m.name,cal:m.cal||0,prot:m.prot||0,carb:m.carb||0,fat:m.fat||0});
+  save(); Sync.pushFoodLog(dk); renderNutrition(); toast(m.name+' logged');
 }
 
 function logCustomFood(){
+  if(!assertEditable('Logging food')) return;
   const name=document.getElementById('food-name').value;
   const cal=parseInt(document.getElementById('food-cal').value)||0;
   const prot=parseInt(document.getElementById('food-prot').value)||0;
   const carb=parseInt(document.getElementById('food-carb').value)||0;
   if(!name||!cal) return;
-  if(!state.foodLog[todayKey()]) state.foodLog[todayKey()]=[];
-  state.foodLog[todayKey()].push({name,cal,prot,carb,fat:0});
+  const dk = viewKey();
+  if(!state.foodLog[dk]) state.foodLog[dk]=[];
+  state.foodLog[dk].push({name,cal,prot,carb,fat:0});
   document.getElementById('food-name').value='';
   document.getElementById('food-cal').value='';
   document.getElementById('food-prot').value='';
   document.getElementById('food-carb').value='';
-  save(); renderNutrition(); toast('Logged');
+  save(); Sync.pushFoodLog(dk); renderNutrition(); toast('Logged');
 }
 
 function removeFood(idx){
-  state.foodLog[todayKey()].splice(idx,1);
+  if(!assertEditable('Removing food')) return;
+  const dk = viewKey();
+  state.foodLog[dk].splice(idx,1);
   if(foodLogEditIdx === idx) foodLogEditIdx = null;
   else if(foodLogEditIdx !== null && foodLogEditIdx > idx) foodLogEditIdx--;
-  save(); renderNutrition();
+  save(); Sync.pushFoodLog(dk); renderNutrition();
 }
 
 // ===== Food search (USDA FoodData Central) =====
@@ -2919,12 +3628,13 @@ function renderFoodSearchResults(html){
 }
 
 function addSearchedFood(idx){
+  if(!assertEditable('Logging food')) return;
   const h = foodSearchResults[idx];
   if(!h) return;
   const qtyEl = document.getElementById('food-qty-'+idx);
   const grams = Math.max(1, parseFloat(qtyEl?.value) || 100);
   const k = grams / 100;
-  const dk = todayKey();
+  const dk = viewKey();
   if(!state.foodLog[dk]) state.foodLog[dk]=[];
   const entryName = `${h.name} (${Math.round(grams)}g)`;
   state.foodLog[dk].push({
@@ -2935,12 +3645,13 @@ function addSearchedFood(idx){
     fat: Math.round(h.fat100 * k)
   });
   save();
+  Sync.pushFoodLog(dk);
   renderNutritionTotals();
   toast(h.name + ' logged');
 }
 
 function renderNutritionTotals(){
-  const log = state.foodLog[todayKey()]||[];
+  const log = state.foodLog[viewKey()]||[];
   const totCal=log.reduce((a,b)=>a+b.cal,0);
   const totProt=log.reduce((a,b)=>a+b.prot,0);
   const totCarb=log.reduce((a,b)=>a+b.carb,0);
@@ -3204,11 +3915,1404 @@ function renderProgress(){
   document.getElementById('weekly-overview').innerHTML=wo;
 }
 
+// ===== Story-card stats helpers =====
+// All time-based queries scope to the *real* today (todayKey()), not viewDate —
+// recaps are about your actual current week/month, not whichever past day you're viewing.
+function statsBetween(daysBack){
+  const dates = [];
+  for(let i=0;i<daysBack;i++) dates.push(shiftDateKey(todayKey(), -i));
+  return dates;
+}
+function statsMonthDates(){
+  const today = new Date();
+  const y = today.getFullYear(), m = today.getMonth();
+  const dates = [];
+  const lastDay = new Date(y, m+1, 0).getDate();
+  for(let d=1; d<=lastDay; d++){
+    dates.push(`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`);
+  }
+  return {dates, monthLabel: today.toLocaleDateString('en-US',{month:'long'}), year:y};
+}
+function statsTrainedOn(date){
+  const dayIdx = getDayIdxFromDate(date);
+  if(DAYS[dayIdx].rest) return 'rest';
+  return (state.workoutsCompleted||[]).includes(date+'-'+dayIdx) ? 'done' : 'missed';
+}
+function statsCurrentStreak(){
+  let streak = 0;
+  let cursor = todayKey();
+  // If today is a training day not yet completed, don't break streak — start counting from yesterday
+  const todayIdx = getDayIdxFromDate(cursor);
+  if(!DAYS[todayIdx].rest && !(state.workoutsCompleted||[]).includes(cursor+'-'+todayIdx)){
+    cursor = shiftDateKey(cursor, -1);
+  }
+  for(let i=0; i<400; i++){
+    const status = statsTrainedOn(cursor);
+    if(status === 'rest' || status === 'done'){
+      if(status === 'done') streak++;
+      cursor = shiftDateKey(cursor, -1);
+    } else break;
+  }
+  return streak;
+}
+function statsBestPR(){
+  const prs = Object.entries(state.prs||{}).filter(([_,w]) => w != null && +w > 0);
+  if(!prs.length) return null;
+  prs.sort((a,b) => b[1] - a[1]);
+  return {name: prs[0][0], weight: +prs[0][1]};
+}
+function statsWeek(weekOffset = 0){
+  const end = shiftDateKey(todayKey(), -7 * weekOffset);
+  const start = shiftDateKey(end, -6);
+  const dates = [];
+  for(let i=0;i<7;i++) dates.push(shiftDateKey(start, i));
+  let workouts = 0, totalSets = 0, totalProt = 0, totalCal = 0, days = 0;
+  dates.forEach(d => {
+    const dayIdx = getDayIdxFromDate(d);
+    if((state.workoutsCompleted||[]).includes(d+'-'+dayIdx)) workouts++;
+    Object.values(state.setLog?.[d] || {}).forEach(day => {
+      Object.values(day || {}).forEach(ex => {
+        Object.values(ex || {}).forEach(s => { if(s.done) totalSets++; });
+      });
+    });
+    const log = state.foodLog?.[d] || [];
+    if(log.length) days++;
+    log.forEach(f => { totalCal += f.cal||0; totalProt += f.prot||0; });
+  });
+  return {start, end, dates, workouts, totalSets, proteinAvg: days?Math.round(totalProt/days):0, calAvg: days?Math.round(totalCal/days):0, weekNum: getWeekNum()};
+}
+function statsMonth(){
+  const {dates, monthLabel, year} = statsMonthDates();
+  const today = todayKey();
+  const past = dates.filter(d => d <= today);
+  let workouts = 0, totalSets = 0, totalProt = 0, days = 0;
+  past.forEach(d => {
+    const dayIdx = getDayIdxFromDate(d);
+    if((state.workoutsCompleted||[]).includes(d+'-'+dayIdx)) workouts++;
+    Object.values(state.setLog?.[d] || {}).forEach(day => {
+      Object.values(day || {}).forEach(ex => {
+        Object.values(ex || {}).forEach(s => { if(s.done) totalSets++; });
+      });
+    });
+    const log = state.foodLog?.[d] || [];
+    if(log.length) days++;
+    log.forEach(f => { totalProt += f.prot||0; });
+  });
+  // Weight delta: first vs last weight in month
+  const monthWeights = (state.weights||[]).filter(w => w.date >= dates[0] && w.date <= today);
+  let weightDelta = null;
+  if(monthWeights.length >= 2){
+    weightDelta = +(monthWeights[monthWeights.length-1].lbs - monthWeights[0].lbs).toFixed(1);
+  }
+  return {dates, monthLabel, year, workouts, totalSets, proteinAvg: days?Math.round(totalProt/days):0, weightDelta};
+}
+function statsToday(){
+  // Snapshot of the just-completed (or in-progress) session for today's day-of-week
+  const dk = todayKey();
+  const dayIdx = getTodayDayIdx();
+  const day = DAYS[dayIdx];
+  let setsLogged = 0, setsTotal = 0, totalReps = 0;
+  let topLift = {name:null, weight:0};
+  (day.exercises || []).forEach((ex, ei) => {
+    setsTotal += ex.sets;
+    const exLog = state.setLog?.[dk]?.[dayIdx]?.[ei] || {};
+    Object.values(exLog).forEach(s => {
+      if(s.done) setsLogged++;
+      if(s.reps) totalReps += +s.reps || 0;
+      if(s.weight && +s.weight > topLift.weight){
+        topLift = {name: ex.name, weight: +s.weight};
+      }
+    });
+  });
+  const completed = (state.workoutsCompleted||[]).includes(dk + '-' + dayIdx);
+  return {dayIdx, dayName: day.name, dayLabel: day.label, isRest: !!day.rest, setsLogged, setsTotal, totalReps, topLift, completed};
+}
+
+function statsDiscipline(period = 30){
+  const dates = statsBetween(period);
+  const trainingDays = dates.filter(d => !DAYS[getDayIdxFromDate(d)].rest);
+  const trainedCount = trainingDays.filter(d => (state.workoutsCompleted||[]).includes(d+'-'+getDayIdxFromDate(d))).length;
+  const workoutHitRate = trainingDays.length ? trainedCount / trainingDays.length : 0;
+  const proteinTarget = 190;
+  const proteinHitDays = dates.filter(d => {
+    const log = state.foodLog?.[d] || [];
+    const totProt = log.reduce((a,b) => a + (b.prot||0), 0);
+    return totProt >= proteinTarget;
+  }).length;
+  const proteinHitRate = period ? proteinHitDays / period : 0;
+  const score = Math.round(workoutHitRate * 50 + proteinHitRate * 50);
+  return {score, workoutHitRate, proteinHitRate, trainedCount, trainingTotal: trainingDays.length, proteinHitDays, period};
+}
+
+// ===== Story-card renderer =====
+const Cards = {
+  W: 1080,
+  H: 1920,
+  current: 'workouts',
+  period: 'week', // for cards that need period (currently unused, reserved)
+  fontsReady: false,
+
+  photo: null, // HTMLImageElement when user has selected a photo
+
+  TYPES: [
+    {id:'session',    label:'Session',    filename:'session'},
+    {id:'workouts',   label:'Workouts',   filename:'workouts'},
+    {id:'macros',     label:'Macros',     filename:'macros'},
+    {id:'pr',         label:'PR',         filename:'pr'},
+    {id:'streak',     label:'Streak',     filename:'streak'},
+    {id:'week',       label:'Week',       filename:'week-recap'},
+    {id:'month',      label:'Month',      filename:'month-recap'},
+    {id:'discipline', label:'Discipline', filename:'discipline'},
+  ],
+
+  async ensureFonts(){
+    if(this.fontsReady) return;
+    try {
+      await document.fonts.ready;
+      await Promise.all([
+        document.fonts.load('400 100px "Instrument Serif"'),
+        document.fonts.load('italic 100px "Instrument Serif"'),
+        document.fonts.load('400 32px "Inter"'),
+        document.fonts.load('500 32px "Inter"'),
+        document.fonts.load('600 32px "Inter"'),
+        document.fonts.load('700 32px "Inter"'),
+        document.fonts.load('800 32px "Inter"'),
+        document.fonts.load('500 32px "JetBrains Mono"'),
+        document.fonts.load('600 32px "JetBrains Mono"'),
+      ]);
+      this.fontsReady = true;
+    } catch(e){ console.warn('Font preload failed:', e); }
+  },
+
+  open(initialType){
+    if(initialType && this.TYPES.some(t => t.id === initialType)) this.current = initialType;
+    document.getElementById('share-backdrop').classList.add('open');
+    document.getElementById('share-sheet').classList.add('open');
+    this.renderPills();
+    this.render();
+  },
+
+  close(){
+    document.getElementById('share-backdrop').classList.remove('open');
+    document.getElementById('share-sheet').classList.remove('open');
+  },
+
+  setType(id){
+    this.current = id;
+    this.renderPills();
+    this.render();
+  },
+
+  handlePhotoSelect(file){
+    if(!file) return;
+    if(!file.type.startsWith('image/')){ toast('Pick an image file'); return; }
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        this.photo = img;
+        this.updatePhotoControls();
+        this.render();
+      };
+      img.onerror = () => toast('Could not load that image');
+      img.src = e.target.result;
+    };
+    reader.onerror = () => toast('Could not read that file');
+    reader.readAsDataURL(file);
+  },
+
+  removePhoto(){
+    this.photo = null;
+    const input = document.getElementById('share-photo-input');
+    if(input) input.value = '';
+    this.updatePhotoControls();
+    this.render();
+  },
+
+  updatePhotoControls(){
+    const addBtn = document.getElementById('share-photo-add-btn');
+    const rmBtn = document.getElementById('share-photo-remove-btn');
+    if(this.photo){
+      addBtn.innerHTML = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/></svg>Change photo`;
+      rmBtn.hidden = false;
+    } else {
+      addBtn.innerHTML = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>Add photo`;
+      rmBtn.hidden = true;
+    }
+  },
+
+  renderPills(){
+    const el = document.getElementById('share-pills');
+    el.innerHTML = this.TYPES.map(t => `
+      <button class="share-pill ${t.id===this.current?'active':''}" onclick="Cards.setType('${t.id}')">${t.label}</button>
+    `).join('');
+  },
+
+  async render(){
+    const loading = document.getElementById('share-loading');
+    loading.style.display = 'flex';
+    await this.ensureFonts();
+    const cv = document.getElementById('share-canvas');
+    const ctx = cv.getContext('2d');
+    ctx.clearRect(0, 0, this.W, this.H);
+    if(this.photo) this.drawPhotoBackground(ctx);
+    else this.drawBackground(ctx);
+    this.drawBrandRow(ctx);
+    if(!this.photo) this.drawFooter(ctx);
+    switch(this.current){
+      case 'session':    this.drawSession(ctx);    break;
+      case 'workouts':   this.drawWorkouts(ctx);   break;
+      case 'macros':     this.drawMacros(ctx);     break;
+      case 'pr':         this.drawPR(ctx);         break;
+      case 'streak':     this.drawStreak(ctx);     break;
+      case 'week':       this.drawWeek(ctx);       break;
+      case 'month':      this.drawMonth(ctx);      break;
+      case 'discipline': this.drawDiscipline(ctx); break;
+    }
+    loading.style.display = 'none';
+  },
+
+  // ===== Base layout helpers =====
+  PAD: 96,
+  ACCENT: '#FFB800',
+  ACCENT_SOFT: 'rgba(255,184,0,0.14)',
+  TEXT: '#fafafa',
+  TEXT_2: '#a1a1aa',
+  TEXT_3: '#71717a',
+  TEXT_4: '#52525b',
+  BG: '#070707',
+  SURFACE: '#101012',
+  BORDER: 'rgba(255,255,255,0.08)',
+
+  drawBackground(ctx){
+    // Solid black with a subtle radial accent glow in upper right
+    ctx.fillStyle = this.BG;
+    ctx.fillRect(0, 0, this.W, this.H);
+    const grd = ctx.createRadialGradient(this.W*0.85, this.H*0.12, 0, this.W*0.85, this.H*0.12, this.W*0.9);
+    grd.addColorStop(0, 'rgba(255,184,0,0.18)');
+    grd.addColorStop(0.4, 'rgba(255,184,0,0.04)');
+    grd.addColorStop(1, 'rgba(255,184,0,0)');
+    ctx.fillStyle = grd;
+    ctx.fillRect(0, 0, this.W, this.H);
+    // Subtle bottom vignette
+    const vg = ctx.createLinearGradient(0, this.H*0.6, 0, this.H);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(0,0,0,0.6)');
+    ctx.fillStyle = vg;
+    ctx.fillRect(0, 0, this.W, this.H);
+  },
+
+  drawPhotoBackground(ctx){
+    // Cover-fit the photo into the 9:16 frame (preserves aspect, crops if needed)
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, this.W, this.H);
+    const img = this.photo;
+    const targetRatio = this.W / this.H;
+    const imgRatio = img.width / img.height;
+    let dw, dh, dx, dy;
+    if(imgRatio > targetRatio){
+      // Image wider than frame — crop horizontally
+      dh = this.H;
+      dw = dh * imgRatio;
+      dx = (this.W - dw) / 2;
+      dy = 0;
+    } else {
+      dw = this.W;
+      dh = dw / imgRatio;
+      dx = 0;
+      dy = (this.H - dh) / 2;
+    }
+    ctx.drawImage(img, dx, dy, dw, dh);
+    // Top gradient (for brand row legibility)
+    const top = ctx.createLinearGradient(0, 0, 0, this.H * 0.22);
+    top.addColorStop(0, 'rgba(0,0,0,0.65)');
+    top.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = top;
+    ctx.fillRect(0, 0, this.W, this.H * 0.22);
+    // Bottom gradient (for stats legibility) — taller and stronger
+    const bot = ctx.createLinearGradient(0, this.H * 0.45, 0, this.H);
+    bot.addColorStop(0, 'rgba(0,0,0,0)');
+    bot.addColorStop(0.55, 'rgba(0,0,0,0.55)');
+    bot.addColorStop(1, 'rgba(0,0,0,0.92)');
+    ctx.fillStyle = bot;
+    ctx.fillRect(0, this.H * 0.45, this.W, this.H * 0.55);
+  },
+
+  drawBrandRow(ctx){
+    const date = new Date().toLocaleDateString('en-US',{month:'short', day:'numeric', year:'numeric'}).toUpperCase();
+    ctx.font = '600 26px "JetBrains Mono", monospace';
+    ctx.fillStyle = this.TEXT_3;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText('DIVINIFY', this.PAD, 96);
+    ctx.textAlign = 'right';
+    ctx.fillText(date, this.W - this.PAD, 96);
+    // hairline divider
+    ctx.strokeStyle = this.BORDER;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(this.PAD, 156);
+    ctx.lineTo(this.W - this.PAD, 156);
+    ctx.stroke();
+  },
+
+  drawFooter(ctx){
+    const wk = getWeekNum();
+    const phaseIdx = wk<=4?0:wk<=8?1:wk<=12?2:3;
+    const phase = PHASES[phaseIdx].label;
+    ctx.strokeStyle = this.BORDER;
+    ctx.beginPath();
+    ctx.moveTo(this.PAD, this.H - 156);
+    ctx.lineTo(this.W - this.PAD, this.H - 156);
+    ctx.stroke();
+    ctx.font = '600 22px "JetBrains Mono", monospace';
+    ctx.fillStyle = this.TEXT_3;
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
+    ctx.fillText(`WEEK ${String(wk).padStart(2,'0')} / 16`, this.PAD, this.H - 124);
+    ctx.textAlign = 'right';
+    ctx.fillText(phase.toUpperCase(), this.W - this.PAD, this.H - 124);
+  },
+
+  drawEyebrow(ctx, text, y){
+    ctx.font = '700 26px "Inter", sans-serif';
+    ctx.fillStyle = this.ACCENT;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.letterSpacing = '0.18em'; // not all browsers, but harmless fallback
+    // Manual letter-spacing
+    this.fillTextSpaced(ctx, text.toUpperCase(), this.PAD, y, 8);
+  },
+
+  fillTextSpaced(ctx, text, x, y, spacing){
+    let cur = x;
+    for(const ch of text){
+      ctx.fillText(ch, cur, y);
+      cur += ctx.measureText(ch).width + spacing;
+    }
+  },
+
+  drawHugeNumber(ctx, num, y, opts = {}){
+    // Returns the measured bounding box height
+    const size = opts.size || 380;
+    ctx.font = `italic ${size}px "Instrument Serif", serif`;
+    ctx.fillStyle = opts.color || this.ACCENT;
+    ctx.textAlign = opts.align || 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(String(num), opts.x ?? this.PAD, y);
+  },
+
+  drawSubline(ctx, text, y, opts = {}){
+    ctx.font = `${opts.weight || 500} ${opts.size || 36}px "Inter", sans-serif`;
+    ctx.fillStyle = opts.color || this.TEXT;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(text, this.PAD, y);
+  },
+
+  // Calendar dot grid for a list of dates with statuses
+  drawDotGrid(ctx, dates, x, y, opts = {}){
+    const cols = opts.cols || 7;
+    const dotR = opts.dotR || 16;
+    const gap = opts.gap || 22;
+    const labelHeight = opts.showLabels ? 36 : 0;
+
+    if(opts.showLabels){
+      const labels = ['M','T','W','T','F','S','S'];
+      ctx.font = '600 18px "JetBrains Mono", monospace';
+      ctx.fillStyle = this.TEXT_4;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      labels.forEach((L, i) => {
+        const cx = x + dotR + i * (dotR*2 + gap);
+        ctx.fillText(L, cx, y);
+      });
+    }
+
+    dates.forEach((entry, i) => {
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const cx = x + dotR + col * (dotR*2 + gap);
+      const cy = y + labelHeight + dotR + row * (dotR*2 + gap);
+      ctx.beginPath();
+      ctx.arc(cx, cy, dotR, 0, Math.PI*2);
+      if(entry.status === 'done'){
+        ctx.fillStyle = this.ACCENT;
+        ctx.fill();
+      } else if(entry.status === 'rest'){
+        ctx.fillStyle = 'rgba(255,255,255,0.18)';
+        ctx.fill();
+      } else if(entry.status === 'missed'){
+        ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      } else { // future
+        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+    });
+  },
+
+  drawStatGrid(ctx, stats, y){
+    // 2-column row of label/value pairs
+    const colW = (this.W - this.PAD*2) / 2;
+    stats.forEach((s, i) => {
+      const col = i % 2;
+      const row = Math.floor(i / 2);
+      const x = this.PAD + col * colW;
+      const cy = y + row * 180;
+      ctx.font = '700 22px "Inter", sans-serif';
+      ctx.fillStyle = this.TEXT_3;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      this.fillTextSpaced(ctx, s.label.toUpperCase(), x, cy, 4);
+      ctx.font = `400 92px "Instrument Serif", serif`;
+      ctx.fillStyle = s.accent ? this.ACCENT : this.TEXT;
+      ctx.fillText(s.value, x, cy + 44);
+      if(s.unit){
+        const valW = ctx.measureText(s.value).width;
+        ctx.font = '500 28px "JetBrains Mono", monospace';
+        ctx.fillStyle = this.TEXT_3;
+        ctx.fillText(s.unit, x + valW + 14, cy + 92);
+      }
+    });
+  },
+
+  drawProgressBar(ctx, x, y, w, h, pct, opts = {}){
+    const r = h / 2;
+    // Track
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    this.roundRect(ctx, x, y, w, h, r);
+    ctx.fill();
+    // Fill
+    if(pct > 0){
+      ctx.fillStyle = opts.color || this.ACCENT;
+      const fillW = Math.max(h, w * Math.min(1, pct));
+      this.roundRect(ctx, x, y, fillW, h, r);
+      ctx.fill();
+    }
+  },
+
+  drawProgressRing(ctx, cx, cy, r, pct, opts = {}){
+    const lw = opts.lineWidth || 28;
+    ctx.lineWidth = lw;
+    ctx.lineCap = 'round';
+    // Track
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI*2);
+    ctx.stroke();
+    // Fill
+    if(pct > 0){
+      ctx.strokeStyle = opts.color || this.ACCENT;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, -Math.PI/2, -Math.PI/2 + Math.PI*2*Math.min(1, pct));
+      ctx.stroke();
+    }
+  },
+
+  roundRect(ctx, x, y, w, h, r){
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  },
+
+  // ===== Compact (photo-mode) hero helper =====
+  // When a photo is loaded, every card collapses to a clean lower-third:
+  //   eyebrow → big number (+ unit) → subline → optional 2-stat row
+  drawCompactHero(ctx, eyebrow, hero, sub, stats){
+    const W = this.W, H = this.H, P = this.PAD;
+    // Eyebrow
+    ctx.font = '700 28px "Inter", sans-serif';
+    ctx.fillStyle = this.ACCENT;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    this.fillTextSpaced(ctx, eyebrow.toUpperCase(), P, H * 0.62, 7);
+    // Big hero
+    const heroSize = hero.size || 280;
+    ctx.font = `italic ${heroSize}px "Instrument Serif", serif`;
+    ctx.fillStyle = '#fff';
+    const heroY = H * 0.66;
+    ctx.fillText(String(hero.value), P, heroY);
+    if(hero.unit){
+      const w = ctx.measureText(String(hero.value)).width;
+      ctx.font = '500 38px "JetBrains Mono", monospace';
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.fillText(hero.unit, P + w + 18, heroY + heroSize * 0.55);
+    }
+    // Subline
+    if(sub){
+      ctx.font = '500 32px "Inter", sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.fillText(sub, P, H * 0.86);
+    }
+    // Optional 2-stat row at bottom
+    if(stats && stats.length){
+      const colW = (W - P*2) / stats.length;
+      stats.forEach((s, i) => {
+        const x = P + i * colW;
+        ctx.font = '700 18px "Inter", sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.textAlign = 'left';
+        this.fillTextSpaced(ctx, s.label.toUpperCase(), x, H * 0.91, 4);
+        ctx.font = '500 36px "JetBrains Mono", monospace';
+        ctx.fillStyle = '#fff';
+        ctx.fillText(`${s.value}${s.unit?' '+s.unit:''}`, x, H * 0.94);
+      });
+    }
+  },
+
+  // ===== Per-card renderers =====
+  drawSession(ctx){
+    const t = statsToday();
+    const wk = getWeekNum();
+    const eyebrow = t.isRest
+      ? `${t.dayLabel} · Rest`
+      : (t.completed ? `${t.dayLabel} · Complete` : `${t.dayLabel} · In progress`);
+    if(this.photo){
+      const stats = [];
+      if(t.topLift.weight) stats.push({label:'Top lift', value:String(t.topLift.weight), unit:'lbs'});
+      stats.push({label:'Week', value:String(wk), unit:'/16'});
+      this.drawCompactHero(ctx,
+        eyebrow,
+        {value: t.isRest ? '—' : `${t.setsLogged}/${t.setsTotal}`, size: 240},
+        t.isRest ? 'recovery day' : `sets · ${t.dayName.toLowerCase()}`,
+        stats
+      );
+      return;
+    }
+    this.drawEyebrow(ctx, eyebrow, 280);
+    if(t.isRest){
+      this.drawHugeNumber(ctx, '—', 380, {size:340});
+      this.drawSubline(ctx, 'recovery day', 800, {weight:500, size:42, color:this.TEXT_2});
+      return;
+    }
+    // Big "X / Y" sets count
+    ctx.font = `italic 320px "Instrument Serif", serif`;
+    ctx.fillStyle = this.ACCENT;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    const a = String(t.setsLogged);
+    ctx.fillText(a, this.PAD, 400);
+    const aw = ctx.measureText(a).width;
+    ctx.font = `400 180px "Instrument Serif", serif`;
+    ctx.fillStyle = this.TEXT_3;
+    ctx.fillText(`/${t.setsTotal}`, this.PAD + aw + 16, 480);
+
+    this.drawSubline(ctx, `sets · ${t.dayName.toLowerCase()}`, 800, {weight:500, size:42, color:this.TEXT_2});
+
+    this.drawStatGrid(ctx, [
+      {label:'Top lift', value: t.topLift.weight ? String(t.topLift.weight) : '—', unit: t.topLift.weight ? 'lbs' : '', accent:true},
+      {label:'Total reps', value: String(t.totalReps)},
+    ], this.H - 540);
+  },
+
+  drawWorkouts(ctx){
+    const {dates, monthLabel} = statsMonthDates();
+    const today = todayKey();
+    const entries = dates.map(d => {
+      if(d > today) return {date:d, status:'future'};
+      return {date:d, status: statsTrainedOn(d)};
+    });
+    const trained = entries.filter(e => e.status === 'done').length;
+    const streak = statsCurrentStreak();
+    const best = statsBestPR();
+
+    if(this.photo){
+      this.drawCompactHero(ctx,
+        `Workouts · ${monthLabel}`,
+        {value: trained, size: 280},
+        'workouts this month',
+        [
+          {label:'Streak', value:String(streak), unit:'d'},
+          best ? {label:'Top lift', value:String(best.weight), unit:'lbs'} : {label:'Top lift', value:'—'},
+        ]
+      );
+      return;
+    }
+
+    this.drawEyebrow(ctx, `Workouts · ${monthLabel}`, 280);
+    this.drawHugeNumber(ctx, trained, 380);
+    ctx.font = `italic 380px "Instrument Serif", serif`;
+    const numH = 380;
+    const subY = 380 + numH - 60;
+    this.drawSubline(ctx, 'workouts this month', subY, {weight:500, size:38, color:this.TEXT_2});
+
+    const gridY = subY + 110;
+    this.drawDotGrid(ctx, entries, this.PAD, gridY, {cols:7, dotR:18, gap:24, showLabels:true});
+
+    this.drawStatGrid(ctx, [
+      {label:'Current streak', value:String(streak), unit:'days', accent:true},
+      {label:'Top lift', value: best ? String(best.weight) : '—', unit: best ? 'lbs' : ''},
+    ], this.H - 540);
+  },
+
+  drawMacros(ctx){
+    const log = state.foodLog?.[todayKey()] || [];
+    const cal = log.reduce((a,b)=>a+(b.cal||0),0);
+    const prot = log.reduce((a,b)=>a+(b.prot||0),0);
+    const carb = log.reduce((a,b)=>a+(b.carb||0),0);
+    const fat = log.reduce((a,b)=>a+(b.fat||0),0);
+    const targets = {cal:3300, prot:190, carb:425, fat:90};
+
+    if(this.photo){
+      this.drawCompactHero(ctx,
+        "Today's fuel",
+        {value: cal, size: 280, unit: '/ '+targets.cal},
+        'calories logged',
+        [
+          {label:'Protein', value:String(prot), unit:'g'},
+          {label:'Carbs',   value:String(carb), unit:'g'},
+        ]
+      );
+      return;
+    }
+
+    this.drawEyebrow(ctx, "Today's fuel", 280);
+
+    // Big calorie number
+    ctx.font = `italic 360px "Instrument Serif", serif`;
+    ctx.fillStyle = this.ACCENT;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(String(cal), this.PAD, 380);
+    const w = ctx.measureText(String(cal)).width;
+    ctx.font = '500 44px "JetBrains Mono", monospace';
+    ctx.fillStyle = this.TEXT_3;
+    ctx.fillText(`/ ${targets.cal}`, this.PAD + w + 22, 530);
+
+    this.drawSubline(ctx, 'calories', 760, {weight:500, size:42, color:this.TEXT_2});
+
+    // Macro bars
+    const bars = [
+      {label:'Protein', val:prot, target:targets.prot, unit:'g', accent:true},
+      {label:'Carbs',   val:carb, target:targets.carb, unit:'g'},
+      {label:'Fat',     val:fat,  target:targets.fat,  unit:'g'},
+    ];
+    let by = 940;
+    bars.forEach(b => {
+      ctx.font = '700 24px "Inter", sans-serif';
+      ctx.fillStyle = this.TEXT_3;
+      ctx.textAlign = 'left';
+      this.fillTextSpaced(ctx, b.label.toUpperCase(), this.PAD, by, 5);
+      ctx.font = '500 36px "JetBrains Mono", monospace';
+      ctx.fillStyle = this.TEXT;
+      ctx.textAlign = 'right';
+      ctx.fillText(`${b.val} / ${b.target} ${b.unit}`, this.W - this.PAD, by - 6);
+      this.drawProgressBar(ctx, this.PAD, by + 44, this.W - this.PAD*2, 14, b.val / b.target, {color: b.accent ? this.ACCENT : 'rgba(255,255,255,0.4)'});
+      by += 130;
+    });
+  },
+
+  drawPR(ctx){
+    const pr = statsBestPR();
+    if(this.photo){
+      if(!pr){
+        this.drawCompactHero(ctx, 'New PR', {value:'—', size:240}, 'no PRs yet', null);
+        return;
+      }
+      this.drawCompactHero(ctx,
+        'Personal record',
+        {value: pr.weight, size: 320, unit: 'lbs'},
+        pr.name.length > 32 ? pr.name.slice(0, 30) + '…' : pr.name,
+        null
+      );
+      return;
+    }
+
+    this.drawEyebrow(ctx, 'New PR', 280);
+    if(!pr){
+      this.drawSubline(ctx, 'No PRs yet — go set one.', 480, {size:42, color:this.TEXT_2});
+      return;
+    }
+    ctx.font = '600 56px "Inter", sans-serif';
+    ctx.fillStyle = this.TEXT;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    const nameLines = this.wrapText(ctx, pr.name, this.W - this.PAD*2);
+    let ny = 380;
+    nameLines.forEach(line => { ctx.fillText(line, this.PAD, ny); ny += 70; });
+
+    ctx.font = `italic 480px "Instrument Serif", serif`;
+    ctx.fillStyle = this.ACCENT;
+    ctx.fillText(String(pr.weight), this.PAD, ny + 60);
+    const w = ctx.measureText(String(pr.weight)).width;
+    ctx.font = '500 56px "JetBrains Mono", monospace';
+    ctx.fillStyle = this.TEXT_3;
+    ctx.fillText('lbs', this.PAD + w + 24, ny + 380);
+  },
+
+  drawStreak(ctx){
+    const streak = statsCurrentStreak();
+    if(this.photo){
+      this.drawCompactHero(ctx,
+        'Current streak',
+        {value: streak, size: 300, unit: 'days'},
+        'no skipped sessions',
+        null
+      );
+      return;
+    }
+
+    this.drawEyebrow(ctx, 'Current streak', 280);
+    this.drawHugeNumber(ctx, streak, 380, {size: streak >= 100 ? 340 : 420});
+
+    ctx.font = `italic ${streak >= 100 ? 340 : 420}px "Instrument Serif", serif`;
+    const numW = ctx.measureText(String(streak)).width;
+    ctx.font = '500 48px "JetBrains Mono", monospace';
+    ctx.fillStyle = this.TEXT_3;
+    ctx.fillText('days', this.PAD + numW + 24, streak >= 100 ? 660 : 720);
+
+    this.drawSubline(ctx, 'no skipped sessions', streak >= 100 ? 800 : 870, {weight:500, size:38, color:this.TEXT_2});
+
+    const days = 28;
+    const today = todayKey();
+    const start = shiftDateKey(today, -(days-1));
+    const entries = [];
+    for(let i=0; i<days; i++){
+      const d = shiftDateKey(start, i);
+      entries.push({date:d, status: statsTrainedOn(d)});
+    }
+    this.drawDotGrid(ctx, entries, this.PAD, 1130, {cols:7, dotR:22, gap:30, showLabels:true});
+  },
+
+  drawWeek(ctx){
+    const wk = statsWeek(0);
+    const startLabel = new Date(wk.start + 'T00:00:00').toLocaleDateString('en-US',{month:'short', day:'numeric'});
+    const endLabel = new Date(wk.end + 'T00:00:00').toLocaleDateString('en-US',{month:'short', day:'numeric'});
+    const best = statsBestPR();
+
+    if(this.photo){
+      this.drawCompactHero(ctx,
+        `Week ${wk.weekNum} recap`,
+        {value: wk.workouts, size: 280, unit: 'sessions'},
+        `${startLabel} → ${endLabel}`,
+        [
+          {label:'Sets', value:String(wk.totalSets)},
+          {label:'Protein', value:String(wk.proteinAvg), unit:'g/d'},
+        ]
+      );
+      return;
+    }
+
+    this.drawEyebrow(ctx, `Week ${wk.weekNum} recap`, 280);
+    this.drawSubline(ctx, `${startLabel} → ${endLabel}`, 340, {weight:500, size:30, color:this.TEXT_3});
+
+    // Big workouts number
+    ctx.font = `italic 340px "Instrument Serif", serif`;
+    ctx.fillStyle = this.ACCENT;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(String(wk.workouts), this.PAD, 440);
+    const w = ctx.measureText(String(wk.workouts)).width;
+    ctx.font = '500 36px "JetBrains Mono", monospace';
+    ctx.fillStyle = this.TEXT_3;
+    ctx.fillText('sessions', this.PAD + w + 24, 660);
+
+    // 7-day dot row
+    const entries = wk.dates.map(d => ({date:d, status: statsTrainedOn(d)}));
+    this.drawDotGrid(ctx, entries, this.PAD, 880, {cols:7, dotR:24, gap:30, showLabels:true});
+
+    this.drawStatGrid(ctx, [
+      {label:'Sets logged', value:String(wk.totalSets)},
+      {label:'Top lift', value: best ? String(best.weight) : '—', unit: best ? 'lbs' : '', accent:true},
+      {label:'Protein avg', value:String(wk.proteinAvg), unit:'g/day'},
+      {label:'Cal avg', value:String(wk.calAvg)},
+    ], this.H - 720);
+  },
+
+  drawMonth(ctx){
+    const m = statsMonth();
+    const disc = statsDiscipline(30);
+
+    if(this.photo){
+      this.drawCompactHero(ctx,
+        `${m.monthLabel} recap`,
+        {value: m.workouts, size: 280, unit: 'sessions'},
+        `${m.monthLabel} ${m.year}`,
+        [
+          {label:'Discipline', value:String(disc.score), unit:'/100'},
+          {label:'Protein', value:String(m.proteinAvg), unit:'g/d'},
+        ]
+      );
+      return;
+    }
+
+    this.drawEyebrow(ctx, `${m.monthLabel} recap`, 280);
+
+    ctx.font = `italic 340px "Instrument Serif", serif`;
+    ctx.fillStyle = this.ACCENT;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(String(m.workouts), this.PAD, 380);
+    const w = ctx.measureText(String(m.workouts)).width;
+    ctx.font = '500 36px "JetBrains Mono", monospace';
+    ctx.fillStyle = this.TEXT_3;
+    ctx.fillText('sessions', this.PAD + w + 24, 600);
+
+    this.drawSubline(ctx, `${m.monthLabel} ${m.year}`, 800, {weight:500, size:32, color:this.TEXT_2});
+
+    const wd = m.weightDelta;
+    this.drawStatGrid(ctx, [
+      {label:'Sets logged', value:String(m.totalSets)},
+      {label:'Discipline', value:String(disc.score), unit:'/100', accent:true},
+      {label:'Protein avg', value:String(m.proteinAvg), unit:'g/day'},
+      {label:'Weight Δ', value: wd != null ? (wd > 0 ? '+'+wd : String(wd)) : '—', unit: wd != null ? 'lbs' : ''},
+    ], this.H - 720);
+  },
+
+  drawDiscipline(ctx){
+    const d = statsDiscipline(30);
+
+    if(this.photo){
+      this.drawCompactHero(ctx,
+        'Discipline · 30 days',
+        {value: d.score, size: 280, unit: '/ 100'},
+        d.score >= 90 ? 'elite consistency' : d.score >= 75 ? 'on track' : d.score >= 50 ? 'building' : 'reset incoming',
+        [
+          {label:'Workouts', value:`${d.trainedCount}/${d.trainingTotal}`},
+          {label:'Protein', value:`${d.proteinHitDays}/${d.period}`},
+        ]
+      );
+      return;
+    }
+
+    this.drawEyebrow(ctx, 'Discipline · 30 days', 280);
+
+    const cx = this.W / 2;
+    const cy = 880;
+    const r = 280;
+    this.drawProgressRing(ctx, cx, cy, r, d.score / 100, {lineWidth:36, color:this.ACCENT});
+    // Score number centered in ring
+    ctx.font = `italic 280px "Instrument Serif", serif`;
+    ctx.fillStyle = this.TEXT;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(d.score), cx, cy + 12);
+    ctx.font = '500 28px "JetBrains Mono", monospace';
+    ctx.fillStyle = this.TEXT_3;
+    ctx.fillText('/ 100', cx, cy + 200);
+
+    // Two component bars
+    const components = [
+      {label:'Workouts hit', val: d.trainedCount, target: d.trainingTotal, pct: d.workoutHitRate},
+      {label:'Protein hit',  val: d.proteinHitDays, target: d.period, pct: d.proteinHitRate},
+    ];
+    let by = 1340;
+    components.forEach(c => {
+      ctx.font = '700 22px "Inter", sans-serif';
+      ctx.fillStyle = this.TEXT_3;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      this.fillTextSpaced(ctx, c.label.toUpperCase(), this.PAD, by, 4);
+      ctx.font = '500 32px "JetBrains Mono", monospace';
+      ctx.fillStyle = this.TEXT;
+      ctx.textAlign = 'right';
+      ctx.fillText(`${c.val} / ${c.target}`, this.W - this.PAD, by - 6);
+      this.drawProgressBar(ctx, this.PAD, by + 40, this.W - this.PAD*2, 12, c.pct, {color:this.ACCENT});
+      by += 124;
+    });
+  },
+
+  wrapText(ctx, text, maxW){
+    const words = text.split(' ');
+    const lines = [];
+    let cur = '';
+    for(const w of words){
+      const test = cur ? cur + ' ' + w : w;
+      if(ctx.measureText(test).width > maxW && cur){
+        lines.push(cur);
+        cur = w;
+      } else cur = test;
+    }
+    if(cur) lines.push(cur);
+    return lines.slice(0, 3); // cap at 3 lines
+  },
+
+  // ===== Export =====
+  async toBlob(){
+    const cv = document.getElementById('share-canvas');
+    return new Promise((resolve) => cv.toBlob(b => resolve(b), 'image/png'));
+  },
+
+  async download(){
+    const blob = await this.toBlob();
+    if(!blob){ toast('Could not export'); return; }
+    const t = this.TYPES.find(x => x.id === this.current);
+    const filename = `divinify-${t.filename}-${todayKey()}.png`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+    toast('Saved to downloads');
+  },
+
+  async share(){
+    const blob = await this.toBlob();
+    if(!blob){ toast('Could not export'); return; }
+    const t = this.TYPES.find(x => x.id === this.current);
+    const filename = `divinify-${t.filename}-${todayKey()}.png`;
+    const file = new File([blob], filename, {type:'image/png'});
+    try {
+      if(navigator.canShare && navigator.canShare({files:[file]})){
+        await navigator.share({files:[file], title:'Divinify Training'});
+        return;
+      }
+    } catch(e){
+      if(e.name === 'AbortError') return;
+      console.warn('share failed, falling back to download:', e);
+    }
+    // Fallback
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+    toast('Saved (sharing not supported on this device)');
+  }
+};
+
+// ===== Profile setup wizard =====
+// Captures identity, body, goals, training style, schedule, mind, coach tone.
+// Lives at state.profile; mirrored to Supabase training_profile (single row).
+const PROFILE_DEFAULTS = {
+  name:'', age:null, heightInches:null,
+  weightLbs:null, goalWeightLbs:null,
+  primaryGoals:[], fitnessFocus:null,
+  trainingStyle:null, experience:null, daysPerWeek:5,
+  preferredTime:null,
+  motivations:[], motivationNote:'',
+  struggles:[], struggleNote:'',
+  coachStyle:null,
+  completedOnboarding:false, onboardedAt:null
+};
+
+const Profile = {
+  step: 0,
+  draft: {},  // working copy during wizard; committed on finish
+  editMode: false,
+
+  open(editMode = false){
+    this.editMode = editMode;
+    this.draft = Object.assign({}, PROFILE_DEFAULTS, state.profile || {});
+    // Migrate legacy single-value primaryGoal → primaryGoals[]
+    if(this.draft.primaryGoal && (!this.draft.primaryGoals || !this.draft.primaryGoals.length)){
+      this.draft.primaryGoals = [this.draft.primaryGoal];
+    }
+    delete this.draft.primaryGoal;
+    // Pull conveniences from existing app state on first open
+    if(!this.draft.coachStyle) this.draft.coachStyle = state.coachStyle || 'friendly';
+    if(!this.draft.weightLbs && state.weights?.length){
+      this.draft.weightLbs = state.weights[state.weights.length-1].lbs;
+    }
+    this.step = 0;
+    document.getElementById('wiz-overlay').classList.add('open');
+    document.body.classList.add('wiz-open');
+    // Bind ESC to close (deduped via _escHandler)
+    this._escHandler = (e) => { if(e.key === 'Escape') this.requestClose(); };
+    document.addEventListener('keydown', this._escHandler);
+    this.render();
+  },
+
+  close(){
+    document.getElementById('wiz-overlay').classList.remove('open');
+    document.body.classList.remove('wiz-open');
+    if(this._escHandler){
+      document.removeEventListener('keydown', this._escHandler);
+      this._escHandler = null;
+    }
+  },
+
+  // Close button handler. In edit mode just bails. In first-time mode confirms,
+  // because closing leaves onboarding incomplete and the wizard re-launches next session.
+  requestClose(){
+    if(this.editMode){
+      this.close();
+      return;
+    }
+    if(confirm('Exit profile setup? You can come back to it later from the Data section on the dashboard.')){
+      this.close();
+    }
+  },
+
+  SCREENS: [
+    {
+      id:'identity',
+      eyebrow:'Step 1 of 7',
+      title:"Let's get to know you",
+      sub:"Just the basics — we'll personalize everything from here.",
+      render:(p) => `
+        <div class="wiz-section">
+          <div class="wiz-field">
+            <span class="wiz-field-label">Name</span>
+            <input class="wiz-input" type="text" placeholder="What should we call you?" value="${escapeHtml(p.name||'')}" oninput="Profile.set('name', this.value)" autocomplete="given-name">
+          </div>
+        </div>
+        <div class="wiz-row cols-2">
+          <div class="wiz-field">
+            <span class="wiz-field-label">Age</span>
+            <input class="wiz-input" type="number" inputmode="numeric" placeholder="24" value="${p.age||''}" oninput="Profile.set('age', parseInt(this.value)||null)">
+          </div>
+          <div class="wiz-field">
+            <span class="wiz-field-label">Height</span>
+            <div class="wiz-row cols-2">
+              <div class="wiz-input-suffix">
+                <input class="wiz-input" type="number" inputmode="numeric" placeholder="5" value="${p.heightInches?Math.floor(p.heightInches/12):''}" oninput="Profile.setHeight(parseInt(this.value)||null, null)">
+                <span class="wiz-input-suffix-text">ft</span>
+              </div>
+              <div class="wiz-input-suffix">
+                <input class="wiz-input" type="number" inputmode="numeric" placeholder="10" value="${p.heightInches?p.heightInches%12:''}" oninput="Profile.setHeight(null, parseInt(this.value)||0)">
+                <span class="wiz-input-suffix-text">in</span>
+              </div>
+            </div>
+          </div>
+        </div>`,
+      validate:(p) => !!(p.name?.trim() && p.age && p.heightInches)
+    },
+    {
+      id:'body',
+      eyebrow:'Step 2 of 7',
+      title:'Where you are, where you’re going',
+      sub:'Your current weight and a target. Skip the goal if you’re unsure.',
+      render:(p) => `
+        <div class="wiz-row cols-2">
+          <div class="wiz-field">
+            <span class="wiz-field-label">Current weight</span>
+            <div class="wiz-input-suffix">
+              <input class="wiz-input" type="number" inputmode="decimal" step="0.1" placeholder="181" value="${p.weightLbs||''}" oninput="Profile.set('weightLbs', parseFloat(this.value)||null)">
+              <span class="wiz-input-suffix-text">lbs</span>
+            </div>
+          </div>
+          <div class="wiz-field">
+            <span class="wiz-field-label">Goal weight <span style="color:var(--text-4);font-weight:500;text-transform:none;letter-spacing:0">(optional)</span></span>
+            <div class="wiz-input-suffix">
+              <input class="wiz-input" type="number" inputmode="decimal" step="0.1" placeholder="195" value="${p.goalWeightLbs||''}" oninput="Profile.set('goalWeightLbs', parseFloat(this.value)||null)">
+              <span class="wiz-input-suffix-text">lbs</span>
+            </div>
+          </div>
+        </div>`,
+      validate:(p) => !!(p.weightLbs > 0)
+    },
+    {
+      id:'goal',
+      eyebrow:'Step 3 of 7',
+      title:'What are you training for?',
+      sub:'Pick any that resonate — you can be working toward more than one.',
+      render:(p) => Profile.choiceMulti('primaryGoals', [
+        {v:'gain_muscle', l:'Build muscle',          d:'Hypertrophy and size'},
+        {v:'lose_fat',    l:'Lose body fat',         d:'Cut while keeping strength'},
+        {v:'recomp',      l:'Recomposition',         d:'Build muscle, lose fat — slower but sustainable'},
+        {v:'strength',    l:'Get stronger',          d:'Powerlifting-style numbers'},
+        {v:'endurance',   l:'Athletic conditioning', d:'Endurance, work capacity, performance'},
+        {v:'maintain',    l:'Maintain',              d:'Stay where you are, train for life'},
+      ], p.primaryGoals),
+      validate:(p) => Array.isArray(p.primaryGoals) && p.primaryGoals.length > 0
+    },
+    {
+      id:'training',
+      eyebrow:'Step 4 of 7',
+      title:'Your training style',
+      sub:'Helps us tune phase suggestions and rep schemes.',
+      render:(p) => `
+        <div class="wiz-section">
+          <span class="wiz-section-label">Style</span>
+          ${Profile.choiceList('trainingStyle', [
+            {v:'general_strength', l:'General strength', d:'Compound lifts, balanced'},
+            {v:'bodybuilding',     l:'Bodybuilding',     d:'Volume, isolation, hypertrophy focus'},
+            {v:'powerlifting',     l:'Powerlifting',     d:'Squat / bench / deadlift focus'},
+            {v:'hybrid',           l:'Hybrid',           d:'Lifting + conditioning'},
+            {v:'functional',       l:'Functional / athletic', d:'Movement quality, sports prep'},
+          ], p.trainingStyle)}
+        </div>
+        <div class="wiz-section">
+          <span class="wiz-section-label">Experience</span>
+          ${Profile.choiceList('experience', [
+            {v:'beginner',     l:'Beginner',     d:'Less than 1 year consistent'},
+            {v:'intermediate', l:'Intermediate', d:'1–3 years'},
+            {v:'advanced',     l:'Advanced',     d:'3+ years'},
+          ], p.experience)}
+        </div>
+        <div class="wiz-section">
+          <span class="wiz-section-label">Days per week</span>
+          ${Profile.stepper('daysPerWeek', p.daysPerWeek, 1, 7, 'days')}
+        </div>`,
+      validate:(p) => !!(p.trainingStyle && p.experience && p.daysPerWeek)
+    },
+    {
+      id:'schedule',
+      eyebrow:'Step 5 of 7',
+      title:'When do you train?',
+      sub:'And what motivates you most. Pick any that resonate.',
+      render:(p) => `
+        <div class="wiz-section">
+          <span class="wiz-section-label">Preferred training time</span>
+          ${Profile.choiceList('preferredTime', [
+            {v:'morning',  l:'Morning',     d:'5–10am'},
+            {v:'midday',   l:'Midday',      d:'10am–2pm'},
+            {v:'evening',  l:'Evening',     d:'4–9pm'},
+            {v:'late',     l:'Late night',  d:'9pm+'},
+            {v:'flexible', l:'Flexible',    d:'Whenever works that day'},
+          ], p.preferredTime)}
+        </div>
+        <div class="wiz-section">
+          <span class="wiz-section-label">What drives you (pick any)</span>
+          ${Profile.chips('motivations', [
+            'Look better','Feel strong','Longevity','Mental health','Athletic performance','Be an example','Compete','Energy levels','Discipline'
+          ], p.motivations || [])}
+        </div>`,
+      validate:(p) => !!p.preferredTime
+    },
+    {
+      id:'mind',
+      eyebrow:'Step 6 of 7',
+      title:'What tends to derail you?',
+      sub:'Be honest — this just helps your coach hold you accountable.',
+      render:(p) => `
+        <div class="wiz-section">
+          <span class="wiz-section-label">Biggest struggles (pick any)</span>
+          ${Profile.chips('struggles', [
+            'Consistency','Protein intake','Sleep','Soreness/recovery','Plateaus','Time','Motivation dips','Travel','Injury history'
+          ], p.struggles || [])}
+        </div>
+        <div class="wiz-section">
+          <span class="wiz-section-label">Anything else? <span style="text-transform:none;color:var(--text-4);letter-spacing:0;font-weight:500">(optional, free text)</span></span>
+          <textarea class="wiz-input" rows="3" placeholder="A specific obstacle, an injury to work around, a goal date…" oninput="Profile.set('struggleNote', this.value)" style="resize:vertical;min-height:80px;font-family:inherit">${escapeHtml(p.struggleNote||'')}</textarea>
+        </div>`,
+      validate:() => true
+    },
+    {
+      id:'coach',
+      eyebrow:'Step 7 of 7',
+      title:'How should your coach talk to you?',
+      sub:'Artemis adapts. Pick the tone that pushes you best.',
+      render:(p) => Profile.choiceList('coachStyle', [
+        {v:'direct',   l:'Direct',   d:'Technical, no fluff'},
+        {v:'friendly', l:'Friendly', d:'Warm, motivating'},
+        {v:'chill',    l:'Chill',    d:'Casual gym friend'},
+        {v:'intense',  l:'Intense',  d:'Hardcore, no excuses'},
+      ], p.coachStyle),
+      validate:(p) => !!p.coachStyle
+    },
+    {
+      id:'done',
+      eyebrow:'All set',
+      title:'Your coach is ready',
+      sub:'',
+      isDone:true,
+      render:(p) => {
+        const ft = p.heightInches ? `${Math.floor(p.heightInches/12)}'${p.heightInches%12}"` : '—';
+        const goalLabels = {gain_muscle:'Build muscle',lose_fat:'Lose fat',recomp:'Recomp',strength:'Strength',endurance:'Endurance',maintain:'Maintain'};
+        const styleLabels = {general_strength:'General strength',bodybuilding:'Bodybuilding',powerlifting:'Powerlifting',hybrid:'Hybrid',functional:'Functional'};
+        const expLabels = {beginner:'Beginner',intermediate:'Intermediate',advanced:'Advanced'};
+        const timeLabels = {morning:'Morning',midday:'Midday',evening:'Evening',late:'Late night',flexible:'Flexible'};
+        const coachLabels = {direct:'Direct',friendly:'Friendly',chill:'Chill',intense:'Intense'};
+        return `
+          <div class="wiz-done-hero">
+            <div class="wiz-done-check">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            </div>
+          </div>
+          <div class="wiz-done-summary">
+            <div class="wiz-done-row"><span class="wiz-done-row-label">Identity</span><span class="wiz-done-row-val">${escapeHtml(p.name||'—')} · ${p.age||'—'} · ${ft}</span></div>
+            <div class="wiz-done-row"><span class="wiz-done-row-label">Body</span><span class="wiz-done-row-val">${p.weightLbs||'—'} lbs${p.goalWeightLbs?` → ${p.goalWeightLbs} lbs`:''}</span></div>
+            <div class="wiz-done-row"><span class="wiz-done-row-label">Goals</span><span class="wiz-done-row-val">${(p.primaryGoals||[]).map(g => goalLabels[g] || g).join(', ') || '—'}</span></div>
+            <div class="wiz-done-row"><span class="wiz-done-row-label">Training</span><span class="wiz-done-row-val">${styleLabels[p.trainingStyle]||'—'} · ${expLabels[p.experience]||'—'} · ${p.daysPerWeek||'—'} days</span></div>
+            <div class="wiz-done-row"><span class="wiz-done-row-label">Schedule</span><span class="wiz-done-row-val">${timeLabels[p.preferredTime]||'—'}</span></div>
+            <div class="wiz-done-row"><span class="wiz-done-row-label">Drives</span><span class="wiz-done-row-val">${(p.motivations||[]).slice(0,3).join(', ')||'—'}</span></div>
+            <div class="wiz-done-row"><span class="wiz-done-row-label">Struggles</span><span class="wiz-done-row-val">${(p.struggles||[]).slice(0,3).join(', ')||'—'}</span></div>
+            <div class="wiz-done-row"><span class="wiz-done-row-label">Coach</span><span class="wiz-done-row-val">${coachLabels[p.coachStyle]||'—'}</span></div>
+          </div>`;
+      },
+      validate:() => true
+    }
+  ],
+
+  render(){
+    const screen = this.SCREENS[this.step];
+    const total = this.SCREENS.length;
+    // Dots
+    const dots = document.getElementById('wiz-dots');
+    dots.innerHTML = this.SCREENS.map((_, i) => {
+      const cls = i < this.step ? 'done' : i === this.step ? 'current' : '';
+      return `<div class="wiz-dot ${cls}"></div>`;
+    }).join('');
+    // Back button visibility
+    const back = document.getElementById('wiz-back');
+    back.toggleAttribute('disabled', this.step === 0);
+    // Step pill
+    const pill = document.getElementById('wiz-step-pill');
+    if(pill) pill.textContent = screen.isDone ? 'DONE' : `${this.step + 1} / ${total - 1}`;
+    // Body
+    const body = document.getElementById('wiz-body');
+    body.innerHTML = `
+      <div class="wiz-eyebrow">${screen.eyebrow}</div>
+      <h1 class="wiz-title">${screen.title}</h1>
+      ${screen.sub ? `<p class="wiz-sub">${screen.sub}</p>` : ''}
+      ${screen.render(this.draft)}
+    `;
+    body.scrollTop = 0;
+    // Continue button label + icon
+    const cont = document.getElementById('wiz-continue');
+    let label, icon;
+    if(screen.isDone){
+      label = 'Start training';
+      icon = '<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>';
+    } else if(this.step === total - 2){
+      label = 'Review';
+      icon = '<path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M13 5l7 7-7 7"/>';
+    } else {
+      label = 'Continue';
+      icon = '<path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M13 5l7 7-7 7"/>';
+    }
+    cont.innerHTML = `<span class="wiz-continue-label">${label}</span><svg fill="none" stroke="currentColor" viewBox="0 0 24 24">${icon}</svg>`;
+    this.updateContinue();
+  },
+
+  // Toggle the Continue button's disabled state based on current screen validation.
+  // Called on every input change so the CTA visibly enables the moment requirements are met.
+  updateContinue(){
+    const screen = this.SCREENS[this.step];
+    const ok = screen.validate(this.draft);
+    const cont = document.getElementById('wiz-continue');
+    if(cont) cont.toggleAttribute('disabled', !ok);
+  },
+
+  // ===== Field setters =====
+  set(key, value){
+    this.draft[key] = value;
+    this.updateContinue();
+  },
+  setHeight(ft, inches){
+    const cur = this.draft.heightInches || 0;
+    const curFt = Math.floor(cur/12);
+    const curIn = cur % 12;
+    const newFt = ft != null ? ft : curFt;
+    const newIn = inches != null ? inches : curIn;
+    this.draft.heightInches = newFt * 12 + newIn;
+    this.updateContinue();
+  },
+  toggleChip(key, value){
+    const arr = this.draft[key] = this.draft[key] || [];
+    const i = arr.indexOf(value);
+    if(i >= 0) arr.splice(i, 1); else arr.push(value);
+    this.render();
+  },
+  // Toggle a value in an array-typed field (used by choiceMulti choice cards)
+  toggleArrayValue(key, value){
+    const arr = this.draft[key] = this.draft[key] || [];
+    const i = arr.indexOf(value);
+    if(i >= 0) arr.splice(i, 1); else arr.push(value);
+    this.render();
+  },
+  setStepper(key, delta, min, max){
+    const cur = this.draft[key] ?? min;
+    const next = Math.min(max, Math.max(min, cur + delta));
+    this.draft[key] = next;
+    this.render();
+  },
+
+  // ===== Field renderers =====
+  choiceList(key, options, current){
+    return options.map(o => `
+      <button class="wiz-choice ${current===o.v?'selected':''}" onclick="Profile.set('${key}','${o.v}'); Profile.render()">
+        <div class="wiz-choice-radio"></div>
+        <div class="wiz-choice-body">
+          <div class="wiz-choice-label">${o.l}</div>
+          <div class="wiz-choice-desc">${o.d}</div>
+        </div>
+      </button>
+    `).join('');
+  },
+  // Multi-select variant — same big-card look but with a checkbox indicator
+  choiceMulti(key, options, current){
+    const sel = current || [];
+    return options.map(o => `
+      <button class="wiz-choice ${sel.includes(o.v)?'selected':''}" onclick="Profile.toggleArrayValue('${key}','${o.v}')">
+        <div class="wiz-choice-check">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+        </div>
+        <div class="wiz-choice-body">
+          <div class="wiz-choice-label">${o.l}</div>
+          <div class="wiz-choice-desc">${o.d}</div>
+        </div>
+      </button>
+    `).join('');
+  },
+  chips(key, options, current){
+    return `<div class="wiz-chips">${options.map(o => `
+      <button class="wiz-chip ${current.includes(o)?'selected':''}" onclick="Profile.toggleChip('${key}','${o.replace(/'/g, "\\'")}')">${o}</button>
+    `).join('')}</div>`;
+  },
+  stepper(key, value, min, max, unit){
+    const v = value ?? min;
+    return `
+      <div class="wiz-stepper">
+        <button class="wiz-stepper-btn" onclick="Profile.setStepper('${key}', -1, ${min}, ${max})" ${v<=min?'disabled':''}>−</button>
+        <div class="wiz-stepper-val">${v}<span class="wiz-stepper-unit">${unit}</span></div>
+        <button class="wiz-stepper-btn" onclick="Profile.setStepper('${key}', +1, ${min}, ${max})" ${v>=max?'disabled':''}>+</button>
+      </div>`;
+  },
+
+  // ===== Navigation =====
+  next(){
+    const screen = this.SCREENS[this.step];
+    if(screen.isDone){
+      this.finish();
+      return;
+    }
+    if(!screen.validate(this.draft)){
+      toast('Fill in the required fields');
+      return;
+    }
+    this.step++;
+    this.render();
+  },
+  back(){
+    if(this.step === 0) return;
+    this.step--;
+    this.render();
+  },
+
+  finish(){
+    const now = new Date().toISOString();
+    state.profile = Object.assign({}, this.draft, {completedOnboarding:true, onboardedAt: state.profile?.onboardedAt || now, updatedAt: now});
+    // Mirror coach style to legacy field used by Artemis renderer
+    if(state.profile.coachStyle) state.coachStyle = state.profile.coachStyle;
+    // Seed today's weight from profile if no entry exists
+    if(state.profile.weightLbs && !(state.weights||[]).some(w => w.date === todayKey())){
+      state.weights = state.weights || [];
+      state.weights.push({date: todayKey(), lbs: state.profile.weightLbs});
+      Sync.pushWeight(todayKey(), state.profile.weightLbs);
+    }
+    save();
+    Sync.pushProfile(state.profile);
+    this.close();
+    renderActivePage();
+    toast(this.editMode ? 'Profile updated' : 'Profile saved');
+  }
+};
+
 load();
-activeDay = getTodayDayIdx();
+activeDay = getViewDayIdx();
+applyReadonlyMode();
 renderDashboard();
 attachFoodSearchListener();
 renderFoodKeyBar();
+initSync().then(() => {
+  // Auto-launch profile setup on first run (or if onboarding never completed).
+  // Wait for sync so we don't show the wizard when cloud already has a profile.
+  if(!state.profile?.completedOnboarding){
+    Profile.open(false);
+  }
+});
 </script>
 </body>
 </html>
