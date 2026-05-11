@@ -742,6 +742,7 @@ input::placeholder{color:var(--text-4);font-weight:400}
 /* Workout time meta header */
 .workout-meta{
   display:flex;justify-content:space-between;align-items:center;
+  gap:10px;
   background:var(--surface);
   border:1px solid var(--border);
   border-radius:var(--r-md);
@@ -750,6 +751,36 @@ input::placeholder{color:var(--text-4);font-weight:400}
   background-image:var(--grad-card);
   box-shadow:var(--shadow-sm);
 }
+.workout-edit-btn{display:inline-flex;align-items:center;gap:5px;background:var(--surface-2);border:1px solid var(--border);color:var(--text-2);font-family:inherit;font-size:12px;font-weight:600;padding:6px 10px;border-radius:8px;cursor:pointer;transition:background .15s, color .15s, border-color .15s;flex-shrink:0}
+.workout-edit-btn:hover{background:var(--surface-3);color:var(--text);border-color:var(--border-strong)}
+.workout-edit-btn svg{width:12px;height:12px;stroke-width:2.5}
+
+/* ===== Plan editor (full-screen sheet) ===== */
+.plan-editor{position:fixed;inset:0;background:var(--bg);z-index:9999;display:none;flex-direction:column;animation:wiz-in .3s ease}
+.plan-editor.open{display:flex}
+body.plan-editor-open nav{display:none}
+body.plan-editor-open{overflow:hidden}
+.pe-top{display:flex;align-items:center;justify-content:space-between;padding:calc(16px + env(safe-area-inset-top)) 20px 12px;flex:0 0 auto;gap:14px;border-bottom:1px solid var(--border);background:var(--surface)}
+.pe-title{font-family:'Instrument Serif',serif;font-size:24px;font-weight:400;line-height:1;font-style:italic;color:var(--text)}
+.pe-close{background:var(--surface-2);border:1px solid var(--border);color:var(--text-2);cursor:pointer;width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;transition:background .15s,color .15s}
+.pe-close:hover{background:var(--surface-3);color:var(--text)}
+.pe-close svg{width:16px;height:16px;stroke-width:2.5}
+.pe-body{flex:1 1 auto;overflow-y:auto;padding:20px;max-width:680px;width:100%;margin:0 auto;display:flex;flex-direction:column;gap:18px;-webkit-overflow-scrolling:touch}
+.pe-section{display:flex;flex-direction:column;gap:8px}
+.pe-section-label{font-size:11px;color:var(--text-3);font-weight:700;text-transform:uppercase;letter-spacing:0.1em}
+.pe-input{width:100%;background:var(--surface);border:1px solid var(--border-strong);color:var(--text);font-family:inherit;font-size:15px;font-weight:500;padding:12px 14px;border-radius:10px;transition:border-color .15s, box-shadow .15s}
+.pe-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+.pe-input::placeholder{color:var(--text-4);font-weight:400}
+textarea.pe-input{resize:vertical;min-height:60px;line-height:1.5}
+.pe-ex-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.pe-ex-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.pe-ex-num{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:var(--text-3);background:var(--surface-2);padding:3px 8px;border-radius:6px;letter-spacing:0.04em}
+.pe-row{display:grid;gap:8px}
+.pe-row.cols-3{grid-template-columns:1fr 1fr 1fr}
+.pe-field{display:flex;flex-direction:column;gap:4px}
+.pe-field-label{font-size:10.5px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:0.06em}
+.pe-foot{padding:14px 20px calc(20px + env(safe-area-inset-bottom));border-top:1px solid var(--border);background:var(--surface);flex:0 0 auto;display:flex;gap:10px}
+.pe-foot .btn{flex:1}
 .workout-meta-time{
   display:flex;align-items:center;gap:8px;
   font-size:14px;font-weight:500;color:var(--text-2);
@@ -1199,6 +1230,25 @@ input::placeholder{color:var(--text-4);font-weight:400}
   border-color:var(--warn);
   color:var(--warn);
 }
+
+/* ===== Artemis plan-change proposal card ===== */
+.proposal-card{align-self:stretch;max-width:100%;background:var(--surface);border:1px solid var(--accent);border-radius:14px;padding:14px;margin:6px 0;display:flex;flex-direction:column;gap:12px;box-shadow:0 4px 16px rgba(255,184,0,0.08)}
+.proposal-eyebrow{display:flex;align-items:center;gap:6px;font-size:10.5px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.1em}
+.proposal-eyebrow svg{width:12px;height:12px;stroke-width:2.5}
+.proposal-rationale{font-size:13px;color:var(--text-2);line-height:1.5;font-weight:500}
+.proposal-ops{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--border);padding-top:10px}
+.proposal-op{font-size:12.5px;line-height:1.55}
+.proposal-op-target{font-weight:700;color:var(--text);margin-bottom:4px;font-size:11.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-3)}
+.proposal-op-field{display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap}
+.proposal-op-field-label{color:var(--text-3);font-weight:600;flex-shrink:0;font-size:11.5px;text-transform:uppercase;letter-spacing:0.04em;padding-top:1px}
+.proposal-op-before{color:var(--text-3);text-decoration:line-through;text-decoration-color:rgba(255,255,255,0.25);font-weight:500}
+.proposal-op-arrow{color:var(--text-4);font-size:11px;align-self:center}
+.proposal-op-after{color:var(--accent);font-weight:600}
+.proposal-actions{display:flex;gap:8px;border-top:1px solid var(--border);padding-top:10px}
+.proposal-actions .btn{flex:1;padding:9px 10px;font-size:12.5px}
+.proposal-status{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;padding:8px 10px;border-radius:8px;text-align:center}
+.proposal-status.approved{background:var(--done-soft);color:var(--done)}
+.proposal-status.rejected{background:rgba(245,158,11,0.12);color:var(--warn)}
 .chat-empty{
   text-align:center;color:var(--text-4);
   font-size:13px;font-weight:500;
@@ -1368,6 +1418,24 @@ input::placeholder{color:var(--text-4);font-weight:400}
         <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" stroke-linecap="round"/>
       </svg>
       <span>Instagram</span>
+    </button>
+  </div>
+</div>
+
+<!-- Plan editor (full-screen) -->
+<div class="plan-editor" id="plan-editor" role="dialog" aria-modal="true" aria-label="Edit workout">
+  <div class="pe-top">
+    <div class="pe-title" id="pe-title">Edit workout</div>
+    <button class="pe-close" onclick="PlanEditor.close()" aria-label="Close">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="pe-body" id="pe-body"></div>
+  <div class="pe-foot">
+    <button class="btn btn-ghost" onclick="PlanEditor.close()">Cancel</button>
+    <button class="btn btn-primary" onclick="PlanEditor.save()">
+      <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+      Save changes
     </button>
   </div>
 </div>
@@ -1919,7 +1987,7 @@ const Sync = {
   async pull(){
     if(!this.ready) return;
     const c = this.client;
-    const [foods, sets, weights, woComp, hiit, prs, profile] = await Promise.all([
+    const [foods, sets, weights, woComp, hiit, prs, profile, plan] = await Promise.all([
       c.from('training_food_log').select('*').order('id'),
       c.from('training_set_log').select('*'),
       c.from('training_weights').select('*').order('date'),
@@ -1927,6 +1995,7 @@ const Sync = {
       c.from('training_hiit_log').select('*'),
       c.from('training_prs').select('*'),
       c.from('training_profile').select('data').eq('id', 1).maybeSingle(),
+      c.from('training_plan').select('data').eq('id', 1).maybeSingle(),
     ]);
     const synced = !!state.syncInitialized;
 
@@ -1935,6 +2004,12 @@ const Sync = {
       if(synced || (cloudProfile && Object.keys(cloudProfile).length)){
         state.profile = Object.assign({}, state.profile || {}, cloudProfile);
         if(state.profile.coachStyle) state.coachStyle = state.profile.coachStyle;
+      }
+    }
+    if(!plan.error && plan.data?.data){
+      const cloudPlan = plan.data.data;
+      if(cloudPlan && cloudPlan.workouts && cloudPlan.workouts.length){
+        state.plan = cloudPlan;
       }
     }
 
@@ -2043,6 +2118,10 @@ const Sync = {
     if(state.profile && Object.keys(state.profile).length){
       tasks.push(this.client.from('training_profile').upsert({id:1, data: state.profile, updated_at: new Date().toISOString()}));
     }
+    // Plan (single row)
+    if(state.plan && state.plan.workouts && state.plan.workouts.length){
+      tasks.push(this.client.from('training_plan').upsert({id:1, data: state.plan, updated_at: new Date().toISOString()}));
+    }
 
     const results = await Promise.allSettled(tasks);
     results.forEach(r => {
@@ -2149,6 +2228,18 @@ const Sync = {
         if(r.error) throw r.error;
       } catch(e){ console.warn('pushProfile failed:', e); }
     })();
+  },
+
+  pushPlan(plan){
+    if(!this.ready) return;
+    (async () => {
+      try {
+        const r = await this.client.from('training_plan').upsert({
+          id: 1, data: plan || {}, updated_at: new Date().toISOString()
+        });
+        if(r.error) throw r.error;
+      } catch(e){ console.warn('pushPlan failed:', e); }
+    })();
   }
 };
 
@@ -2184,11 +2275,13 @@ function load(){
     if(!state.coachStyle) state.coachStyle='friendly';
     if(!Array.isArray(state.artemisChat)) state.artemisChat=[];
     if(!state.meals||!Array.isArray(state.meals)) state.meals=JSON.parse(JSON.stringify(DEFAULT_MEALS));
+    initializePlan();
     save();
     applyTheme();
   }catch(e){
     state.startDate = todayKey();
     state.meals = JSON.parse(JSON.stringify(DEFAULT_MEALS));
+    initializePlan();
     applyTheme();
   }
 }
@@ -2295,7 +2388,7 @@ function renderDashboard(){
   document.getElementById('dash-workouts').innerHTML=`${state.workoutsCompleted.length}<span class="metric-unit">total</span>`;
 
   const dayIdx = getViewDayIdx();
-  const day = DAYS[dayIdx];
+  const day = getWorkout(dayIdx);
   const viewingToday = isViewingToday();
   const sessionDone = !day.rest && state.workoutsCompleted.includes(viewKey()+'-'+dayIdx);
   const sessionLabel = document.getElementById('today-session-label');
@@ -2443,7 +2536,7 @@ function buildArtemisSystemPrompt(){
   const phaseIdx = wk<=4?0:wk<=8?1:wk<=12?2:3;
   const ph = PHASES[phaseIdx];
   const dayIdx = getTodayDayIdx();
-  const today = DAYS[dayIdx];
+  const today = getWorkout(dayIdx);
   const todayWeekday = new Date().toLocaleDateString('en-US',{weekday:'long'});
   const todayDate = new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
 
@@ -2554,6 +2647,12 @@ GROUNDING RULES:
 - Use the athlete profile below to tailor your tone and recommendations to their stated goals, struggles, and motivations.
 - Use plain text formatting only (no markdown like ** or ###). Bullets with "•" or "-" are fine.
 
+PLAN-EDITING RULES:
+- When ${userName} asks to MODIFY their training plan (swap an exercise, change sets/reps/rest/weight target, rename a workout, update a form cue), use the propose_plan_change tool to make a structured proposal. The user reviews it as a diff card and approves or rejects before anything is applied.
+- A short conversational reply ALONGSIDE the tool call is good — explain WHY in 1-2 sentences, then call the tool with full structured operations.
+- Only call the tool when the user has asked for changes. For pure questions ("how am I doing", "what should I focus on"), reply with text only.
+- If the user has just had a proposal approved or rejected, acknowledge that and don't re-propose the same change.
+
 PROGRAM STRUCTURE (16-week split: Mon Push / Tue Pull / Wed Legs / Thu Upper-heavy / Fri HIIT / Sat Rest (optional bonus) / Sun Rest):
 - W1-4 Foundation: 3 sets x 8-12 reps, 90s rest. Learn working weights, form first.
 - W5-8 Load: 4 sets x 8-12 reps, 90s rest. Add 5 lbs upper / 10 lbs lower at top of range.
@@ -2595,6 +2694,82 @@ TOTAL SESSIONS COMPLETED: ${sessionsTotal}
 Respond in character per the personality guidance above.`;
 }
 
+// Tool exposed to Claude: lets Artemis propose structured edits to the training plan.
+// The user reviews each proposal as a diff card before it's applied. We don't run a
+// full agent loop — proposals are flattened to text in history so we never need to
+// send a tool_result block back to the API.
+const PLAN_CHANGE_TOOL = {
+  name: 'propose_plan_change',
+  description: "Propose specific, structured changes to the user's training plan. Use whenever the user asks to swap an exercise, change sets/reps/weight target/rest, rename a workout, change a form cue, etc. ALWAYS include a clear, data-grounded rationale tied to their goals, struggles, or recent performance. The user reviews each proposal as a diff card and approves or rejects before anything is applied. Phase 1 supports updating fields on existing exercises and workouts only — adding/removing/reordering exercises is not yet supported (tell the user to come back when that's available).",
+  input_schema: {
+    type: 'object',
+    properties: {
+      rationale: {
+        type: 'string',
+        description: '1-3 sentences explaining why these changes make sense for THIS athlete. Reference their stated goals, current week/phase, struggles, recent PRs, or specific data points. No generic motivation.'
+      },
+      operations: {
+        type: 'array',
+        description: 'Ordered list of changes to apply.',
+        items: {
+          type: 'object',
+          properties: {
+            type: {
+              type: 'string',
+              enum: ['update_exercise', 'update_workout'],
+              description: "'update_exercise' to change fields on an existing exercise. 'update_workout' to change the workout's name or description."
+            },
+            day_idx: {
+              type: 'integer',
+              minimum: 0,
+              maximum: 6,
+              description: 'Day of week index: 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun.'
+            },
+            exercise_idx: {
+              type: 'integer',
+              minimum: 0,
+              description: 'Index of the exercise within the workout (0-based). Required for update_exercise. Omit for update_workout.'
+            },
+            changes: {
+              type: 'object',
+              description: 'Fields to update. Include only the fields you want to change.',
+              properties: {
+                name: {type: 'string', description: 'For update_exercise: exercise name (e.g. "Incline DB press"). For update_workout: workout name (e.g. "Push").'},
+                sets: {type: 'integer', description: 'Number of working sets (update_exercise only).'},
+                reps: {type: 'string', description: 'Rep range as a string (e.g. "8-10", "6-8") (update_exercise only).'},
+                weight: {type: 'string', description: 'Weight target / loading guidance (e.g. "start 135 lbs", "moderate-heavy") (update_exercise only).'},
+                rest: {type: 'string', description: 'Rest period (e.g. "90s", "2 min") (update_exercise only).'},
+                desc: {type: 'string', description: 'Form cue (update_exercise) or workout description (update_workout).'}
+              }
+            }
+          },
+          required: ['type', 'day_idx', 'changes']
+        }
+      }
+    },
+    required: ['rationale', 'operations']
+  }
+};
+
+// Flatten tool-use proposals into a text representation for conversation history.
+// This avoids needing to send tool_result blocks back to the API on every turn.
+function flattenToolUseToText(m){
+  if(!m.toolUse) return m.content || '';
+  const ops = (m.toolUse.operations || []).map(op => {
+    const target = op.type === 'update_exercise'
+      ? `Day ${op.day_idx} · exercise ${op.exercise_idx}`
+      : `Day ${op.day_idx} · workout`;
+    const fields = Object.entries(op.changes || {}).map(([k,v]) => `${k}=${v}`).join(', ');
+    return `${target}: ${fields}`;
+  }).join('; ');
+  const statusLine = m.toolUseStatus === 'approved'
+    ? '[USER APPROVED — changes were applied]'
+    : m.toolUseStatus === 'rejected'
+      ? '[USER REJECTED — changes NOT applied]'
+      : '[PROPOSAL PENDING USER REVIEW]';
+  return `${m.content || ''}\n\n${statusLine} Proposed: ${m.toolUse.rationale || ''} Operations: ${ops}`;
+}
+
 async function callArtemis(userMessage, opts={}){
   const apiKey = getApiKey();
   if(!apiKey) throw new Error('No API key set');
@@ -2603,10 +2778,23 @@ async function callArtemis(userMessage, opts={}){
   const history = (state.artemisChat||[])
     .filter(m=>!m.error)
     .slice(-20)
-    .map(m=>({role:m.role, content:m.content}));
+    .map(m=>({role:m.role, content: m.toolUse ? flattenToolUseToText(m) : (m.content || '')}));
 
   const messages = opts.skipHistory ? [] : history.slice();
   messages.push({role:'user', content:userMessage});
+
+  const body = {
+    model:'claude-sonnet-4-6',
+    max_tokens: opts.maxTokens || 1500,
+    system:[
+      {type:'text', text:systemPrompt, cache_control:{type:'ephemeral'}}
+    ],
+    messages
+  };
+  // Expose the plan-change tool unless explicitly skipped (e.g. daily focus)
+  if(!opts.skipTools){
+    body.tools = [PLAN_CHANGE_TOOL];
+  }
 
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method:'POST',
@@ -2616,14 +2804,7 @@ async function callArtemis(userMessage, opts={}){
       'anthropic-version':'2023-06-01',
       'anthropic-dangerous-direct-browser-access':'true'
     },
-    body:JSON.stringify({
-      model:'claude-sonnet-4-6',
-      max_tokens: opts.maxTokens || 1024,
-      system:[
-        {type:'text', text:systemPrompt, cache_control:{type:'ephemeral'}}
-      ],
-      messages
-    })
+    body:JSON.stringify(body)
   });
 
   if(!res.ok){
@@ -2637,7 +2818,8 @@ async function callArtemis(userMessage, opts={}){
     throw new Error(errMsg);
   }
   const data = await res.json();
-  return data.content?.[0]?.text || '';
+  // Return full response so caller can inspect content blocks for tool_use
+  return opts.rawResponse !== false ? data : (data.content?.[0]?.text || '');
 }
 
 let artemisSending = false;
@@ -2658,8 +2840,23 @@ async function sendArtemisMessage(prefilled){
   scrollChatToBottom();
 
   try{
-    const reply = await callArtemis(msg);
-    state.artemisChat.push({role:'assistant', content:reply, ts:Date.now()});
+    const data = await callArtemis(msg);
+    // data may be the full Anthropic response or a string (legacy callers).
+    // For sendArtemisMessage we always get the full response now.
+    const blocks = data.content || [];
+    const textBlock = blocks.find(b => b.type === 'text');
+    const toolUseBlock = blocks.find(b => b.type === 'tool_use' && b.name === 'propose_plan_change');
+    const msgRecord = {
+      role: 'assistant',
+      content: textBlock?.text || '',
+      ts: Date.now()
+    };
+    if(toolUseBlock){
+      msgRecord.toolUse = toolUseBlock.input;
+      msgRecord.toolUseId = toolUseBlock.id;
+      msgRecord.toolUseStatus = 'pending';
+    }
+    state.artemisChat.push(msgRecord);
     save();
   }catch(e){
     state.artemisChat.push({role:'assistant', content:e.message||'Something went wrong', ts:Date.now(), error:true});
@@ -2682,8 +2879,10 @@ async function refreshDailyFocus(){
   renderArtemis();
   try{
     const prompt = `In 3-4 sentences max (under 60 words), give me my single most important focus for today based on my current data. Be specific to my exact numbers and today's session. No greeting, no sign-off.`;
-    const reply = await callArtemis(prompt, {skipHistory:true, maxTokens:200});
-    state.dailyFocus = {date:today, style:state.coachStyle, text:reply, loading:false};
+    // Daily focus is read-only — skip tools so the model doesn't try to propose changes
+    const data = await callArtemis(prompt, {skipHistory:true, maxTokens:200, skipTools:true});
+    const text = (data.content || []).find(b => b.type === 'text')?.text || '';
+    state.dailyFocus = {date:today, style:state.coachStyle, text, loading:false};
     save();
   }catch(e){
     state.dailyFocus = {date:today, style:state.coachStyle, text:`(${e.message})`, loading:false, error:true};
@@ -2737,7 +2936,7 @@ function workSecondsForReps(repStr){
   return Math.round(reps*3.5 + 8);
 }
 function estimateWorkoutMinutes(dayIdx){
-  const day = DAYS[dayIdx];
+  const day = getWorkout(dayIdx);
   if(day.rest) return 0;
   let seconds = 0;
   // Lifting: warmup + working sets + transitions
@@ -2767,13 +2966,51 @@ function estimateWorkoutMinutes(dayIdx){
 
 // ----- Exercise name editing -----
 let editingExKey = null;
+// ===== Plan data model =====
+// state.plan is the single source of truth for the active training plan.
+// It's a deep clone of DAYS on first run, then editable freely (by the user via
+// the Train tab edit sheet, or by Artemis via approved tool-use diffs).
+// All workout reads in the app go through getWorkout(i) so Train + Artemis +
+// Dashboard + Cards + stats helpers stay in sync.
+function initializePlan(){
+  if(state.plan && Array.isArray(state.plan.workouts) && state.plan.workouts.length === DAYS.length) return;
+  const cloned = JSON.parse(JSON.stringify(DAYS));
+  // Migrate any legacy per-exercise name overrides into plan.workouts
+  Object.entries(state.customExercises || {}).forEach(([dayIdx, exMap]) => {
+    Object.entries(exMap || {}).forEach(([exIdx, customName]) => {
+      const ex = cloned[+dayIdx]?.exercises?.[+exIdx];
+      if(ex && customName && customName.trim()) ex.name = customName.trim();
+    });
+  });
+  // Migrate legacy HIIT picker overrides
+  Object.entries(state.customHiit || {}).forEach(([dayIdx, list]) => {
+    if(Array.isArray(list) && cloned[+dayIdx]) cloned[+dayIdx].hiit = list;
+  });
+  state.plan = {
+    id: 'default',
+    name: '16-Week Strength + Hypertrophy',
+    workouts: cloned,
+    updatedAt: new Date().toISOString()
+  };
+}
+function getPlanWorkouts(){ return state.plan?.workouts || DAYS; }
+function getWorkout(dayIdx){ return getPlanWorkouts()[dayIdx]; }
+function getExercise(dayIdx, exIdx){ return getWorkout(dayIdx)?.exercises?.[exIdx]; }
+function getDefaultExercise(dayIdx, exIdx){ return DAYS[dayIdx]?.exercises?.[exIdx]; }
+function savePlan(){
+  if(!state.plan) return;
+  state.plan.updatedAt = new Date().toISOString();
+  save();
+  if(typeof Sync !== 'undefined') Sync.pushPlan(state.plan);
+}
+
 function getExName(dayIdx, exIdx){
-  const custom = state.customExercises?.[dayIdx]?.[exIdx];
-  return (custom && custom.trim()) ? custom : DAYS[dayIdx].exercises[exIdx].name;
+  return getExercise(dayIdx, exIdx)?.name || '';
 }
 function isExCustomized(dayIdx, exIdx){
-  const c = state.customExercises?.[dayIdx]?.[exIdx];
-  return !!(c && c.trim() && c.trim() !== DAYS[dayIdx].exercises[exIdx].name);
+  const cur = getExName(dayIdx, exIdx);
+  const orig = getDefaultExercise(dayIdx, exIdx)?.name;
+  return !!(cur && orig && cur !== orig);
 }
 function startEditExName(dayIdx, exIdx){
   editingExKey = `${dayIdx}-${exIdx}`;
@@ -2785,21 +3022,19 @@ function startEditExName(dayIdx, exIdx){
 }
 function finishEditExName(dayIdx, exIdx, value){
   const trimmed = (value||'').trim();
-  if(!state.customExercises) state.customExercises={};
-  if(!state.customExercises[dayIdx]) state.customExercises[dayIdx]={};
-  const original = DAYS[dayIdx].exercises[exIdx].name;
-  if(!trimmed || trimmed === original){
-    delete state.customExercises[dayIdx][exIdx];
-  } else {
-    state.customExercises[dayIdx][exIdx] = trimmed;
-  }
-  save();
+  const ex = getExercise(dayIdx, exIdx);
+  if(!ex) return;
+  const original = getDefaultExercise(dayIdx, exIdx)?.name;
+  ex.name = trimmed || original;
+  savePlan();
   editingExKey = null;
   renderWorkoutContent();
 }
 function resetExName(dayIdx, exIdx){
-  if(state.customExercises?.[dayIdx]) delete state.customExercises[dayIdx][exIdx];
-  save(); renderWorkoutContent(); toast('Reset');
+  const ex = getExercise(dayIdx, exIdx);
+  const original = getDefaultExercise(dayIdx, exIdx)?.name;
+  if(ex && original){ ex.name = original; savePlan(); }
+  renderWorkoutContent(); toast('Reset');
 }
 
 // ----- Meal ingredient list helpers -----
@@ -2845,14 +3080,12 @@ function renderIngredientList(containerId, items){
 
 // ----- HIIT picker -----
 function getDayHiit(dayIdx){
-  const c = state.customHiit?.[dayIdx];
-  if(Array.isArray(c)) return c;
-  return DAYS[dayIdx].hiit || [];
+  return getWorkout(dayIdx)?.hiit || [];
 }
 function setDayHiit(dayIdx, list){
-  if(!state.customHiit) state.customHiit={};
-  state.customHiit[dayIdx] = list;
-  save();
+  const w = getWorkout(dayIdx);
+  if(w) w.hiit = list;
+  savePlan();
 }
 let hiitPickerOpen = {};
 function toggleHiitPicker(dayIdx){
@@ -2962,7 +3195,7 @@ let activeDay = 0;
 
 function renderWorkout(){
   renderDateNav('date-nav-workout');
-  const pills = DAYS.map((d,i)=>`<button class="pill ${i===activeDay?'active':''}" onclick="setDay(${i})">${d.label}<small>${d.name}</small></button>`).join('');
+  const pills = getPlanWorkouts().map((d,i)=>`<button class="pill ${i===activeDay?'active':''}" onclick="setDay(${i})">${d.label}<small>${d.name}</small></button>`).join('');
   document.getElementById('day-pills').innerHTML=pills;
   renderWorkoutContent();
 }
@@ -2970,7 +3203,7 @@ function renderWorkout(){
 function setDay(i){ activeDay=i; renderWorkout(); }
 
 function renderWorkoutContent(){
-  const day = DAYS[activeDay];
+  const day = getWorkout(activeDay);
   const dateKey = viewKey();
   if(!state.setLog[dateKey]) state.setLog[dateKey]={};
   if(!state.setLog[dateKey][activeDay]) state.setLog[dateKey][activeDay]={};
@@ -2996,6 +3229,10 @@ function renderWorkoutContent(){
         <span><strong>~${estMin}</strong> min</span>
       </div>
       <div class="workout-meta-info">${parts.join(' · ')}</div>
+      <button class="workout-edit-btn editable-only" onclick="PlanEditor.open(${activeDay})" title="Edit workout">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+        Edit
+      </button>
     </div>`;
     if(day.exercises.length){
       html+=`<div class="section-label" style="margin-bottom:10px">Lifting · ${day.desc}</div>`;
@@ -3112,7 +3349,7 @@ function logSet(dayIdx, exIdx, setIdx, field, value){
 
   let prChanged = null;
   if(field==='weight'){
-    const exName = DAYS[dayIdx].exercises[exIdx]?.name;
+    const exName = getWorkout(dayIdx).exercises[exIdx]?.name;
     if(exName){
       if(!state.prs) state.prs={};
       const w = parseFloat(value);
@@ -3150,7 +3387,7 @@ function markWorkoutDone(){
 }
 
 function showSessionCelebration(){
-  const day = DAYS[activeDay];
+  const day = getWorkout(activeDay);
   const dayLog = state.setLog?.[viewKey()]?.[activeDay] || {};
   let setsLogged = 0, setsTotal = 0;
   (day.exercises || []).forEach((ex, ei) => {
@@ -3757,7 +3994,7 @@ function renderArtStats(){
   const phaseIdx = wk<=4?0:wk<=8?1:wk<=12?2:3;
   const ph = PHASES[phaseIdx];
   const dayIdx = getTodayDayIdx();
-  const today = DAYS[dayIdx];
+  const today = getWorkout(dayIdx);
   const dk = todayKey();
   const todayLog = state.foodLog?.[dk]||[];
   const todayProt = todayLog.reduce((a,b)=>a+(b.prot||0),0);
@@ -3862,11 +4099,18 @@ function renderChat(){
   const chat = state.artemisChat||[];
   let thread = '';
   if(!chat.length){
-    thread = `<div class="chat-empty">Start a conversation, or tap a quick ask above. Artemis sees your full training and nutrition data.</div>`;
+    thread = `<div class="chat-empty">Start a conversation, or tap a quick ask above. Artemis sees your full training plan and can propose changes — tell it "swap bench press for incline DB press" or "add a 4th set to overhead press."</div>`;
   } else {
-    thread = chat.map(m=>{
+    thread = chat.map((m, i) => {
       const cls = m.role==='user' ? 'user' : (m.error ? 'assistant error' : 'assistant');
-      return `<div class="chat-msg ${cls}">${escapeHtml(m.content)}</div>`;
+      let html = '';
+      if(m.content){
+        html += `<div class="chat-msg ${cls}">${escapeHtml(m.content)}</div>`;
+      }
+      if(m.toolUse){
+        html += PlanProposal.renderCard(m, i);
+      }
+      return html;
     }).join('');
   }
   if(artemisSending){
@@ -3948,7 +4192,7 @@ function statsMonthDates(){
 }
 function statsTrainedOn(date){
   const dayIdx = getDayIdxFromDate(date);
-  if(DAYS[dayIdx].rest) return 'rest';
+  if(getWorkout(dayIdx).rest) return 'rest';
   return (state.workoutsCompleted||[]).includes(date+'-'+dayIdx) ? 'done' : 'missed';
 }
 function statsCurrentStreak(){
@@ -3956,7 +4200,7 @@ function statsCurrentStreak(){
   let cursor = todayKey();
   // If today is a training day not yet completed, don't break streak — start counting from yesterday
   const todayIdx = getDayIdxFromDate(cursor);
-  if(!DAYS[todayIdx].rest && !(state.workoutsCompleted||[]).includes(cursor+'-'+todayIdx)){
+  if(!getWorkout(todayIdx).rest && !(state.workoutsCompleted||[]).includes(cursor+'-'+todayIdx)){
     cursor = shiftDateKey(cursor, -1);
   }
   for(let i=0; i<400; i++){
@@ -4023,7 +4267,7 @@ function statsToday(){
   // Snapshot of the just-completed (or in-progress) session for today's day-of-week
   const dk = todayKey();
   const dayIdx = getTodayDayIdx();
-  const day = DAYS[dayIdx];
+  const day = getWorkout(dayIdx);
   let setsLogged = 0, setsTotal = 0, totalReps = 0;
   let topLift = {name:null, weight:0};
   (day.exercises || []).forEach((ex, ei) => {
@@ -4043,7 +4287,7 @@ function statsToday(){
 
 function statsDiscipline(period = 30){
   const dates = statsBetween(period);
-  const trainingDays = dates.filter(d => !DAYS[getDayIdxFromDate(d)].rest);
+  const trainingDays = dates.filter(d => !getWorkout(getDayIdxFromDate(d)).rest);
   const trainedCount = trainingDays.filter(d => (state.workoutsCompleted||[]).includes(d+'-'+getDayIdxFromDate(d))).length;
   const workoutHitRate = trainingDays.length ? trainedCount / trainingDays.length : 0;
   const proteinTarget = 190;
@@ -4957,6 +5201,228 @@ const Cards = {
       probe.click();
       document.body.removeChild(probe);
     }, 900);
+  }
+};
+
+// ===== Artemis plan-change proposals =====
+// Renders a structured diff card in the chat for each propose_plan_change tool use.
+// The user reviews each operation (before → after) and approves or rejects.
+// Approval writes through savePlan() so Train tab + Supabase + Artemis context all sync.
+const DAY_LABELS = ['MON','TUE','WED','THU','FRI','SAT','SUN'];
+const FIELD_LABELS = {name:'Name', sets:'Sets', reps:'Reps', weight:'Weight', rest:'Rest', desc:'Cue'};
+
+const PlanProposal = {
+  renderCard(message, msgIdx){
+    const tu = message.toolUse;
+    if(!tu) return '';
+    const status = message.toolUseStatus || 'pending';
+    const ops = (tu.operations || []).map(op => this.renderOp(op)).join('');
+    let actions;
+    if(status === 'approved'){
+      actions = `<div class="proposal-status approved">✓ Approved · changes applied</div>`;
+    } else if(status === 'rejected'){
+      actions = `<div class="proposal-status rejected">✕ Rejected</div>`;
+    } else {
+      actions = `<div class="proposal-actions">
+        <button class="btn btn-ghost" onclick="PlanProposal.reject(${msgIdx})">Reject</button>
+        <button class="btn btn-primary" onclick="PlanProposal.approve(${msgIdx})">
+          <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+          Approve
+        </button>
+      </div>`;
+    }
+    return `<div class="proposal-card">
+      <div class="proposal-eyebrow">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+        Proposed plan change
+      </div>
+      ${tu.rationale ? `<div class="proposal-rationale">${escapeHtml(tu.rationale)}</div>` : ''}
+      <div class="proposal-ops">${ops}</div>
+      ${actions}
+    </div>`;
+  },
+
+  renderOp(op){
+    const dayLabel = DAY_LABELS[op.day_idx] || `Day ${op.day_idx}`;
+    let target, current;
+    if(op.type === 'update_exercise'){
+      const cur = getExercise(op.day_idx, op.exercise_idx);
+      target = `${dayLabel} · exercise ${(op.exercise_idx ?? 0)+1}${cur?.name ? ` (${cur.name})` : ''}`;
+      current = cur || {};
+    } else if(op.type === 'update_workout'){
+      const cur = getWorkout(op.day_idx);
+      target = `${dayLabel} · workout${cur?.name ? ` (${cur.name})` : ''}`;
+      current = cur || {};
+    } else {
+      target = `${dayLabel} · ${op.type}`;
+      current = {};
+    }
+    const fields = Object.entries(op.changes || {}).map(([k, v]) => {
+      const before = current[k];
+      const beforeStr = before == null || before === '' ? '—' : String(before);
+      const afterStr = v == null || v === '' ? '—' : String(v);
+      return `<div class="proposal-op-field">
+        <span class="proposal-op-field-label">${FIELD_LABELS[k] || k}:</span>
+        <span class="proposal-op-before">${escapeHtml(beforeStr)}</span>
+        <span class="proposal-op-arrow">→</span>
+        <span class="proposal-op-after">${escapeHtml(afterStr)}</span>
+      </div>`;
+    }).join('');
+    return `<div class="proposal-op">
+      <div class="proposal-op-target">${escapeHtml(target)}</div>
+      ${fields}
+    </div>`;
+  },
+
+  approve(msgIdx){
+    const m = state.artemisChat?.[msgIdx];
+    if(!m || !m.toolUse || m.toolUseStatus !== 'pending') return;
+    // Apply operations to state.plan
+    const ops = m.toolUse.operations || [];
+    let appliedCount = 0;
+    for(const op of ops){
+      const w = getWorkout(op.day_idx);
+      if(!w) continue;
+      if(op.type === 'update_exercise'){
+        const ex = w.exercises?.[op.exercise_idx];
+        if(!ex) continue;
+        Object.entries(op.changes || {}).forEach(([k, v]) => { ex[k] = v; });
+        appliedCount++;
+      } else if(op.type === 'update_workout'){
+        Object.entries(op.changes || {}).forEach(([k, v]) => { w[k] = v; });
+        appliedCount++;
+      }
+    }
+    m.toolUseStatus = 'approved';
+    savePlan();
+    renderArtemis();
+    scrollChatToBottom();
+    toast(`${appliedCount} change${appliedCount===1?'':'s'} applied`);
+  },
+
+  reject(msgIdx){
+    const m = state.artemisChat?.[msgIdx];
+    if(!m || !m.toolUse || m.toolUseStatus !== 'pending') return;
+    m.toolUseStatus = 'rejected';
+    save();
+    renderArtemis();
+    scrollChatToBottom();
+    toast('Proposal rejected');
+  }
+};
+
+// ===== Plan editor (Train tab → Edit workout) =====
+// Full-screen sheet to edit a single workout: name, description, and per-exercise
+// fields (name, sets, reps, weight target, rest, cue/desc). Writes go through
+// savePlan() so Supabase + Train tab + Artemis context stay in sync.
+const PlanEditor = {
+  dayIdx: 0,
+  draft: null,
+
+  open(dayIdx){
+    this.dayIdx = dayIdx;
+    const w = getWorkout(dayIdx);
+    if(!w) return;
+    // Deep clone so cancel doesn't mutate state
+    this.draft = JSON.parse(JSON.stringify(w));
+    document.getElementById('plan-editor').classList.add('open');
+    document.body.classList.add('plan-editor-open');
+    this.render();
+  },
+
+  close(){
+    document.getElementById('plan-editor').classList.remove('open');
+    document.body.classList.remove('plan-editor-open');
+    this.draft = null;
+  },
+
+  set(path, value){
+    // path examples: "name", "desc", "exercises.0.sets"
+    const parts = path.split('.');
+    let cur = this.draft;
+    for(let i=0; i<parts.length-1; i++){
+      const key = isNaN(+parts[i]) ? parts[i] : +parts[i];
+      cur = cur[key];
+    }
+    const last = parts[parts.length-1];
+    cur[isNaN(+last) ? last : +last] = value;
+  },
+
+  render(){
+    const d = this.draft;
+    document.getElementById('pe-title').textContent = `Edit · ${d.label} ${d.name}`;
+    const body = document.getElementById('pe-body');
+
+    // Workout-level fields
+    let html = `
+      <div class="pe-section">
+        <span class="pe-section-label">Workout</span>
+        <div class="pe-field">
+          <span class="pe-field-label">Name</span>
+          <input class="pe-input" type="text" value="${escapeHtml(d.name||'')}" oninput="PlanEditor.set('name', this.value)">
+        </div>
+        <div class="pe-field">
+          <span class="pe-field-label">Description</span>
+          <input class="pe-input" type="text" value="${escapeHtml(d.desc||'')}" placeholder="e.g. Chest · Shoulders · Triceps" oninput="PlanEditor.set('desc', this.value)">
+        </div>
+      </div>`;
+
+    // Rest day toggle / handling — keep simple for v1
+    if(d.rest){
+      html += `<div class="pe-section"><div style="color:var(--text-3);font-size:13px;line-height:1.5;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px">This is a rest day. Lifting fields aren't editable here in v1 — ask Artemis to convert it to a training day if you want exercises.</div></div>`;
+    } else if(d.exercises && d.exercises.length){
+      html += `<div class="pe-section"><span class="pe-section-label">Exercises</span></div>`;
+      d.exercises.forEach((ex, ei) => {
+        html += `
+          <div class="pe-ex-card">
+            <div class="pe-ex-head">
+              <span class="pe-ex-num">EX ${String(ei+1).padStart(2,'0')}</span>
+            </div>
+            <div class="pe-field">
+              <span class="pe-field-label">Name</span>
+              <input class="pe-input" type="text" value="${escapeHtml(ex.name||'')}" oninput="PlanEditor.set('exercises.${ei}.name', this.value)">
+            </div>
+            <div class="pe-row cols-3">
+              <div class="pe-field">
+                <span class="pe-field-label">Sets</span>
+                <input class="pe-input" type="number" inputmode="numeric" value="${ex.sets||''}" oninput="PlanEditor.set('exercises.${ei}.sets', parseInt(this.value)||0)">
+              </div>
+              <div class="pe-field">
+                <span class="pe-field-label">Reps</span>
+                <input class="pe-input" type="text" value="${escapeHtml(ex.reps||'')}" placeholder="8–10" oninput="PlanEditor.set('exercises.${ei}.reps', this.value)">
+              </div>
+              <div class="pe-field">
+                <span class="pe-field-label">Rest</span>
+                <input class="pe-input" type="text" value="${escapeHtml(ex.rest||'')}" placeholder="90s" oninput="PlanEditor.set('exercises.${ei}.rest', this.value)">
+              </div>
+            </div>
+            <div class="pe-field">
+              <span class="pe-field-label">Weight target</span>
+              <input class="pe-input" type="text" value="${escapeHtml(ex.weight||'')}" placeholder="e.g. start 135 lbs" oninput="PlanEditor.set('exercises.${ei}.weight', this.value)">
+            </div>
+            <div class="pe-field">
+              <span class="pe-field-label">Cue / description</span>
+              <textarea class="pe-input" rows="2" oninput="PlanEditor.set('exercises.${ei}.desc', this.value)">${escapeHtml(ex.desc||'')}</textarea>
+            </div>
+          </div>`;
+      });
+    } else {
+      html += `<div style="color:var(--text-4);font-size:13px;text-align:center;padding:20px">No exercises in this workout. Ask Artemis to add some.</div>`;
+    }
+
+    body.innerHTML = html;
+  },
+
+  save(){
+    if(!this.draft) return;
+    const idx = this.dayIdx;
+    if(!state.plan?.workouts?.[idx]){ this.close(); return; }
+    state.plan.workouts[idx] = this.draft;
+    savePlan();
+    this.close();
+    // Re-render any active page that might depend on plan
+    if(typeof renderActivePage === 'function') renderActivePage();
+    toast('Workout updated');
   }
 };
 
