@@ -873,20 +873,27 @@ textarea.pe-input{resize:vertical;min-height:60px;line-height:1.5}
 }
 .hiit-pool-title{font-size:10.5px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px}
 .hiit-pool-item{
-  display:flex;align-items:center;gap:10px;
-  padding:9px 10px;
+  display:flex;align-items:stretch;gap:4px;
+  padding:4px;
   background:var(--surface);
   border:1px solid var(--border);
   border-radius:8px;
   margin-bottom:6px;
-  cursor:pointer;
-  transition:all 0.15s var(--t-fast);
+  transition:background 0.15s var(--t-fast),border-color 0.15s var(--t-fast);
 }
-.hiit-pool-item:active{transform:scale(0.99)}
 .hiit-pool-item.selected{
   background:var(--accent-soft);
   border-color:var(--accent);
 }
+.hiit-pool-toggle{
+  display:flex;align-items:center;gap:10px;
+  padding:5px 6px;
+  flex:1;min-width:0;
+  cursor:pointer;
+  border-radius:6px;
+  transition:background 0.15s var(--t-fast);
+}
+.hiit-pool-toggle:active{transform:scale(0.99)}
 .hiit-pool-check{
   width:18px;height:18px;
   border:1.5px solid var(--border-strong);
@@ -905,6 +912,41 @@ textarea.pe-input{resize:vertical;min-height:60px;line-height:1.5}
 .hiit-pool-info{flex:1;min-width:0}
 .hiit-pool-name{font-size:13px;font-weight:600;letter-spacing:-0.01em}
 .hiit-pool-detail{font-size:11px;color:var(--text-3);margin-top:2px;font-weight:500}
+.hiit-pool-actions{display:flex;align-items:center;gap:2px;flex-shrink:0;padding-right:2px}
+.hiit-pool-actions .icon-btn{width:30px;height:30px;border-radius:6px}
+.hiit-pool-actions .icon-btn svg{width:13px;height:13px}
+
+.hiit-pool-edit{
+  background:var(--surface-2);border:1px solid var(--accent);border-radius:10px;
+  padding:12px;margin-bottom:6px;
+  display:flex;flex-direction:column;gap:8px;
+  animation:hiit-edit-in .2s ease;
+}
+@keyframes hiit-edit-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.hiit-pool-edit-input{
+  width:100%;background:var(--surface);border:1px solid var(--border-strong);
+  color:var(--text);font-family:inherit;font-size:13px;font-weight:500;
+  padding:9px 11px;border-radius:8px;
+  transition:border-color .15s,box-shadow .15s;
+}
+.hiit-pool-edit-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+.hiit-pool-edit-input::placeholder{color:var(--text-4);font-weight:400}
+.hiit-pool-edit-actions{display:flex;gap:8px;margin-top:2px}
+
+.hiit-pool-add-btn{
+  width:100%;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  padding:9px 10px;margin-top:2px;
+  background:transparent;
+  border:1px dashed var(--border-strong);
+  border-radius:8px;
+  color:var(--text-2);
+  font-family:inherit;font-size:12.5px;font-weight:600;
+  cursor:pointer;
+  transition:background .15s,color .15s,border-color .15s;
+}
+.hiit-pool-add-btn:hover{background:var(--surface-2);color:var(--text);border-color:var(--accent)}
+.hiit-pool-add-btn svg{width:13px;height:13px;stroke-width:2.5}
 
 /* Meal template editor */
 .meal-row .meal-actions{flex-direction:row;align-items:center}
@@ -2973,30 +3015,43 @@ let editingExKey = null;
 // All workout reads in the app go through getWorkout(i) so Train + Artemis +
 // Dashboard + Cards + stats helpers stay in sync.
 function initializePlan(){
-  if(state.plan && Array.isArray(state.plan.workouts) && state.plan.workouts.length === DAYS.length) return;
-  const cloned = JSON.parse(JSON.stringify(DAYS));
-  // Migrate any legacy per-exercise name overrides into plan.workouts
-  Object.entries(state.customExercises || {}).forEach(([dayIdx, exMap]) => {
-    Object.entries(exMap || {}).forEach(([exIdx, customName]) => {
-      const ex = cloned[+dayIdx]?.exercises?.[+exIdx];
-      if(ex && customName && customName.trim()) ex.name = customName.trim();
+  const planExists = state.plan && Array.isArray(state.plan.workouts) && state.plan.workouts.length === DAYS.length;
+  if(!planExists){
+    const cloned = JSON.parse(JSON.stringify(DAYS));
+    // Migrate any legacy per-exercise name overrides into plan.workouts
+    Object.entries(state.customExercises || {}).forEach(([dayIdx, exMap]) => {
+      Object.entries(exMap || {}).forEach(([exIdx, customName]) => {
+        const ex = cloned[+dayIdx]?.exercises?.[+exIdx];
+        if(ex && customName && customName.trim()) ex.name = customName.trim();
+      });
     });
-  });
-  // Migrate legacy HIIT picker overrides
-  Object.entries(state.customHiit || {}).forEach(([dayIdx, list]) => {
-    if(Array.isArray(list) && cloned[+dayIdx]) cloned[+dayIdx].hiit = list;
-  });
-  state.plan = {
-    id: 'default',
-    name: '16-Week Strength + Hypertrophy',
-    workouts: cloned,
-    updatedAt: new Date().toISOString()
-  };
+    // Migrate legacy HIIT picker overrides
+    Object.entries(state.customHiit || {}).forEach(([dayIdx, list]) => {
+      if(Array.isArray(list) && cloned[+dayIdx]) cloned[+dayIdx].hiit = list;
+    });
+    state.plan = {
+      id: 'default',
+      name: '16-Week Strength + Hypertrophy',
+      workouts: cloned,
+      hiitPool: JSON.parse(JSON.stringify(HIIT_POOL)),
+      updatedAt: new Date().toISOString()
+    };
+    return;
+  }
+  // Plan exists — backfill any newer fields added in later releases
+  if(!Array.isArray(state.plan.hiitPool) || !state.plan.hiitPool.length){
+    state.plan.hiitPool = JSON.parse(JSON.stringify(HIIT_POOL));
+  }
 }
 function getPlanWorkouts(){ return state.plan?.workouts || DAYS; }
 function getWorkout(dayIdx){ return getPlanWorkouts()[dayIdx]; }
 function getExercise(dayIdx, exIdx){ return getWorkout(dayIdx)?.exercises?.[exIdx]; }
 function getDefaultExercise(dayIdx, exIdx){ return DAYS[dayIdx]?.exercises?.[exIdx]; }
+function getHiitPool(){
+  return Array.isArray(state.plan?.hiitPool) && state.plan.hiitPool.length
+    ? state.plan.hiitPool
+    : HIIT_POOL;
+}
 function savePlan(){
   if(!state.plan) return;
   state.plan.updatedAt = new Date().toISOString();
@@ -3088,8 +3143,15 @@ function setDayHiit(dayIdx, list){
   savePlan();
 }
 let hiitPickerOpen = {};
+let hiitPoolEditIdx = null;     // index of pool item being edited inline
+let hiitPoolAddOpen = false;    // is the "add new" inline form open?
 function toggleHiitPicker(dayIdx){
   hiitPickerOpen[dayIdx] = !hiitPickerOpen[dayIdx];
+  // Reset pool-edit UI when the picker closes so it doesn't reopen mid-edit
+  if(!hiitPickerOpen[dayIdx]){
+    hiitPoolEditIdx = null;
+    hiitPoolAddOpen = false;
+  }
   renderWorkoutContent();
 }
 function toggleHiitItem(dayIdx, name){
@@ -3098,11 +3160,76 @@ function toggleHiitItem(dayIdx, name){
   if(idx>=0){
     current.splice(idx,1);
   } else {
-    const pool = HIIT_POOL.find(h=>h.name===name);
+    const pool = getHiitPool().find(h=>h.name===name);
     if(pool) current.push({name:pool.name, detail:pool.detail});
   }
   setDayHiit(dayIdx, current);
   renderWorkoutContent();
+}
+
+// ----- HIIT master pool (add/edit/remove the menu shown in the picker) -----
+function startEditHiitPool(idx){
+  hiitPoolEditIdx = idx;
+  hiitPoolAddOpen = false;
+  renderWorkoutContent();
+  setTimeout(() => {
+    const el = document.getElementById(`hiit-edit-name-${idx}`);
+    if(el){ el.focus(); el.select(); }
+  }, 30);
+}
+function cancelEditHiitPool(){
+  hiitPoolEditIdx = null;
+  renderWorkoutContent();
+}
+function saveEditHiitPool(idx){
+  const nameEl = document.getElementById(`hiit-edit-name-${idx}`);
+  const detailEl = document.getElementById(`hiit-edit-detail-${idx}`);
+  const name = (nameEl?.value || '').trim();
+  const detail = (detailEl?.value || '').trim();
+  if(!name){ toast('Name required'); return; }
+  const pool = getHiitPool();
+  if(!pool[idx]){ hiitPoolEditIdx = null; renderWorkoutContent(); return; }
+  pool[idx] = {name, detail};
+  savePlan();
+  hiitPoolEditIdx = null;
+  renderWorkoutContent();
+  toast('Updated');
+}
+function startAddHiitPool(){
+  hiitPoolAddOpen = true;
+  hiitPoolEditIdx = null;
+  renderWorkoutContent();
+  setTimeout(() => {
+    const el = document.getElementById('hiit-new-name');
+    if(el) el.focus();
+  }, 30);
+}
+function cancelAddHiitPool(){
+  hiitPoolAddOpen = false;
+  renderWorkoutContent();
+}
+function saveNewHiitPool(){
+  const name = (document.getElementById('hiit-new-name')?.value || '').trim();
+  const detail = (document.getElementById('hiit-new-detail')?.value || '').trim();
+  if(!name){ toast('Name required'); return; }
+  const pool = getHiitPool();
+  pool.push({name, detail});
+  savePlan();
+  hiitPoolAddOpen = false;
+  renderWorkoutContent();
+  toast(`${name} added to pool`);
+}
+function removeHiitPoolItem(idx){
+  const pool = getHiitPool();
+  const item = pool[idx];
+  if(!item) return;
+  if(!confirm(`Remove "${item.name}" from the HIIT pool? Workouts that already use it will keep it — this only hides it from the picker.`)) return;
+  pool.splice(idx, 1);
+  if(hiitPoolEditIdx === idx) hiitPoolEditIdx = null;
+  else if(hiitPoolEditIdx != null && hiitPoolEditIdx > idx) hiitPoolEditIdx--;
+  savePlan();
+  renderWorkoutContent();
+  toast('Removed');
 }
 function removeHiitItem(dayIdx, idx){
   const current = getDayHiit(dayIdx).slice();
@@ -3311,19 +3438,62 @@ function renderWorkoutContent(){
         ${open?'Close picker':'Add HIIT exercise'}
       </button>`;
       if(open){
-        html+=`<div class="hiit-pool"><div class="hiit-pool-title">Pick movements for this session</div>`;
-        HIIT_POOL.forEach(p=>{
-          const sel = dayHiit.some(h=>h.name===p.name);
-          html+=`<div class="hiit-pool-item ${sel?'selected':''}" onclick="toggleHiitItem(${activeDay},'${p.name.replace(/'/g,"\\'")}')">
-            <div class="hiit-pool-check">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+        html+=`<div class="hiit-pool"><div class="hiit-pool-title">Pick movements for this session · tap edit to manage</div>`;
+        const pool = getHiitPool();
+        pool.forEach((p, idx) => {
+          if(hiitPoolEditIdx === idx){
+            // Inline edit form
+            html+=`<div class="hiit-pool-edit">
+              <input class="hiit-pool-edit-input" id="hiit-edit-name-${idx}" type="text" value="${escapeHtml(p.name)}" placeholder="Name" autocapitalize="words">
+              <input class="hiit-pool-edit-input" id="hiit-edit-detail-${idx}" type="text" value="${escapeHtml(p.detail||'')}" placeholder="e.g. 30s on · 30s rest · 4 rounds">
+              <div class="hiit-pool-edit-actions">
+                <button class="btn btn-ghost btn-sm" style="flex:1" onclick="cancelEditHiitPool()">Cancel</button>
+                <button class="btn btn-primary btn-sm" style="flex:1" onclick="saveEditHiitPool(${idx})">Save</button>
+              </div>
+            </div>`;
+            return;
+          }
+          const sel = dayHiit.some(h => h.name === p.name);
+          const safeName = p.name.replace(/'/g, "\\'");
+          html+=`<div class="hiit-pool-item ${sel?'selected':''}">
+            <div class="hiit-pool-toggle" onclick="toggleHiitItem(${activeDay},'${safeName}')">
+              <div class="hiit-pool-check">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+              </div>
+              <div class="hiit-pool-info">
+                <div class="hiit-pool-name">${escapeHtml(p.name)}</div>
+                <div class="hiit-pool-detail">${escapeHtml(p.detail||'')}</div>
+              </div>
             </div>
-            <div class="hiit-pool-info">
-              <div class="hiit-pool-name">${p.name}</div>
-              <div class="hiit-pool-detail">${p.detail}</div>
+            <div class="hiit-pool-actions">
+              <button class="icon-btn" title="Edit" onclick="event.stopPropagation();startEditHiitPool(${idx})">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+              </button>
+              <button class="icon-btn danger" title="Remove from pool" onclick="event.stopPropagation();removeHiitPoolItem(${idx})">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"/></svg>
+              </button>
             </div>
           </div>`;
         });
+        // Add-new form or button at the bottom
+        if(hiitPoolAddOpen){
+          html+=`<div class="hiit-pool-edit">
+            <input class="hiit-pool-edit-input" id="hiit-new-name" type="text" placeholder="Name (e.g. Boxing)" autocapitalize="words">
+            <input class="hiit-pool-edit-input" id="hiit-new-detail" type="text" placeholder="e.g. 3 min rounds · 1 min rest · 5 rounds">
+            <div class="hiit-pool-edit-actions">
+              <button class="btn btn-ghost btn-sm" style="flex:1" onclick="cancelAddHiitPool()">Cancel</button>
+              <button class="btn btn-primary btn-sm" style="flex:1" onclick="saveNewHiitPool()">
+                <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+                Add to pool
+              </button>
+            </div>
+          </div>`;
+        } else {
+          html+=`<button class="hiit-pool-add-btn" onclick="startAddHiitPool()">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+            Add custom HIIT exercise
+          </button>`;
+        }
         html+=`</div>`;
       }
       html+=`</div></div>`;
