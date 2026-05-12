@@ -4662,10 +4662,13 @@ const Cards = {
     const cv = document.getElementById('share-canvas');
     const ctx = cv.getContext('2d');
     ctx.clearRect(0, 0, this.W, this.H);
-    if(this.photo) this.drawPhotoBackground(ctx);
-    else this.drawBackground(ctx);
-    this.drawBrandRow(ctx);
-    if(!this.photo) this.drawFooter(ctx);
+    if(this.photo){
+      this.drawPhotoBackground(ctx);  // owns brand wordmark + frosted panel in photo mode
+    } else {
+      this.drawBackground(ctx);
+      this.drawBrandRow(ctx);
+      this.drawFooter(ctx);
+    }
     switch(this.current){
       case 'session':    this.drawSession(ctx);    break;
       case 'workouts':   this.drawWorkouts(ctx);   break;
@@ -4716,7 +4719,7 @@ const Cards = {
   },
 
   drawPhotoBackground(ctx){
-    // Cover-fit the photo into the 9:16 frame (preserves aspect, crops if needed)
+    // 1. Cover-fit the photo into the 9:16 frame
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, this.W, this.H);
     const img = this.photo;
@@ -4735,24 +4738,58 @@ const Cards = {
       dy = (this.H - dh) / 2;
     }
     ctx.drawImage(img, dx, dy, dw, dh);
-    // Top gradient (for brand row legibility)
-    const topEnd = this.SAFE_TOP + 120;
-    const top = ctx.createLinearGradient(0, 0, 0, topEnd);
-    top.addColorStop(0, 'rgba(0,0,0,0.7)');
-    top.addColorStop(0.6, 'rgba(0,0,0,0.35)');
-    top.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = top;
+
+    // 2. Subtle top gradient so the wordmark stays legible on bright photos
+    const topEnd = this.SAFE_TOP + 100;
+    const topG = ctx.createLinearGradient(0, 0, 0, topEnd);
+    topG.addColorStop(0, 'rgba(0,0,0,0.6)');
+    topG.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = topG;
     ctx.fillRect(0, 0, this.W, topEnd);
-    // Bottom gradient: starts well above the eyebrow so all overlay text is on dark
-    // (eyebrow lives ~Y=900 once compact hero compresses up).
-    const botStart = this.H * 0.42;
-    const bot = ctx.createLinearGradient(0, botStart, 0, this.H);
-    bot.addColorStop(0, 'rgba(0,0,0,0)');
-    bot.addColorStop(0.4, 'rgba(0,0,0,0.55)');
-    bot.addColorStop(0.75, 'rgba(0,0,0,0.85)');
-    bot.addColorStop(1, 'rgba(0,0,0,0.95)');
-    ctx.fillStyle = bot;
-    ctx.fillRect(0, botStart, this.W, this.H - botStart);
+
+    // 3. Frosted-glass panel at the bottom — guaranteed-readable surface for stats.
+    // We blur a clipped copy of the photo, then dark-fill on top. Works on all modern
+    // canvas implementations including iOS Safari (filter:blur supported since 2022).
+    const panelTop = this.SAFE_BOTTOM - 600;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, panelTop, this.W, this.H - panelTop);
+    ctx.clip();
+    ctx.filter = 'blur(48px) brightness(0.5) saturate(1.35)';
+    ctx.drawImage(img, dx, dy, dw, dh);
+    ctx.restore();
+
+    // 4. Dark overlay on top of the blurred area — locks contrast regardless of source
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.fillRect(0, panelTop, this.W, this.H - panelTop);
+
+    // 5. Soft edge into the panel — small fade so the transition isn't a hard line
+    const fadeStart = panelTop - 50;
+    const fadeG = ctx.createLinearGradient(0, fadeStart, 0, panelTop + 30);
+    fadeG.addColorStop(0, 'rgba(0,0,0,0)');
+    fadeG.addColorStop(1, 'rgba(0,0,0,0.35)');
+    ctx.fillStyle = fadeG;
+    ctx.fillRect(0, fadeStart, this.W, 80);
+
+    // 6. Single hairline border at the panel top — anchors it visually
+    ctx.strokeStyle = 'rgba(255,255,255,0.13)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, panelTop);
+    ctx.lineTo(this.W, panelTop);
+    ctx.stroke();
+
+    // 7. Top wordmark — small, restrained, with a tight shadow for legibility
+    ctx.font = '700 22px "JetBrains Mono", monospace';
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.shadowColor = 'rgba(0,0,0,0.55)';
+    ctx.shadowBlur = 14;
+    ctx.shadowOffsetY = 1;
+    this.fillTextSpaced(ctx, 'DIVINIFY', this.PAD, this.SAFE_TOP, 4);
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
   },
 
   drawBrandRow(ctx){
@@ -4944,55 +4981,80 @@ const Cards = {
   },
 
   // ===== Compact (photo-mode) hero helper =====
-  // When a photo is loaded, every card collapses to a clean lower-third anchored
-  // to SAFE_BOTTOM so nothing is clipped by Instagram Story's bottom UI.
-  // Layout (bottom-up): footer stats → subline → big hero → eyebrow.
+  // Renders the content inside the frosted-glass bottom panel that drawPhotoBackground
+  // already painted. Premium / minimal typographic hierarchy:
+  //   date · week  →  accent eyebrow  →  HUGE bold sans hero  →  caption  →  divider  →  2-col stats
+  // We deliberately drop the italic serif here — over photos, the swashy letterforms
+  // compete with the image. Inter 800 reads clean and modern at any size.
   drawCompactHero(ctx, eyebrow, hero, sub, stats){
     const W = this.W, P = this.PAD;
     const SB = this.SAFE_BOTTOM;
-    // Footer stats baseline anchored to safe bottom
-    const statsValueY = SB - 60;
-    const statsLabelY = SB - 110;
-    const subY = SB - 200;
-    const heroSize = hero.size || 280;
-    // Hero baseline sits above the subline; use cap-height ~70% of font size for rough alignment
-    const heroY = subY - (heroSize * 0.72) - 30;
-    const eyebrowY = heroY - 60;
+    const heroSize = Math.min(hero.size || 168, 180);
 
-    // Eyebrow
-    ctx.font = '700 28px "Inter", sans-serif';
-    ctx.fillStyle = this.ACCENT;
+    // Anchored Y positions inside the panel (panel top = SB - 600)
+    const dateY        = SB - 510;
+    const eyebrowY     = SB - 458;
+    const heroY        = SB - 400;
+    const heroBottom   = heroY + heroSize;
+    const subY         = heroBottom + 18;
+    const dividerY     = SB - 142;
+    const statsLabelY  = SB - 108;
+    const statsValueY  = SB - 62;
+
+    // 1. Date · week strip (mono caps, dim)
+    const wk = getWeekNum();
+    const dateStr = new Date().toLocaleDateString('en-US',{month:'short', day:'numeric'}).toUpperCase();
+    ctx.font = '600 22px "JetBrains Mono", monospace';
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    this.fillTextSpaced(ctx, eyebrow.toUpperCase(), P, eyebrowY, 7);
-    // Big hero
-    ctx.font = `italic ${heroSize}px "Instrument Serif", serif`;
+    this.fillTextSpaced(ctx, `${dateStr}  ·  WEEK ${String(wk).padStart(2,'0')} / 16`, P, dateY, 2);
+
+    // 2. Accent eyebrow (small, tracked, premium feel)
+    ctx.font = '700 25px "Inter", sans-serif';
+    ctx.fillStyle = this.ACCENT;
+    this.fillTextSpaced(ctx, eyebrow.toUpperCase(), P, eyebrowY, 5);
+
+    // 3. Hero — bold sans-serif, the visual peak
+    ctx.font = `800 ${heroSize}px "Inter", sans-serif`;
     ctx.fillStyle = '#fff';
     ctx.fillText(String(hero.value), P, heroY);
+
+    // 3a. Unit (small mono, baseline-aligned with the hero number)
     if(hero.unit){
       const w = ctx.measureText(String(hero.value)).width;
-      ctx.font = '500 38px "JetBrains Mono", monospace';
-      ctx.fillStyle = 'rgba(255,255,255,0.7)';
-      ctx.fillText(hero.unit, P + w + 18, heroY + heroSize * 0.55);
+      ctx.font = '500 34px "JetBrains Mono", monospace';
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.fillText(hero.unit, P + w + 18, heroBottom - 56);
     }
-    // Subline
+
+    // 4. Caption / subline (medium weight, soft white)
     if(sub){
-      ctx.font = '500 32px "Inter", sans-serif';
+      ctx.font = '500 30px "Inter", sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,0.85)';
       ctx.fillText(sub, P, subY);
     }
-    // Optional 2-stat row anchored to bottom
+
+    // 5. Hairline divider above the stat row
+    ctx.strokeStyle = 'rgba(255,255,255,0.13)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(P, dividerY);
+    ctx.lineTo(W - P, dividerY);
+    ctx.stroke();
+
+    // 6. 2-column stat row (tracked caps label + bold value)
     if(stats && stats.length){
       const colW = (W - P*2) / stats.length;
       stats.forEach((s, i) => {
         const x = P + i * colW;
-        ctx.font = '700 18px "Inter", sans-serif';
-        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.font = '700 17px "Inter", sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
         ctx.textAlign = 'left';
-        this.fillTextSpaced(ctx, s.label.toUpperCase(), x, statsLabelY, 4);
-        ctx.font = '500 36px "JetBrains Mono", monospace';
+        this.fillTextSpaced(ctx, s.label.toUpperCase(), x, statsLabelY, 3);
+        ctx.font = '600 34px "Inter", sans-serif';
         ctx.fillStyle = '#fff';
-        ctx.fillText(`${s.value}${s.unit?' '+s.unit:''}`, x, statsValueY);
+        ctx.fillText(`${s.value}${s.unit ? ' ' + s.unit : ''}`, x, statsValueY);
       });
     }
   },
