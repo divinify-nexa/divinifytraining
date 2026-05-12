@@ -4467,8 +4467,13 @@ function statsBestPR(){
   return {name: prs[0][0], weight: +prs[0][1]};
 }
 function statsWeek(weekOffset = 0){
-  const end = shiftDateKey(todayKey(), -7 * weekOffset);
-  const start = shiftDateKey(end, -6);
+  // Current calendar week (Mon → Sun) so the dot grid labels (M T W T F S S)
+  // align correctly with each date. Future days within the current week stay
+  // empty/outline rather than being miscounted as missed.
+  const todayDayIdx = getDayIdxFromDate(todayKey()); // 0=Mon … 6=Sun
+  const thisMonday = shiftDateKey(todayKey(), -todayDayIdx);
+  const start = weekOffset === 0 ? thisMonday : shiftDateKey(thisMonday, -7 * weekOffset);
+  const end = shiftDateKey(start, 6);
   const dates = [];
   for(let i=0;i<7;i++) dates.push(shiftDateKey(start, i));
   let workouts = 0, totalSets = 0, totalProt = 0, totalCal = 0, days = 0;
@@ -5129,9 +5134,10 @@ const Cards = {
     }
 
     this.drawEyebrow(ctx, `Workouts · ${monthLabel}`, 460);
-    this.drawHugeNumber(ctx, trained, 540);
-    ctx.font = `italic 380px "Instrument Serif", serif`;
-    const subY = 540 + 320;
+    // Hero sized down from 380→260: the italic-serif "2" had a low swash that
+    // overlapped the subline and dot-grid labels at the larger size.
+    this.drawHugeNumber(ctx, trained, 540, {size: 260});
+    const subY = 830;
     this.drawSubline(ctx, 'workouts this month', subY, {weight:500, size:38, color:this.TEXT_2});
 
     const gridY = subY + 80;
@@ -5309,7 +5315,13 @@ const Cards = {
     ctx.fillText('sessions', this.PAD + w + 24, 760);
 
     // 7-day dot row
-    const entries = wk.dates.map(d => ({date:d, status: statsTrainedOn(d)}));
+    // Future days within the current week render as outline circles — no judgement
+    // until they happen. Past days fall through to statsTrainedOn (done/rest/missed).
+    const today = todayKey();
+    const entries = wk.dates.map(d => ({
+      date: d,
+      status: d > today ? 'future' : statsTrainedOn(d)
+    }));
     this.drawDotGrid(ctx, entries, this.PAD, 920, {cols:7, dotR:20, gap:24, showLabels:true});
 
     this.drawStatGrid(ctx, [
