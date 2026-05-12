@@ -5453,20 +5453,19 @@ const Cards = {
 };
 
 // ===== Barcode scanner =====
-// Opens a full-screen camera viewfinder, detects UPC/EAN barcodes, looks them
-// up against OpenFoodFacts (huge crowdsourced barcode DB, exact-match endpoint,
-// no API key) with USDA FoodData Central as a fallback. On success, normalizes
-// to the same shape as `normalizeFoodHit` and shows it in the food-search-results
-// area so the user can adjust grams and log it with one tap — same flow as text search.
+// Opens a full-screen camera viewfinder, detects UPC/EAN barcodes via the
+// @zxing/library decoder (battle-tested, works across iOS Safari, Chrome,
+// Firefox), and looks the result up against OpenFoodFacts (huge crowdsourced
+// barcode DB, no API key) with USDA FoodData Central as fallback. We don't
+// use the native BarcodeDetector API — it's quietly broken on Safari and
+// silently returns no detections forever, which made the camera feel "stuck."
+const ZXING_CDN = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';
+
 const Scanner = {
-  stream: null,
-  detector: null,            // BarcodeDetector instance (native, when available)
-  zxingReader: null,         // ZXing fallback reader
-  zxingControls: null,       // ZXing decode-loop controls (for stopping)
-  rafId: null,
+  zxingReader: null,
   detecting: false,
   lookingUp: false,
-  lastBarcode: null,         // dedupe rapid repeat scans
+  lastBarcode: null,
   lastBarcodeAt: 0,
   torchOn: false,
   manualOpen: false,
@@ -5474,83 +5473,102 @@ const Scanner = {
   async open(){
     document.getElementById('scanner-overlay').classList.add('open');
     document.body.classList.add('scanner-open');
-    this.setStatus('Starting camera…');
     this.manualOpen = false;
     document.getElementById('scanner-manual').hidden = true;
     document.getElementById('scanner-manual-toggle').textContent = 'Type barcode manually';
     document.getElementById('scanner-manual-input').value = '';
 
+    // Load ZXing first (lazy, cached after first scan)
+    this.setStatus(window.ZXing ? 'Starting camera…' : 'Loading scanner…');
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: false
-      });
+      await this.ensureZXing();
     } catch(e){
-      console.warn('Camera access failed:', e);
-      const msg = e.name === 'NotAllowedError'
-        ? 'Camera permission denied. Use "Type barcode manually" below.'
-        : 'No camera available. Type a barcode manually below.';
-      this.setStatus(msg, 'error');
+      console.error('[Scanner] ZXing failed to load:', e);
+      this.setStatus('Could not load scanner library. Check your connection or type the barcode below.', 'error');
       return;
     }
 
+    if(!navigator.mediaDevices?.getUserMedia){
+      this.setStatus('Your browser does not allow camera access. Type the barcode below.', 'error');
+      return;
+    }
+
+    this.setStatus('Starting camera…');
     const video = document.getElementById('scanner-video');
-    video.srcObject = this.stream;
-    await video.play().catch(() => {});
+    try {
+      this.zxingReader = new window.ZXing.BrowserMultiFormatReader();
+      // Reasonable hints — most food packaging is EAN-13 / UPC-A
+      const hints = new Map();
+      const formats = window.ZXing.BarcodeFormat;
+      if(formats){
+        hints.set(window.ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+          formats.EAN_13, formats.EAN_8, formats.UPC_A, formats.UPC_E,
+          formats.CODE_128, formats.CODE_39, formats.ITF
+        ]);
+        hints.set(window.ZXing.DecodeHintType.TRY_HARDER, true);
+      }
+      this.zxingReader = new window.ZXing.BrowserMultiFormatReader(hints);
 
-    // Show torch button if supported on this track
-    const track = this.stream.getVideoTracks()[0];
-    const caps = track?.getCapabilities?.();
-    document.getElementById('scanner-flash').hidden = !(caps && caps.torch);
+      // Let ZXing open the camera with our preferred constraints — high resolution
+      // helps it lock on faster, especially on smaller barcodes.
+      const constraints = {
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        },
+        audio: false
+      };
+      console.log('[Scanner] Starting decode with constraints:', constraints);
+      await this.zxingReader.decodeFromConstraints(constraints, video, (result, err) => {
+        if(result){
+          console.log('[Scanner] Detected:', result.getText(), result.getBarcodeFormat?.());
+          this.onDetected(result.getText());
+        }
+        // Per-frame "no result" errors are normal — only log fatal ones
+        if(err && err.name && err.name !== 'NotFoundException' && err.name !== 'ChecksumException' && err.name !== 'FormatException'){
+          console.warn('[Scanner] decode error:', err);
+        }
+      });
 
-    this.setStatus('Point your camera at a barcode');
-    this.startDetection(video);
+      this.detecting = true;
+      this.setStatus('Point your camera at a barcode');
+
+      // Show torch button if supported on this track
+      const stream = video.srcObject;
+      const track = stream?.getVideoTracks?.()[0];
+      const caps = track?.getCapabilities?.();
+      document.getElementById('scanner-flash').hidden = !(caps && caps.torch);
+    } catch(e){
+      console.error('[Scanner] camera/decoder failed:', e);
+      const msg = e.name === 'NotAllowedError' || e.message?.includes('Permission')
+        ? 'Camera permission denied. Use "Type barcode manually" below.'
+        : e.name === 'NotFoundError' || e.name === 'OverconstrainedError'
+          ? 'No back camera available. Type the barcode below.'
+          : `Camera failed: ${e.message || e.name || 'unknown error'}. Try again or type the barcode.`;
+      this.setStatus(msg, 'error');
+    }
   },
 
-  async startDetection(video){
-    // Path A: native BarcodeDetector (fast, no extra JS)
-    if('BarcodeDetector' in window){
-      try {
-        const formats = await window.BarcodeDetector.getSupportedFormats();
-        const want = ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','itf'].filter(f => formats.includes(f));
-        this.detector = new window.BarcodeDetector({ formats: want.length ? want : undefined });
-        this.detecting = true;
-        const loop = async () => {
-          if(!this.detecting) return;
-          try {
-            const codes = await this.detector.detect(video);
-            if(codes && codes.length){
-              this.onDetected(codes[0].rawValue);
-            }
-          } catch(_){ /* ignore per-frame errors */ }
-          this.rafId = requestAnimationFrame(loop);
-        };
-        this.rafId = requestAnimationFrame(loop);
+  async ensureZXing(){
+    if(window.ZXing) return;
+    await new Promise((resolve, reject) => {
+      const existing = document.querySelector(`script[src="${ZXING_CDN}"]`);
+      if(existing){
+        existing.addEventListener('load', resolve, {once:true});
+        existing.addEventListener('error', () => reject(new Error('ZXing load failed')), {once:true});
         return;
-      } catch(e){
-        console.warn('BarcodeDetector failed, falling back to ZXing:', e);
       }
-    }
-    // Path B: load @zxing/browser from CDN and use it
-    try {
-      if(!window.ZXingBrowser){
-        await new Promise((resolve, reject) => {
-          const s = document.createElement('script');
-          s.src = 'https://unpkg.com/@zxing/browser@0.1.5/umd/index.min.js';
-          s.onload = resolve;
-          s.onerror = () => reject(new Error('Failed to load ZXing'));
-          document.head.appendChild(s);
-        });
-      }
-      this.zxingReader = new window.ZXingBrowser.BrowserMultiFormatReader();
-      this.zxingControls = await this.zxingReader.decodeFromVideoElement(video, (result, err) => {
-        if(result) this.onDetected(result.getText());
-      });
-      this.detecting = true;
-    } catch(e){
-      console.warn('ZXing fallback failed:', e);
-      this.setStatus('Scanner unavailable on this browser. Type the barcode below.', 'error');
-    }
+      const s = document.createElement('script');
+      s.src = ZXING_CDN;
+      s.async = true;
+      s.onload = () => {
+        if(window.ZXing) resolve();
+        else reject(new Error('ZXing loaded but global missing'));
+      };
+      s.onerror = () => reject(new Error('Failed to load ZXing from CDN'));
+      document.head.appendChild(s);
+    });
   },
 
   onDetected(code){
@@ -5615,34 +5633,31 @@ const Scanner = {
   },
 
   async toggleTorch(){
-    if(!this.stream) return;
-    const track = this.stream.getVideoTracks()[0];
+    const video = document.getElementById('scanner-video');
+    const stream = video?.srcObject;
+    const track = stream?.getVideoTracks?.()[0];
     if(!track?.getCapabilities?.().torch) return;
     this.torchOn = !this.torchOn;
     try {
       await track.applyConstraints({ advanced: [{ torch: this.torchOn }] });
       document.getElementById('scanner-flash').classList.toggle('active', this.torchOn);
-    } catch(e){ console.warn('Torch toggle failed:', e); }
+    } catch(e){ console.warn('[Scanner] torch toggle failed:', e); }
   },
 
   close(){
     this.detecting = false;
-    if(this.rafId){ cancelAnimationFrame(this.rafId); this.rafId = null; }
-    if(this.zxingControls){
-      try { this.zxingControls.stop(); } catch(_) {}
-      this.zxingControls = null;
-    }
+    // ZXing's reset() stops the decode loop AND releases the camera stream
     if(this.zxingReader){
-      try { this.zxingReader.reset(); } catch(_) {}
+      try { this.zxingReader.reset(); } catch(e){ console.warn('[Scanner] reset error:', e); }
       this.zxingReader = null;
     }
-    if(this.stream){
-      this.stream.getTracks().forEach(t => t.stop());
-      this.stream = null;
-    }
+    // Belt-and-suspenders: stop any tracks still attached to the video element
     const video = document.getElementById('scanner-video');
+    const stream = video?.srcObject;
+    if(stream && typeof stream.getTracks === 'function'){
+      stream.getTracks().forEach(t => t.stop());
+    }
     if(video) video.srcObject = null;
-    this.detector = null;
     this.lookingUp = false;
     this.lastBarcode = null;
     this.torchOn = false;
