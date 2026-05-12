@@ -403,6 +403,45 @@ body.wiz-open{overflow:hidden}
 .today-cta{display:flex;justify-content:space-between;align-items:center}
 .today-meta{font-size:12px;color:var(--text-3);font-weight:500}
 
+.food-search-row{display:flex;gap:8px;align-items:stretch;margin-bottom:10px}
+.food-search-row .food-search-input-wrap{flex:1;margin-bottom:0}
+.food-scan-btn{flex-shrink:0;width:44px;height:44px;border-radius:12px;background:var(--surface);border:1px solid var(--border-strong);color:var(--text-2);display:flex;align-items:center;justify-content:center;cursor:pointer;font-family:inherit;transition:background .15s,color .15s,border-color .15s,transform .1s}
+.food-scan-btn:hover{background:var(--surface-2);color:var(--accent);border-color:var(--accent)}
+.food-scan-btn:active{transform:scale(0.95)}
+.food-scan-btn svg{width:20px;height:20px;stroke-width:2}
+
+/* ===== Barcode scanner overlay ===== */
+.scanner-overlay{position:fixed;inset:0;background:#000;z-index:9999;display:none;flex-direction:column;animation:wiz-in .25s ease}
+.scanner-overlay.open{display:flex}
+body.scanner-open nav{display:none}
+body.scanner-open{overflow:hidden}
+.scanner-top{display:flex;align-items:center;justify-content:space-between;padding:calc(12px + env(safe-area-inset-top)) 18px 12px;gap:12px;background:linear-gradient(to bottom, rgba(0,0,0,0.6), rgba(0,0,0,0));position:absolute;top:0;left:0;right:0;z-index:2}
+.scanner-close, .scanner-flash{background:rgba(255,255,255,0.12);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:none;color:#fff;width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s}
+.scanner-close:hover, .scanner-flash:hover{background:rgba(255,255,255,0.2)}
+.scanner-flash.active{background:var(--accent);color:var(--accent-text)}
+.scanner-close svg, .scanner-flash svg{width:18px;height:18px;stroke-width:2.5}
+.scanner-title{color:#fff;font-size:15px;font-weight:600;letter-spacing:-0.01em;text-shadow:0 1px 4px rgba(0,0,0,0.5)}
+.scanner-stage{flex:1 1 auto;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center}
+#scanner-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
+.scanner-viewfinder{position:relative;width:min(78vw,520px);height:42vh;max-height:280px;z-index:1;pointer-events:none}
+.scanner-corner{position:absolute;width:28px;height:28px;border-color:var(--accent);border-style:solid;border-width:0}
+.scanner-corner.tl{top:0;left:0;border-top-width:3px;border-left-width:3px;border-top-left-radius:6px}
+.scanner-corner.tr{top:0;right:0;border-top-width:3px;border-right-width:3px;border-top-right-radius:6px}
+.scanner-corner.bl{bottom:0;left:0;border-bottom-width:3px;border-left-width:3px;border-bottom-left-radius:6px}
+.scanner-corner.br{bottom:0;right:0;border-bottom-width:3px;border-right-width:3px;border-bottom-right-radius:6px}
+.scanner-line{position:absolute;left:14px;right:14px;top:50%;height:2px;background:linear-gradient(90deg,transparent,var(--accent),transparent);box-shadow:0 0 12px var(--accent);animation:scan-line 2s ease-in-out infinite;border-radius:99px}
+@keyframes scan-line{0%,100%{top:14px;opacity:0.85}50%{top:calc(100% - 14px);opacity:0.6}}
+.scanner-status{position:absolute;bottom:24px;left:0;right:0;text-align:center;color:#fff;font-size:13px;font-weight:600;letter-spacing:-0.005em;text-shadow:0 1px 6px rgba(0,0,0,0.7);padding:0 24px;z-index:2}
+.scanner-status.error{color:var(--warn)}
+.scanner-status.success{color:var(--done)}
+.scanner-foot{padding:18px 20px calc(20px + env(safe-area-inset-bottom));background:linear-gradient(to top, rgba(0,0,0,0.85), rgba(0,0,0,0));position:absolute;bottom:0;left:0;right:0;z-index:2;display:flex;flex-direction:column;gap:10px;align-items:center}
+.scanner-manual-toggle{background:rgba(255,255,255,0.1);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.15);color:#fff;font-family:inherit;font-size:12.5px;font-weight:600;padding:8px 14px;border-radius:99px;cursor:pointer;transition:background .15s}
+.scanner-manual-toggle:hover{background:rgba(255,255,255,0.18)}
+.scanner-manual{display:flex;gap:8px;width:100%;max-width:420px}
+.scanner-manual-input{flex:1;background:rgba(255,255,255,0.12);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.2);color:#fff;font-family:'JetBrains Mono',monospace;font-size:14px;padding:11px 14px;border-radius:10px}
+.scanner-manual-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+.scanner-manual-input::placeholder{color:rgba(255,255,255,0.4)}
+
 .food-search-input-wrap{position:relative;margin-bottom:10px}
 .food-search-input-wrap svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--text-3);stroke-width:2;pointer-events:none}
 .food-search-input-wrap input[type=search]{
@@ -1464,6 +1503,37 @@ textarea.pe-input{resize:vertical;min-height:60px;line-height:1.5}
   </div>
 </div>
 
+<!-- Barcode scanner -->
+<div class="scanner-overlay" id="scanner-overlay" role="dialog" aria-modal="true" aria-label="Scan barcode">
+  <div class="scanner-top">
+    <button class="scanner-close" onclick="Scanner.close()" aria-label="Close">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+    </button>
+    <div class="scanner-title">Scan barcode</div>
+    <button class="scanner-flash" id="scanner-flash" onclick="Scanner.toggleTorch()" aria-label="Toggle flashlight" hidden>
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+    </button>
+  </div>
+  <div class="scanner-stage">
+    <video id="scanner-video" playsinline muted></video>
+    <div class="scanner-viewfinder">
+      <div class="scanner-corner tl"></div>
+      <div class="scanner-corner tr"></div>
+      <div class="scanner-corner bl"></div>
+      <div class="scanner-corner br"></div>
+      <div class="scanner-line"></div>
+    </div>
+    <div class="scanner-status" id="scanner-status">Point your camera at a barcode</div>
+  </div>
+  <div class="scanner-foot">
+    <button class="scanner-manual-toggle" onclick="Scanner.toggleManual()" id="scanner-manual-toggle">Type barcode manually</button>
+    <div class="scanner-manual" id="scanner-manual" hidden>
+      <input class="scanner-manual-input" id="scanner-manual-input" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="12 or 13 digit barcode" autocomplete="off">
+      <button class="btn btn-primary" onclick="Scanner.submitManual()">Look up</button>
+    </div>
+  </div>
+</div>
+
 <!-- Plan editor (full-screen) -->
 <div class="plan-editor" id="plan-editor" role="dialog" aria-modal="true" aria-label="Edit workout">
   <div class="pe-top">
@@ -1668,12 +1738,20 @@ textarea.pe-input{resize:vertical;min-height:60px;line-height:1.5}
   <div class="section editable-only">
     <div class="section-label" style="margin-bottom:10px">Search foods</div>
     <div class="card">
-      <div class="food-search-input-wrap">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 100-15 7.5 7.5 0 000 15z"/></svg>
-        <input type="search" id="food-search-input" placeholder="e.g. Oikos mixed berry yogurt" autocomplete="off" autocapitalize="none" spellcheck="false">
+      <div class="food-search-row">
+        <div class="food-search-input-wrap">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 100-15 7.5 7.5 0 000 15z"/></svg>
+          <input type="search" id="food-search-input" placeholder="e.g. Oikos mixed berry yogurt" autocomplete="off" autocapitalize="none" spellcheck="false">
+        </div>
+        <button class="food-scan-btn" onclick="Scanner.open()" aria-label="Scan barcode" title="Scan barcode">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 7V5a1 1 0 011-1h2M17 4h2a1 1 0 011 1v2M20 17v2a1 1 0 01-1 1h-2M7 20H5a1 1 0 01-1-1v-2"/>
+            <path stroke-linecap="round" d="M7 8v8M10 8v8M13 8v8M16 8v8"/>
+          </svg>
+        </button>
       </div>
       <div id="food-key-bar"></div>
-      <div id="food-search-results"><div class="food-search-status">Search a brand or food. Macros load automatically — adjust grams to match what you ate.</div></div>
+      <div id="food-search-results"><div class="food-search-status">Search a brand or food, or tap the barcode icon to scan a package. Macros load automatically — adjust grams to match what you ate.</div></div>
     </div>
   </div>
 
@@ -5373,6 +5451,267 @@ const Cards = {
     }, 900);
   }
 };
+
+// ===== Barcode scanner =====
+// Opens a full-screen camera viewfinder, detects UPC/EAN barcodes, looks them
+// up against OpenFoodFacts (huge crowdsourced barcode DB, exact-match endpoint,
+// no API key) with USDA FoodData Central as a fallback. On success, normalizes
+// to the same shape as `normalizeFoodHit` and shows it in the food-search-results
+// area so the user can adjust grams and log it with one tap — same flow as text search.
+const Scanner = {
+  stream: null,
+  detector: null,            // BarcodeDetector instance (native, when available)
+  zxingReader: null,         // ZXing fallback reader
+  zxingControls: null,       // ZXing decode-loop controls (for stopping)
+  rafId: null,
+  detecting: false,
+  lookingUp: false,
+  lastBarcode: null,         // dedupe rapid repeat scans
+  lastBarcodeAt: 0,
+  torchOn: false,
+  manualOpen: false,
+
+  async open(){
+    document.getElementById('scanner-overlay').classList.add('open');
+    document.body.classList.add('scanner-open');
+    this.setStatus('Starting camera…');
+    this.manualOpen = false;
+    document.getElementById('scanner-manual').hidden = true;
+    document.getElementById('scanner-manual-toggle').textContent = 'Type barcode manually';
+    document.getElementById('scanner-manual-input').value = '';
+
+    try {
+      this.stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false
+      });
+    } catch(e){
+      console.warn('Camera access failed:', e);
+      const msg = e.name === 'NotAllowedError'
+        ? 'Camera permission denied. Use "Type barcode manually" below.'
+        : 'No camera available. Type a barcode manually below.';
+      this.setStatus(msg, 'error');
+      return;
+    }
+
+    const video = document.getElementById('scanner-video');
+    video.srcObject = this.stream;
+    await video.play().catch(() => {});
+
+    // Show torch button if supported on this track
+    const track = this.stream.getVideoTracks()[0];
+    const caps = track?.getCapabilities?.();
+    document.getElementById('scanner-flash').hidden = !(caps && caps.torch);
+
+    this.setStatus('Point your camera at a barcode');
+    this.startDetection(video);
+  },
+
+  async startDetection(video){
+    // Path A: native BarcodeDetector (fast, no extra JS)
+    if('BarcodeDetector' in window){
+      try {
+        const formats = await window.BarcodeDetector.getSupportedFormats();
+        const want = ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','itf'].filter(f => formats.includes(f));
+        this.detector = new window.BarcodeDetector({ formats: want.length ? want : undefined });
+        this.detecting = true;
+        const loop = async () => {
+          if(!this.detecting) return;
+          try {
+            const codes = await this.detector.detect(video);
+            if(codes && codes.length){
+              this.onDetected(codes[0].rawValue);
+            }
+          } catch(_){ /* ignore per-frame errors */ }
+          this.rafId = requestAnimationFrame(loop);
+        };
+        this.rafId = requestAnimationFrame(loop);
+        return;
+      } catch(e){
+        console.warn('BarcodeDetector failed, falling back to ZXing:', e);
+      }
+    }
+    // Path B: load @zxing/browser from CDN and use it
+    try {
+      if(!window.ZXingBrowser){
+        await new Promise((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = 'https://unpkg.com/@zxing/browser@0.1.5/umd/index.min.js';
+          s.onload = resolve;
+          s.onerror = () => reject(new Error('Failed to load ZXing'));
+          document.head.appendChild(s);
+        });
+      }
+      this.zxingReader = new window.ZXingBrowser.BrowserMultiFormatReader();
+      this.zxingControls = await this.zxingReader.decodeFromVideoElement(video, (result, err) => {
+        if(result) this.onDetected(result.getText());
+      });
+      this.detecting = true;
+    } catch(e){
+      console.warn('ZXing fallback failed:', e);
+      this.setStatus('Scanner unavailable on this browser. Type the barcode below.', 'error');
+    }
+  },
+
+  onDetected(code){
+    if(!code) return;
+    const now = Date.now();
+    // Dedupe: ignore the same code if seen within 1.5s
+    if(code === this.lastBarcode && now - this.lastBarcodeAt < 1500) return;
+    if(this.lookingUp) return;
+    this.lastBarcode = code;
+    this.lastBarcodeAt = now;
+    this.handleBarcode(code);
+  },
+
+  async handleBarcode(code){
+    this.lookingUp = true;
+    this.setStatus(`Found ${code} — looking up…`, 'success');
+    // Brief haptic on supported devices
+    if(navigator.vibrate) navigator.vibrate(50);
+    try {
+      const hit = await lookupBarcode(code);
+      if(!hit){
+        this.setStatus(`Barcode ${code} not in OpenFoodFacts or USDA. Try another product or add it manually.`, 'error');
+        this.lookingUp = false;
+        return;
+      }
+      // Hand the result over to the Fuel tab's food-search-results UI
+      foodSearchResults = [hit];
+      lastFoodQuery = code;
+      renderFoodSearchResults(foodResultCard(hit, 0));
+      this.close();
+      toast(`${hit.name}`);
+    } catch(e){
+      console.warn('Barcode lookup failed:', e);
+      this.setStatus(`Lookup failed: ${e.message || 'network error'}. Try again.`, 'error');
+      this.lookingUp = false;
+    }
+  },
+
+  setStatus(msg, kind){
+    const el = document.getElementById('scanner-status');
+    if(!el) return;
+    el.textContent = msg;
+    el.classList.remove('error','success');
+    if(kind) el.classList.add(kind);
+  },
+
+  toggleManual(){
+    this.manualOpen = !this.manualOpen;
+    const manual = document.getElementById('scanner-manual');
+    const toggle = document.getElementById('scanner-manual-toggle');
+    manual.hidden = !this.manualOpen;
+    toggle.textContent = this.manualOpen ? 'Hide manual entry' : 'Type barcode manually';
+    if(this.manualOpen){
+      setTimeout(() => document.getElementById('scanner-manual-input')?.focus(), 30);
+    }
+  },
+
+  submitManual(){
+    const v = (document.getElementById('scanner-manual-input')?.value || '').replace(/\D/g, '');
+    if(v.length < 8){ this.setStatus('Enter at least 8 digits', 'error'); return; }
+    this.handleBarcode(v);
+  },
+
+  async toggleTorch(){
+    if(!this.stream) return;
+    const track = this.stream.getVideoTracks()[0];
+    if(!track?.getCapabilities?.().torch) return;
+    this.torchOn = !this.torchOn;
+    try {
+      await track.applyConstraints({ advanced: [{ torch: this.torchOn }] });
+      document.getElementById('scanner-flash').classList.toggle('active', this.torchOn);
+    } catch(e){ console.warn('Torch toggle failed:', e); }
+  },
+
+  close(){
+    this.detecting = false;
+    if(this.rafId){ cancelAnimationFrame(this.rafId); this.rafId = null; }
+    if(this.zxingControls){
+      try { this.zxingControls.stop(); } catch(_) {}
+      this.zxingControls = null;
+    }
+    if(this.zxingReader){
+      try { this.zxingReader.reset(); } catch(_) {}
+      this.zxingReader = null;
+    }
+    if(this.stream){
+      this.stream.getTracks().forEach(t => t.stop());
+      this.stream = null;
+    }
+    const video = document.getElementById('scanner-video');
+    if(video) video.srcObject = null;
+    this.detector = null;
+    this.lookingUp = false;
+    this.lastBarcode = null;
+    this.torchOn = false;
+    document.getElementById('scanner-flash').classList.remove('active');
+    document.getElementById('scanner-overlay').classList.remove('open');
+    document.body.classList.remove('scanner-open');
+  }
+};
+
+// Lookup chain: OpenFoodFacts (barcode-exact, no key, huge db) → USDA by UPC.
+// Returns the same shape as normalizeFoodHit() so the existing result card UI works as-is.
+async function lookupBarcode(barcode){
+  // Try OpenFoodFacts first
+  try {
+    const off = await fetchOpenFoodFactsByBarcode(barcode);
+    if(off) return off;
+  } catch(e){ console.warn('OFF lookup failed:', e); }
+  // Fallback: USDA by UPC (uses existing helper)
+  try {
+    const data = await fetchUSDA(barcode);
+    const hits = (data.foods||[])
+      .map(f => normalizeFoodHit(f))
+      .filter(h => h && h.cal >= 0 && h.name);
+    if(hits.length) return hits[0];
+  } catch(e){ console.warn('USDA fallback failed:', e); }
+  return null;
+}
+
+async function fetchOpenFoodFactsByBarcode(barcode){
+  const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}?fields=product_name,brands,nutriments,serving_size,serving_quantity,quantity`;
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('http_' + res.status);
+  const data = await res.json();
+  if(data.status !== 1 || !data.product) return null;
+  const p = data.product;
+  const n = p.nutriments || {};
+  // Energy: OFF gives kcal directly when available; otherwise convert from kJ
+  let cal100 = parseFloat(n['energy-kcal_100g']);
+  if(!isFinite(cal100) || cal100 < 0){
+    const kj100 = parseFloat(n['energy-kj_100g'] || n['energy_100g']);
+    if(isFinite(kj100) && kj100 > 0) cal100 = kj100 / 4.184;
+  }
+  const prot100 = parseFloat(n.proteins_100g);
+  const carb100 = parseFloat(n.carbohydrates_100g);
+  const fat100 = parseFloat(n.fat_100g);
+  if(!isFinite(cal100) || cal100 <= 0) return null;
+  const name = (p.product_name || '').trim();
+  if(!name) return null;
+  const brand = (p.brands || '').split(',')[0].trim();
+  // Serving size in grams when OFF has a clean number
+  let servingGrams = null;
+  const sq = parseFloat(p.serving_quantity);
+  if(isFinite(sq) && sq > 0 && sq < 2000) servingGrams = Math.round(sq);
+  const servingLabel = (p.serving_size || '').trim();
+  return {
+    name, brand,
+    fdcId: barcode, // reuse field name for downstream uniqueness; safe
+    cal: Math.round(cal100),
+    prot: Math.round(prot100 || 0),
+    carb: Math.round(carb100 || 0),
+    fat: Math.round(fat100 || 0),
+    cal100,
+    prot100: isFinite(prot100) ? prot100 : 0,
+    carb100: isFinite(carb100) ? carb100 : 0,
+    fat100: isFinite(fat100) ? fat100 : 0,
+    servingGrams,
+    servingLabel
+  };
+}
 
 // ===== Artemis plan-change proposals =====
 // Renders a structured diff card in the chat for each propose_plan_change tool use.
