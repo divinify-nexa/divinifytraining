@@ -220,6 +220,39 @@ body.share-open{overflow:hidden}
 .share-photo-btn.danger{color:var(--text-3)}
 .share-photo-btn.danger:hover{color:var(--warn);border-color:var(--warn)}
 
+/* ===== Dashboard: Water goal card ===== */
+.water-card{display:flex;align-items:center;gap:14px;padding:18px 18px;text-align:left;cursor:pointer;border:1px solid var(--border);background:var(--surface);background-image:var(--grad-card);transition:background .15s, border-color .15s, transform .08s;width:100%;font-family:inherit}
+.water-card:hover{background:var(--surface-2)}
+.water-card:active{transform:scale(0.99)}
+.water-card.hit{border-color:var(--accent);background:var(--accent-soft);background-image:none}
+.water-check{flex-shrink:0;width:42px;height:42px;border-radius:12px;border:2px solid var(--border-strong);display:flex;align-items:center;justify-content:center;color:transparent;transition:all .2s cubic-bezier(.34,1.56,.64,1)}
+.water-card.hit .water-check{border-color:var(--accent);background:var(--accent);color:var(--accent-text)}
+.water-check svg{width:22px;height:22px;stroke-width:3;transition:transform .2s}
+.water-card.hit .water-check svg{transform:scale(1)}
+.water-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.water-title{font-size:14.5px;font-weight:600;color:var(--text);letter-spacing:-0.005em;line-height:1.3}
+.water-card.hit .water-title{color:var(--text)}
+.water-sub{font-size:11.5px;color:var(--text-3);font-weight:500}
+.water-card.hit .water-sub{color:var(--accent)}
+
+/* ===== Dashboard: Today's focus AI card ===== */
+.focus-card{padding:18px;display:flex;flex-direction:column;gap:12px;min-height:80px}
+.focus-text{font-size:14px;line-height:1.55;color:var(--text);font-weight:500;letter-spacing:-0.005em;white-space:pre-wrap}
+.focus-empty{font-size:13px;color:var(--text-3);line-height:1.5}
+.focus-empty a{color:var(--accent);font-weight:600;cursor:pointer;text-decoration:none}
+.focus-empty a:hover{text-decoration:underline}
+.focus-loading{display:flex;align-items:center;gap:10px;color:var(--text-3);font-size:12.5px;font-weight:500;padding:6px 0}
+.focus-loading-dot{width:5px;height:5px;border-radius:50%;background:var(--accent);animation:focus-pulse 1.4s ease-in-out infinite both}
+.focus-loading-dot:nth-child(2){animation-delay:0.2s}
+.focus-loading-dot:nth-child(3){animation-delay:0.4s}
+@keyframes focus-pulse{0%,80%,100%{opacity:0.3;transform:scale(0.8)}40%{opacity:1;transform:scale(1)}}
+.focus-foot{display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--border);padding-top:10px;font-size:11px;color:var(--text-4);font-weight:500;letter-spacing:0.02em}
+.focus-foot button{background:transparent;border:none;color:var(--text-3);font-family:inherit;font-size:11px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:4px;padding:4px 6px;border-radius:6px;transition:background .15s, color .15s}
+.focus-foot button:hover{background:var(--surface-2);color:var(--accent)}
+.focus-foot button svg{width:11px;height:11px;stroke-width:2.5;transition:transform .3s}
+.focus-foot button.spinning svg{animation:spin 1s linear infinite}
+@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+
 /* ===== Profile wizard (full-screen onboarding) ===== */
 .wiz-overlay{position:fixed;inset:0;background:var(--bg);z-index:9999;display:none;flex-direction:column;animation:wiz-in .3s ease}
 .wiz-overlay.open{display:flex}
@@ -1645,11 +1678,36 @@ textarea.pe-input{resize:vertical;min-height:60px;line-height:1.5}
     </div>
   </div>
 
+  <div class="section" id="dash-focus-section">
+    <div class="section-head">
+      <div class="section-label">
+        <svg style="width:11px;height:11px;display:inline-block;vertical-align:-1px;margin-right:5px;color:var(--accent)" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M19 17v4M17 19h4M11 3l2.39 5.42L19 11l-5.61 2.58L11 19l-2.39-5.42L3 11l5.61-2.58L11 3z"/></svg>
+        Today's focus
+      </div>
+    </div>
+    <div class="card focus-card" id="dash-focus-card"></div>
+  </div>
+
   <div class="section">
     <div class="section-head">
       <div class="section-label" id="today-session-label">Today's session</div>
     </div>
     <div class="today-hero" id="today-session-content"></div>
+  </div>
+
+  <div class="section">
+    <div class="section-head">
+      <div class="section-label">Water goal</div>
+    </div>
+    <button class="card water-card editable-only" id="water-card" onclick="toggleWater()">
+      <div class="water-check" id="water-check">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+      </div>
+      <div class="water-text">
+        <div class="water-title" id="water-title">Tap when you've hit your water goal</div>
+        <div class="water-sub" id="water-sub">One quick check-in per day</div>
+      </div>
+    </button>
   </div>
 
   <div class="section">
@@ -2107,7 +2165,7 @@ const Sync = {
   async pull(){
     if(!this.ready) return;
     const c = this.client;
-    const [foods, sets, weights, woComp, hiit, prs, profile, plan] = await Promise.all([
+    const [foods, sets, weights, woComp, hiit, prs, profile, plan, water] = await Promise.all([
       c.from('training_food_log').select('*').order('id'),
       c.from('training_set_log').select('*'),
       c.from('training_weights').select('*').order('date'),
@@ -2116,6 +2174,7 @@ const Sync = {
       c.from('training_prs').select('*'),
       c.from('training_profile').select('data').eq('id', 1).maybeSingle(),
       c.from('training_plan').select('data').eq('id', 1).maybeSingle(),
+      c.from('training_water_log').select('*'),
     ]);
     const synced = !!state.syncInitialized;
 
@@ -2131,6 +2190,11 @@ const Sync = {
       if(cloudPlan && cloudPlan.workouts && cloudPlan.workouts.length){
         state.plan = cloudPlan;
       }
+    }
+    if(!water.error){
+      const wl = {};
+      water.data.forEach(r => { if(r.hit) wl[r.date] = true; });
+      if(synced || Object.keys(wl).length) state.waterLog = wl;
     }
 
     if(!foods.error){
@@ -2242,6 +2306,11 @@ const Sync = {
     if(state.plan && state.plan.workouts && state.plan.workouts.length){
       tasks.push(this.client.from('training_plan').upsert({id:1, data: state.plan, updated_at: new Date().toISOString()}));
     }
+    // Water log (one row per day the goal was hit)
+    const waterRows = Object.entries(state.waterLog || {})
+      .filter(([_, hit]) => !!hit)
+      .map(([date]) => ({date, hit: true}));
+    if(waterRows.length) tasks.push(this.client.from('training_water_log').upsert(waterRows));
 
     const results = await Promise.allSettled(tasks);
     results.forEach(r => {
@@ -2359,6 +2428,21 @@ const Sync = {
         });
         if(r.error) throw r.error;
       } catch(e){ console.warn('pushPlan failed:', e); }
+    })();
+  },
+
+  pushWater(date, hit){
+    if(!this.ready) return;
+    (async () => {
+      try {
+        if(hit){
+          const r = await this.client.from('training_water_log').upsert({date, hit:true, updated_at: new Date().toISOString()});
+          if(r.error) throw r.error;
+        } else {
+          const r = await this.client.from('training_water_log').delete().eq('date', date);
+          if(r.error) throw r.error;
+        }
+      } catch(e){ console.warn('pushWater failed:', e); }
     })();
   }
 };
@@ -2575,6 +2659,9 @@ function renderDashboard(){
   } else {
     document.getElementById('weight-history').innerHTML='';
   }
+
+  renderWaterCard();
+  renderTodayFocusCard();
 }
 
 function logWeight(){
@@ -2587,6 +2674,98 @@ function logWeight(){
   state.weights.push({date:tk, lbs:v});
   document.getElementById('weight-input').value='';
   save(); Sync.pushWeight(tk, v); renderDashboard(); toast('Weight logged');
+}
+
+// ===== Water goal (binary per-day check-in) =====
+function getWaterHit(dateKey){
+  return !!(state.waterLog && state.waterLog[dateKey]);
+}
+function toggleWater(){
+  if(!assertEditable('Logging water')) return;
+  const tk = todayKey();
+  if(!state.waterLog) state.waterLog = {};
+  const wasHit = !!state.waterLog[tk];
+  if(wasHit) delete state.waterLog[tk];
+  else state.waterLog[tk] = true;
+  save();
+  Sync.pushWater(tk, !wasHit);
+  renderWaterCard();
+  toast(wasHit ? 'Water goal reset' : 'Water goal hit ✓');
+}
+function renderWaterCard(){
+  const card = document.getElementById('water-card');
+  if(!card) return;
+  const hit = getWaterHit(viewKey());
+  card.classList.toggle('hit', hit);
+  const titleEl = document.getElementById('water-title');
+  const subEl = document.getElementById('water-sub');
+  if(hit){
+    titleEl.textContent = "Water goal hit";
+    subEl.textContent = isViewingToday() ? 'Tap to reset' : 'Logged on ' + formatViewDateLabel(viewKey());
+  } else {
+    titleEl.textContent = isViewingToday() ? "Tap when you've hit your water goal" : 'Not hit on this day';
+    subEl.textContent = isViewingToday() ? 'One quick check-in per day' : '';
+  }
+}
+
+// ===== Today's focus (Dashboard AI summary) =====
+let focusRefreshing = false;
+function renderTodayFocusCard(){
+  const card = document.getElementById('dash-focus-card');
+  if(!card) return;
+  const apiKey = getApiKey();
+  if(!apiKey){
+    card.innerHTML = `<div class="focus-empty">
+      Set up your AI coach on the <a onclick="showPage('artemis', document.querySelectorAll('nav .nav-btn')[3])">Artemis tab</a> to see a daily focus here.
+    </div>`;
+    return;
+  }
+  const f = state.dailyFocus;
+  const td = todayKey();
+  const fresh = f && f.date === td && f.style === state.coachStyle;
+
+  if(f && f.loading){
+    card.innerHTML = `<div class="focus-loading">
+      <div class="focus-loading-dot"></div><div class="focus-loading-dot"></div><div class="focus-loading-dot"></div>
+      <span>Generating today's focus…</span>
+    </div>`;
+    return;
+  }
+  if(fresh && f.text){
+    const styleLabel = (COACH_STYLES[state.coachStyle]?.name) || 'Coach';
+    card.innerHTML = `
+      <div class="focus-text">${escapeHtml(f.text)}</div>
+      <div class="focus-foot">
+        <span>Coached as · ${escapeHtml(styleLabel)}</span>
+        <button onclick="refreshDashFocus()" class="${focusRefreshing?'spinning':''}" aria-label="Refresh">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          Refresh
+        </button>
+      </div>`;
+    return;
+  }
+  if(f && f.error){
+    card.innerHTML = `<div class="focus-empty">Couldn't generate focus: ${escapeHtml(f.text || 'unknown error')}. <a onclick="refreshDashFocus()">Try again</a></div>`;
+    return;
+  }
+  // Stale or missing — kick off a refresh and show loading
+  card.innerHTML = `<div class="focus-loading">
+    <div class="focus-loading-dot"></div><div class="focus-loading-dot"></div><div class="focus-loading-dot"></div>
+    <span>Generating today's focus…</span>
+  </div>`;
+  refreshDailyFocus();
+}
+function refreshDashFocus(){
+  if(focusRefreshing) return;
+  focusRefreshing = true;
+  // Force refresh by clearing the cached focus
+  state.dailyFocus = null;
+  save();
+  renderTodayFocusCard();
+  refreshDailyFocus().finally(() => {
+    focusRefreshing = false;
+    renderTodayFocusCard();
+  });
 }
 
 // ===== ARTEMIS — AI coach =====
@@ -2993,10 +3172,11 @@ async function refreshDailyFocus(){
   const today = todayKey();
   // Already cached for today + this style?
   if(state.dailyFocus && state.dailyFocus.date===today && state.dailyFocus.style===state.coachStyle && !arguments[0]){
-    renderArtemis(); return;
+    renderArtemis(); renderTodayFocusCard(); return;
   }
   state.dailyFocus = {date:today, style:state.coachStyle, text:null, loading:true};
   renderArtemis();
+  renderTodayFocusCard();
   try{
     const prompt = `In 3-4 sentences max (under 60 words), give me my single most important focus for today based on my current data. Be specific to my exact numbers and today's session. No greeting, no sign-off.`;
     // Daily focus is read-only — skip tools so the model doesn't try to propose changes
@@ -3008,6 +3188,7 @@ async function refreshDailyFocus(){
     state.dailyFocus = {date:today, style:state.coachStyle, text:`(${e.message})`, loading:false, error:true};
   }
   renderArtemis();
+  renderTodayFocusCard();
 }
 
 function clearArtemisChat(){
@@ -3476,7 +3657,7 @@ function renderWorkoutContent(){
           html+=`<div class="set-table editable-only" style="margin-top:6px">
             <div class="set-num">${s+1}</div>
             <input type="number" class="set-input" placeholder="${ex.reps.split('–')[0]}" value="${sLog.reps||''}" inputmode="numeric" onchange="logSet(${activeDay},${ei},${s},'reps',this.value)">
-            <input type="number" class="set-input" placeholder="—" value="${sLog.weight||''}" inputmode="numeric" onchange="logSet(${activeDay},${ei},${s},'weight',this.value)">
+            <input type="number" class="set-input" placeholder="—" value="${sLog.weight||''}" inputmode="decimal" step="0.5" onchange="logSet(${activeDay},${ei},${s},'weight',this.value)">
             <button class="set-check ${done?'done':''}" onclick="toggleSet(${activeDay},${ei},${s})">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
             </button>
