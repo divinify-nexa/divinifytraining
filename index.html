@@ -220,6 +220,29 @@ body.share-open{overflow:hidden}
 .share-photo-btn.danger{color:var(--text-3)}
 .share-photo-btn.danger:hover{color:var(--warn);border-color:var(--warn)}
 
+/* ===== Dashboard: Sync status pill ===== */
+.sync-status-row{display:flex;justify-content:flex-end;margin-bottom:10px;min-height:22px}
+.sync-pill{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:99px;background:var(--surface);border:1px solid var(--border);font-family:inherit;font-size:11px;font-weight:600;letter-spacing:0.02em;color:var(--text-3);cursor:pointer;transition:background .15s,color .15s,border-color .15s}
+.sync-pill:hover{background:var(--surface-2);color:var(--text);border-color:var(--border-strong)}
+.sync-pill svg{width:11px;height:11px;stroke-width:2.5;flex-shrink:0}
+.sync-pill.syncing{color:var(--accent);border-color:var(--border)}
+.sync-pill.error{color:var(--warn);border-color:var(--warn);background:rgba(245,158,11,0.08)}
+.sync-pill.stale{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
+@keyframes sync-spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+.sync-pill.syncing svg{animation:sync-spin 1.2s linear infinite}
+
+/* ===== Dashboard: Restore-from-cloud banner ===== */
+.restore-banner{display:none;align-items:center;gap:12px;padding:14px 16px;background:var(--accent-soft);border:1px solid var(--accent);border-radius:14px;margin-bottom:14px;cursor:pointer;text-align:left;font-family:inherit;width:100%;transition:transform .1s,filter .15s}
+.restore-banner:active{transform:scale(0.99);filter:brightness(0.95)}
+.restore-banner.shown{display:flex}
+.restore-banner-icon{flex-shrink:0;width:36px;height:36px;border-radius:10px;background:var(--accent);color:var(--accent-text);display:flex;align-items:center;justify-content:center}
+.restore-banner-icon svg{width:18px;height:18px;stroke-width:2.5}
+.restore-banner-text{flex:1;min-width:0}
+.restore-banner-title{font-size:13.5px;font-weight:700;color:var(--text);letter-spacing:-0.005em;line-height:1.3}
+.restore-banner-sub{font-size:12px;color:var(--text-2);line-height:1.4;margin-top:2px;font-weight:500}
+.restore-banner-arrow{flex-shrink:0;color:var(--text-3)}
+.restore-banner-arrow svg{width:16px;height:16px;stroke-width:2.5}
+
 /* ===== Dashboard: Water goal card ===== */
 .water-card{display:flex;align-items:center;gap:14px;padding:18px 18px;text-align:left;cursor:pointer;border:1px solid var(--border);background:var(--surface);background-image:var(--grad-card);transition:background .15s, border-color .15s, transform .08s;width:100%;font-family:inherit}
 .water-card:hover{background:var(--surface-2)}
@@ -1631,6 +1654,21 @@ textarea.pe-input{resize:vertical;min-height:60px;line-height:1.5}
     <span>Viewing a past day · read-only. <a onclick="goToday()">Jump to today</a> to log new entries.</span>
   </div>
 
+  <button class="restore-banner" id="restore-banner" onclick="resyncFromCloud()" type="button">
+    <div class="restore-banner-icon">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 15a4 4 0 014-4h.586a1 1 0 00.707-.293l1.121-1.121A2 2 0 0110.828 9h2.344a2 2 0 011.414.586l1.121 1.121A1 1 0 0016.414 11H17a4 4 0 014 4M9 19l3 3m0 0l3-3m-3 3V10"/></svg>
+    </div>
+    <div class="restore-banner-text">
+      <div class="restore-banner-title">Local data looks empty</div>
+      <div class="restore-banner-sub">Your data is safe in the cloud — tap to restore</div>
+    </div>
+    <div class="restore-banner-arrow">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+    </div>
+  </button>
+
+  <div class="sync-status-row" id="sync-status"></div>
+
   <div class="hero-stat">
     <div class="hero-row">
       <div>
@@ -2168,6 +2206,10 @@ const Sync = {
 
   async pull(){
     if(!this.ready) return;
+    syncStatus.state = 'syncing';
+    if(typeof renderSyncStatus === 'function') renderSyncStatus();
+    let threw = null;
+    try {
     const c = this.client;
     const [foods, sets, weights, woComp, hiit, prs, profile, plan, water] = await Promise.all([
       c.from('training_food_log').select('*').order('id'),
@@ -2246,6 +2288,21 @@ const Sync = {
       if(synced || Object.keys(p).length) state.prs = p;
     }
     save();
+    } catch(e){
+      threw = e;
+    } finally {
+      if(threw){
+        syncStatus.state = 'error';
+        syncStatus.errorMsg = threw?.message || String(threw);
+      } else {
+        syncStatus.state = 'idle';
+        syncStatus.lastSyncedAt = Date.now();
+        syncStatus.errorMsg = '';
+      }
+      if(typeof renderSyncStatus === 'function') renderSyncStatus();
+      if(typeof renderRestoreBanner === 'function') renderRestoreBanner();
+    }
+    if(threw) throw threw;
   },
 
   async backfillFromLocal(){
@@ -2450,6 +2507,82 @@ const Sync = {
     })();
   }
 };
+
+// ===== Sync status indicator (Dashboard) =====
+// Module-level (not persisted) — surfaces what the Sync layer is doing in real
+// time so the user can see when their data is being pulled and how fresh it is.
+let syncStatus = {
+  state: 'idle',         // 'idle' | 'syncing' | 'error'
+  lastSyncedAt: null,    // ms timestamp of last successful pull
+  errorMsg: ''
+};
+
+function formatSyncAgo(ms){
+  const s = Math.floor(ms / 1000);
+  if(s < 5) return 'just now';
+  if(s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if(m < 60) return `${m} min ago`;
+  const h = Math.floor(m / 60);
+  if(h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
+}
+
+function renderSyncStatus(){
+  const el = document.getElementById('sync-status');
+  if(!el) return;
+  if(syncStatus.state === 'syncing'){
+    el.innerHTML = `<button class="sync-pill syncing" type="button">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+      Syncing from cloud…
+    </button>`;
+    return;
+  }
+  if(syncStatus.state === 'error'){
+    el.innerHTML = `<button class="sync-pill error" type="button" onclick="resyncFromCloud()">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+      Sync failed · tap to retry
+    </button>`;
+    return;
+  }
+  if(!syncStatus.lastSyncedAt){
+    el.innerHTML = `<button class="sync-pill stale" type="button" onclick="resyncFromCloud()">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 15a4 4 0 014-4h.586a1 1 0 00.707-.293l1.121-1.121A2 2 0 0110.828 9h2.344a2 2 0 011.414.586l1.121 1.121A1 1 0 0016.414 11H17a4 4 0 014 4M9 19l3 3m0 0l3-3m-3 3V10"/></svg>
+      Tap to sync from cloud
+    </button>`;
+    return;
+  }
+  const ago = formatSyncAgo(Date.now() - syncStatus.lastSyncedAt);
+  el.innerHTML = `<button class="sync-pill" type="button" onclick="resyncFromCloud()" title="Tap to sync again">
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+    Synced ${ago}
+  </button>`;
+}
+
+// Banner shown only when sync says local looks empty after first-time sync.
+// Hidden in all other cases so it doesn't nag normal users.
+function renderRestoreBanner(){
+  const el = document.getElementById('restore-banner');
+  if(!el) return;
+  const everSynced = !!state.syncInitialized;
+  const reallyEmpty = (state.workoutsCompleted || []).length === 0
+    && Object.keys(state.setLog || {}).length === 0
+    && (state.weights || []).length === 0
+    && Object.keys(state.foodLog || {}).length === 0;
+  const showBanner = everSynced && reallyEmpty && syncStatus.state !== 'syncing';
+  el.classList.toggle('shown', showBanner);
+}
+
+// Tick the "X min ago" string every 30s so it stays accurate without
+// requiring a full page re-render. Cheap — only updates DOM text.
+if(typeof window !== 'undefined'){
+  setInterval(() => {
+    if(syncStatus.state === 'idle' && syncStatus.lastSyncedAt){
+      renderSyncStatus();
+    }
+  }, 30000);
+}
 
 async function initSync(){
   Sync.init();
@@ -2703,6 +2836,8 @@ function renderDashboard(){
 
   renderWaterCard();
   renderTodayFocusCard();
+  renderSyncStatus();
+  renderRestoreBanner();
 }
 
 function logWeight(){
