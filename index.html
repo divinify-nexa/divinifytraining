@@ -5978,6 +5978,12 @@ const Scanner = {
 
       this.detecting = true;
 
+      // Diagnostic probe — log once on scanner open so we can see what the
+      // loaded zxing-js build actually exposes if decodeFromCanvas misbehaves.
+      console.log('[Scanner] decodeFromCanvas type:', typeof this.zxingReader.decodeFromCanvas);
+      console.log('[Scanner] reader proto methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(this.zxingReader)));
+      console.log('[Scanner] reader inherited methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(Object.getPrototypeOf(this.zxingReader))));
+
       const isNoResultError = (e) =>
         e && e.name && (e.name === 'NotFoundException' || e.name === 'ChecksumException' || e.name === 'FormatException');
 
