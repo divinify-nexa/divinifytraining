@@ -6014,7 +6014,7 @@ const Scanner = {
           ctx.drawImage(video, 0, 0);
           let result = null;
           try {
-            result = this.zxingReader.decodeFromCanvas(canvas);
+            result = this.zxingReader.decodeBitmap(canvas);
           } catch(e){
             if(!isNoResultError(e)) console.warn('[Scanner] decode error:', e);
           }
@@ -6030,7 +6030,7 @@ const Scanner = {
             rotatedCtx.drawImage(video, 0, 0);
             rotatedCtx.restore();
             try {
-              result = this.zxingReader.decodeFromCanvas(rotatedCanvas);
+              result = this.zxingReader.decodeBitmap(rotatedCanvas);
             } catch(e){
               if(!isNoResultError(e)) console.warn('[Scanner] decode error:', e);
             }
