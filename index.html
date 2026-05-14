@@ -5894,6 +5894,8 @@ const ZXING_CDN = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.
 
 const Scanner = {
   zxingReader: null,
+  barcodeDetector: null,
+  rafId: null,
   detecting: false,
   lookingUp: false,
   lastBarcode: null,
@@ -5908,6 +5910,12 @@ const Scanner = {
     document.getElementById('scanner-manual').hidden = true;
     document.getElementById('scanner-manual-toggle').textContent = 'Type barcode manually';
     document.getElementById('scanner-manual-input').value = '';
+
+    // Prefer the native BarcodeDetector when available — meaningfully more
+    // robust on real hardware than ZXing-js. Fall back to ZXing otherwise.
+    if('BarcodeDetector' in window){
+      return this.openNative();
+    }
 
     // Load ZXing first (lazy, cached after first scan)
     this.setStatus(window.ZXing ? 'Starting camera…' : 'Loading scanner…');
@@ -5975,6 +5983,64 @@ const Scanner = {
       document.getElementById('scanner-flash').hidden = !(caps && caps.torch);
     } catch(e){
       console.error('[Scanner] camera/decoder failed:', e);
+      const msg = e.name === 'NotAllowedError' || e.message?.includes('Permission')
+        ? 'Camera permission denied. Use "Type barcode manually" below.'
+        : e.name === 'NotFoundError' || e.name === 'OverconstrainedError'
+          ? 'No back camera available. Type the barcode below.'
+          : `Camera failed: ${e.message || e.name || 'unknown error'}. Try again or type the barcode.`;
+      this.setStatus(msg, 'error');
+    }
+  },
+
+  async openNative(){
+    this.setStatus('Starting camera…');
+    if(!navigator.mediaDevices?.getUserMedia){
+      this.setStatus('Your browser does not allow camera access. Type the barcode below.', 'error');
+      return;
+    }
+    const video = document.getElementById('scanner-video');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        },
+        audio: false
+      });
+      video.srcObject = stream;
+      await video.play();
+
+      this.barcodeDetector = new window.BarcodeDetector({
+        formats: ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','itf']
+      });
+
+      const track = stream.getVideoTracks?.()[0];
+      const caps = track?.getCapabilities?.();
+      document.getElementById('scanner-flash').hidden = !(caps && caps.torch);
+
+      this.detecting = true;
+      this.setStatus('Point your camera at a barcode');
+
+      const tick = async () => {
+        if(!this.detecting) return;
+        if(this.lookingUp){
+          this.rafId = requestAnimationFrame(tick);
+          return;
+        }
+        try {
+          const codes = await this.barcodeDetector.detect(video);
+          if(codes && codes.length){
+            this.onDetected(codes[0].rawValue);
+          }
+        } catch(e){
+          console.warn('[Scanner] BarcodeDetector.detect error:', e);
+        }
+        if(this.detecting) this.rafId = requestAnimationFrame(tick);
+      };
+      this.rafId = requestAnimationFrame(tick);
+    } catch(e){
+      console.error('[Scanner] native camera failed:', e);
       const msg = e.name === 'NotAllowedError' || e.message?.includes('Permission')
         ? 'Camera permission denied. Use "Type barcode manually" below.'
         : e.name === 'NotFoundError' || e.name === 'OverconstrainedError'
@@ -6080,6 +6146,11 @@ const Scanner = {
 
   close(){
     this.detecting = false;
+    if(this.rafId){
+      cancelAnimationFrame(this.rafId);
+      this.rafId = null;
+    }
+    this.barcodeDetector = null;
     // ZXing's reset() stops the decode loop AND releases the camera stream
     if(this.zxingReader){
       try { this.zxingReader.reset(); } catch(e){ console.warn('[Scanner] reset error:', e); }
