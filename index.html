@@ -497,6 +497,8 @@ body.scanner-open{overflow:hidden}
 .scanner-manual-input{flex:1;background:rgba(255,255,255,0.12);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,0.2);color:#fff;font-family:'JetBrains Mono',monospace;font-size:14px;padding:11px 14px;border-radius:10px}
 .scanner-manual-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
 .scanner-manual-input::placeholder{color:rgba(255,255,255,0.4)}
+/* TEMP: on-screen debug panel — remove once mobile scanner bug is identified */
+.scanner-debug{position:absolute;left:8px;right:8px;bottom:calc(96px + env(safe-area-inset-bottom));padding:8px 10px;background:rgba(0,0,0,0.85);color:#0f0;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:10.5px;line-height:1.45;white-space:pre-wrap;border-radius:6px;z-index:3;pointer-events:none;max-height:110px;overflow:hidden}
 
 .food-search-input-wrap{position:relative;margin-bottom:10px}
 .food-search-input-wrap svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);width:15px;height:15px;color:var(--text-3);stroke-width:2;pointer-events:none}
@@ -1581,6 +1583,8 @@ textarea.pe-input{resize:vertical;min-height:60px;line-height:1.5}
     </div>
     <div class="scanner-status" id="scanner-status">Point your camera at a barcode</div>
   </div>
+  <!-- TEMP debug panel — remove with the .scanner-debug CSS once fixed -->
+  <div class="scanner-debug" id="scanner-debug" aria-hidden="true"></div>
   <div class="scanner-foot">
     <button class="scanner-manual-toggle" onclick="Scanner.toggleManual()" id="scanner-manual-toggle">Type barcode manually</button>
     <div class="scanner-manual" id="scanner-manual" hidden>
@@ -5896,6 +5900,8 @@ const Scanner = {
   zxingReader: null,
   barcodeDetector: null,
   rafId: null,
+  debugLines: [],
+  loggedFirstFrame: false,
   detecting: false,
   lookingUp: false,
   lastBarcode: null,
@@ -5910,12 +5916,17 @@ const Scanner = {
     document.getElementById('scanner-manual').hidden = true;
     document.getElementById('scanner-manual-toggle').textContent = 'Type barcode manually';
     document.getElementById('scanner-manual-input').value = '';
+    this.debugLines = [];
+    this.loggedFirstFrame = false;
+    document.getElementById('scanner-debug').textContent = '';
+    this.dlog(`open(); BarcodeDetector in window: ${'BarcodeDetector' in window}`);
 
     // Prefer the native BarcodeDetector when available — meaningfully more
     // robust on real hardware than ZXing-js. Fall back to ZXing otherwise.
     if('BarcodeDetector' in window){
       return this.openNative();
     }
+    this.dlog('path: ZXing (no native BarcodeDetector)');
 
     // Load ZXing first (lazy, cached after first scan)
     this.setStatus(window.ZXing ? 'Starting camera…' : 'Loading scanner…');
@@ -5950,6 +5961,8 @@ const Scanner = {
       hints.set(window.ZXing.DecodeHintType.TRY_HARDER, true);
       hints.set(window.ZXing.DecodeHintType.ALSO_INVERTED, true);
       this.zxingReader = new window.ZXing.BrowserMultiFormatReader(hints);
+      this.dlog(`decodeFromCanvas: ${typeof this.zxingReader.decodeFromCanvas}`);
+      this.dlog(`reader proto: ${Object.getOwnPropertyNames(Object.getPrototypeOf(this.zxingReader)).slice(0,6).join(',')}`);
 
       // Let ZXing open the camera with our preferred constraints — high resolution
       // helps it lock on faster, especially on smaller barcodes.
@@ -5978,12 +5991,6 @@ const Scanner = {
 
       this.detecting = true;
 
-      // Diagnostic probe — log once on scanner open so we can see what the
-      // loaded zxing-js build actually exposes if decodeFromCanvas misbehaves.
-      console.log('[Scanner] decodeFromCanvas type:', typeof this.zxingReader.decodeFromCanvas);
-      console.log('[Scanner] reader proto methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(this.zxingReader)));
-      console.log('[Scanner] reader inherited methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(Object.getPrototypeOf(this.zxingReader))));
-
       const isNoResultError = (e) =>
         e && e.name && (e.name === 'NotFoundException' || e.name === 'ChecksumException' || e.name === 'FormatException');
 
@@ -5994,6 +6001,10 @@ const Scanner = {
           return;
         }
         const vw = video.videoWidth, vh = video.videoHeight;
+        if(!this.loggedFirstFrame && vw && vh){
+          this.loggedFirstFrame = true;
+          this.dlog(`first frame: ${vw}x${vh}`);
+        }
         if(vw && vh){
           // Pass 1: un-rotated frame
           if(canvas.width !== vw || canvas.height !== vh){
@@ -6051,6 +6062,7 @@ const Scanner = {
   },
 
   async openNative(){
+    this.dlog('path: native BarcodeDetector');
     this.setStatus('Starting camera…');
     if(!navigator.mediaDevices?.getUserMedia){
       this.setStatus('Your browser does not allow camera access. Type the barcode below.', 'error');
@@ -6085,6 +6097,10 @@ const Scanner = {
         if(this.lookingUp){
           this.rafId = requestAnimationFrame(tick);
           return;
+        }
+        if(!this.loggedFirstFrame && video.videoWidth){
+          this.loggedFirstFrame = true;
+          this.dlog(`first frame: ${video.videoWidth}x${video.videoHeight}`);
         }
         try {
           const codes = await this.barcodeDetector.detect(video);
@@ -6130,6 +6146,7 @@ const Scanner = {
   },
 
   onDetected(code){
+    this.dlog(`detected: ${code}`);
     if(!code) return;
     const now = Date.now();
     // Dedupe: ignore the same code if seen within 1.5s
@@ -6173,6 +6190,17 @@ const Scanner = {
     if(kind) el.classList.add(kind);
   },
 
+  // TEMP — mirrors logs to an on-screen panel for mobile debugging. Remove
+  // along with the .scanner-debug CSS / div once the bug is identified.
+  dlog(msg){
+    const stamp = new Date().toISOString().slice(11, 19);
+    this.debugLines.push(`${stamp} ${msg}`);
+    if(this.debugLines.length > 5) this.debugLines.shift();
+    const panel = document.getElementById('scanner-debug');
+    if(panel) panel.textContent = this.debugLines.join('\n');
+    console.log('[Scanner]', msg);
+  },
+
   toggleManual(){
     this.manualOpen = !this.manualOpen;
     const manual = document.getElementById('scanner-manual');
@@ -6204,6 +6232,7 @@ const Scanner = {
 
   close(){
     this.detecting = false;
+    this.loggedFirstFrame = false;
     if(this.rafId){
       cancelAnimationFrame(this.rafId);
       this.rafId = null;
@@ -6227,6 +6256,10 @@ const Scanner = {
     document.getElementById('scanner-flash').classList.remove('active');
     document.getElementById('scanner-overlay').classList.remove('open');
     document.body.classList.remove('scanner-open');
+    // TEMP: clear debug panel
+    this.debugLines = [];
+    const dbg = document.getElementById('scanner-debug');
+    if(dbg) dbg.textContent = '';
   }
 };
 
