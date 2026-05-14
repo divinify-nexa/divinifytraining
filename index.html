@@ -5962,22 +5962,74 @@ const Scanner = {
         audio: false
       };
       console.log('[Scanner] Starting decode with constraints:', constraints);
-      await this.zxingReader.decodeFromConstraints(constraints, video, (result, err) => {
-        if(result){
-          console.log('[Scanner] Detected:', result.getText(), result.getBarcodeFormat?.());
-          this.onDetected(result.getText());
-        }
-        // Per-frame "no result" errors are normal — only log fatal ones
-        if(err && err.name && err.name !== 'NotFoundException' && err.name !== 'ChecksumException' && err.name !== 'FormatException'){
-          console.warn('[Scanner] decode error:', err);
-        }
-      });
+      // Open the camera ourselves so we can run a two-pass decode per frame:
+      // un-rotated for naturally-vertical barcodes, then a 90° rotated retry
+      // for horizontally-held ones. The browser luminance source's rotation
+      // support is unreliable, so TRY_HARDER's rotated retry can be a no-op
+      // here — doing it manually is the reliable fix.
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      video.srcObject = stream;
+      await video.play();
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const rotatedCanvas = document.createElement('canvas');
+      const rotatedCtx = rotatedCanvas.getContext('2d');
 
       this.detecting = true;
+
+      const isNoResultError = (e) =>
+        e && e.name && (e.name === 'NotFoundException' || e.name === 'ChecksumException' || e.name === 'FormatException');
+
+      const decodeFrame = () => {
+        if(!this.detecting) return;
+        if(this.lookingUp){
+          this.rafId = requestAnimationFrame(decodeFrame);
+          return;
+        }
+        const vw = video.videoWidth, vh = video.videoHeight;
+        if(vw && vh){
+          // Pass 1: un-rotated frame
+          if(canvas.width !== vw || canvas.height !== vh){
+            canvas.width = vw;
+            canvas.height = vh;
+          }
+          ctx.drawImage(video, 0, 0);
+          let result = null;
+          try {
+            result = this.zxingReader.decodeFromCanvas(canvas);
+          } catch(e){
+            if(!isNoResultError(e)) console.warn('[Scanner] decode error:', e);
+          }
+          // Pass 2: 90° rotated, only if pass 1 missed
+          if(!result){
+            if(rotatedCanvas.width !== vh || rotatedCanvas.height !== vw){
+              rotatedCanvas.width = vh;
+              rotatedCanvas.height = vw;
+            }
+            rotatedCtx.save();
+            rotatedCtx.translate(rotatedCanvas.width, 0);
+            rotatedCtx.rotate(Math.PI / 2);
+            rotatedCtx.drawImage(video, 0, 0);
+            rotatedCtx.restore();
+            try {
+              result = this.zxingReader.decodeFromCanvas(rotatedCanvas);
+            } catch(e){
+              if(!isNoResultError(e)) console.warn('[Scanner] decode error:', e);
+            }
+          }
+          if(result){
+            console.log('[Scanner] Detected:', result.getText(), result.getBarcodeFormat?.());
+            this.onDetected(result.getText());
+          }
+        }
+        if(this.detecting) this.rafId = requestAnimationFrame(decodeFrame);
+      };
+      this.rafId = requestAnimationFrame(decodeFrame);
+
       this.setStatus('Point your camera at a barcode');
 
       // Show torch button if supported on this track
-      const stream = video.srcObject;
       const track = stream?.getVideoTracks?.()[0];
       const caps = track?.getCapabilities?.();
       document.getElementById('scanner-flash').hidden = !(caps && caps.torch);
