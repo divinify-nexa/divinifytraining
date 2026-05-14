@@ -5936,8 +5936,11 @@ const Scanner = {
           formats.EAN_13, formats.EAN_8, formats.UPC_A, formats.UPC_E,
           formats.CODE_128, formats.CODE_39, formats.ITF
         ]);
-        hints.set(window.ZXing.DecodeHintType.TRY_HARDER, true);
       }
+      // TRY_HARDER must apply even if BarcodeFormat is missing — it also drives
+      // ZXing's internal 90°-rotation retry for 1D readers (covers horizontal barcodes).
+      hints.set(window.ZXing.DecodeHintType.TRY_HARDER, true);
+      hints.set(window.ZXing.DecodeHintType.ALSO_INVERTED, true);
       this.zxingReader = new window.ZXing.BrowserMultiFormatReader(hints);
 
       // Let ZXing open the camera with our preferred constraints — high resolution
