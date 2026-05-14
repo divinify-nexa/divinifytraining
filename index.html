@@ -6014,7 +6014,9 @@ const Scanner = {
           ctx.drawImage(video, 0, 0);
           let result = null;
           try {
-            result = this.zxingReader.decodeBitmap(canvas);
+            const lum = new window.ZXing.HTMLCanvasElementLuminanceSource(canvas);
+            const bin = new window.ZXing.BinaryBitmap(new window.ZXing.HybridBinarizer(lum));
+            result = this.zxingReader.decodeBitmap(bin);
           } catch(e){
             if(!isNoResultError(e)) console.warn('[Scanner] decode error:', e);
           }
@@ -6030,7 +6032,9 @@ const Scanner = {
             rotatedCtx.drawImage(video, 0, 0);
             rotatedCtx.restore();
             try {
-              result = this.zxingReader.decodeBitmap(rotatedCanvas);
+              const lum = new window.ZXing.HTMLCanvasElementLuminanceSource(rotatedCanvas);
+              const bin = new window.ZXing.BinaryBitmap(new window.ZXing.HybridBinarizer(lum));
+              result = this.zxingReader.decodeBitmap(bin);
             } catch(e){
               if(!isNoResultError(e)) console.warn('[Scanner] decode error:', e);
             }
