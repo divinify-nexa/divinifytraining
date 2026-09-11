@@ -783,6 +783,12 @@ body.plan-editor-open{overflow:hidden}
 .workout-meta-time{flex-shrink:0;font-family:var(--font-mono);font-size:var(--fs-caption);font-weight:500;color:var(--text-primary)}
 .workout-meta-info{flex:1;min-width:0;font-size:var(--fs-caption);line-height:var(--lh-caption);font-weight:400;color:var(--text-secondary)}
 .workout-meta-info:not(:empty)::before{content:'·';margin-right:var(--s-2);color:var(--text-tertiary)}
+.session-actions{display:flex;flex-wrap:wrap;gap:var(--s-2);margin:calc(-1 * var(--s-2)) 0 var(--s-4)}
+.session-actions .btn{height:var(--tap)}
+.rest-state + .session-actions{margin-top:var(--s-4)}
+.rest-actions{display:flex;justify-content:center;gap:var(--s-2);margin-top:var(--s-5)}
+.move-list{display:flex;flex-direction:column}
+.move-list .row-value{text-align:right}
 .workout-meta-note{display:block;font-size:var(--fs-micro);line-height:var(--lh-micro);color:var(--text-tertiary)}
 /* Another day's plan viewed today: session controls read as disabled (same treatment as past days) */
 #workout-content[data-preview] .session-only{opacity:.55;pointer-events:none}
@@ -1055,6 +1061,17 @@ body[data-theme="dark"] .theme-switch::after{transform:translateX(20px)}
       <button class="btn btn-primary" onclick="Scanner.submitManual()">Look up</button>
     </div>
   </div>
+</div>
+
+<!-- Move session: picks a date today..+28 (reuses the plan-editor sheet chrome) -->
+<div class="plan-editor" id="move-sheet" role="dialog" aria-modal="true" aria-labelledby="move-title">
+  <div class="pe-top">
+    <div class="pe-title" id="move-title">Move session</div>
+    <button class="pe-close" onclick="MoveSheet.close()" aria-label="Close">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="pe-body" id="move-body"></div>
 </div>
 
 <!-- Plan editor (full-screen) -->
@@ -1573,8 +1590,13 @@ function formatViewDateLabel(dateStr){
   const d = new Date(dateStr + 'T00:00:00');
   return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
 }
+// Future days (up to PLAN_AHEAD_DAYS out) can be viewed and planned — moved to or skipped —
+// but logging stays today-only.
+const PLAN_AHEAD_DAYS = 28;
+function lastPlannableDate(){ return shiftDateKey(todayKey(), PLAN_AHEAD_DAYS); }
+function isViewingFuture(){ return viewDate > todayKey(); }
 function setViewDate(dateStr){
-  if(dateStr > todayKey()) return; // never go past today
+  if(dateStr > lastPlannableDate()) return;
   viewDate = dateStr;
   // When navigating dates, snap workout view to that date's day-of-week
   activeDay = getViewDayIdx();
@@ -1582,14 +1604,28 @@ function setViewDate(dateStr){
   renderActivePage();
 }
 function goPrevDay(){ setViewDate(shiftDateKey(viewDate, -1)); }
-function goNextDay(){ if(!isViewingToday()) setViewDate(shiftDateKey(viewDate, 1)); }
+function goNextDay(){ if(viewDate < lastPlannableDate()) setViewDate(shiftDateKey(viewDate, 1)); }
 function goToday(){ setViewDate(todayKey()); }
 function applyReadonlyMode(){
   document.body.setAttribute('data-readonly', isViewingToday() ? '' : 'true');
+  // Each page's banner keeps its own past-day wording; future days swap in the planning note.
+  document.querySelectorAll('.readonly-banner span').forEach(el => {
+    if(!bannerPastText.has(el)) bannerPastText.set(el, el.innerHTML);
+    const text = isViewingFuture() ? 'Planning ahead · read-only. You can move or skip sessions here; <a onclick="goToday()">jump to today</a> to log.' : bannerPastText.get(el);
+    if(el.innerHTML !== text) el.innerHTML = text;
+  });
 }
+const bannerPastText = new Map();
 function assertEditable(actionLabel){
   if(isViewingToday()) return true;
-  toast((actionLabel || 'Editing') + ' is locked on past days');
+  toast(isViewingFuture() ? `${actionLabel || 'Editing'} opens on ${formatViewDateLabel(viewDate)}` : (actionLabel || 'Editing') + ' is locked on past days');
+  return false;
+}
+// Schedule actions (move, skip, optional) work today and on future days, never on past ones.
+function isPlannable(date){ return date >= todayKey() && date <= lastPlannableDate(); }
+function assertPlannable(date){
+  if(isPlannable(date)) return true;
+  toast(date < todayKey() ? "Past days can't be rescheduled" : `You can plan up to ${PLAN_AHEAD_DAYS} days ahead`);
   return false;
 }
 function renderActivePage(){
@@ -1609,6 +1645,7 @@ function renderDateNav(slotId){
   const label = today ? 'Today · ' + formatViewDateLabel(viewDate) : formatViewDateLabel(viewDate);
   const badge = today
     ? '<span class="date-nav-today-badge">Today</span>'
+    : isViewingFuture() ? '<span class="date-nav-past-badge date-nav-future-badge">Future</span>'
     : '<span class="date-nav-past-badge">Past</span>';
   el.innerHTML = `
     <button class="date-nav-arrow" onclick="goPrevDay()" aria-label="Previous day">
@@ -1617,7 +1654,7 @@ function renderDateNav(slotId){
     <button class="date-nav-label" onclick="goToday()" title="${today ? 'Already on today' : 'Jump to today'}">
       <span>${label}</span>${badge}
     </button>
-    <button class="date-nav-arrow" onclick="goNextDay()" aria-label="Next day" ${today ? 'disabled' : ''}>
+    <button class="date-nav-arrow" onclick="goNextDay()" aria-label="Next day" ${viewDate >= lastPlannableDate() ? 'disabled' : ''}>
       <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
     </button>`;
 }
@@ -1685,7 +1722,8 @@ const Sync = {
       this.fetchAll(() => c.from('training_session_sets').select('*', {count:'exact'}).order('session_id').order('block_idx').order('item_idx').order('set_idx')),
     ]);
     const synced = !!state.syncInitialized;
-    const unsynced = Session.unsyncedCopy();   // taken before the cloud copy replaces local sessions
+    const unsynced = Session.unsyncedCopy();
+    const queryErrors = [foods, sets, weights, woComp, hiit, prs, profile, plan, water, sessions, sessionSets].map(r => r.error).filter(Boolean);   // taken before the cloud copy replaces local sessions
 
     if(!profile.error && profile.data?.data){
       const cloudProfile = profile.data.data;
@@ -1767,6 +1805,8 @@ const Sync = {
     Session.restoreUnsynced(unsynced);   // the cloud doesn't have these yet — keep this device's copy
     Session.projectAll();   // legacy-shaped copy of session sets for the stats helpers
     save();
+    // Tables that did load are applied above; the pull still counts as failed, so "Synced" is never shown.
+    if(queryErrors.length) throw new Error(queryErrors[0].message || 'Could not reach the server');
     } catch(e){
       threw = e;
     } finally {
@@ -1897,7 +1937,7 @@ const Sync = {
     if(!this.ready) return false;
     try {
       const r = await this.client.from('training_sessions').update({
-        status:session.status, completed_at:session.completed_at ?? null, date:session.date,
+        status:session.status, started_at:session.started_at ?? null, completed_at:session.completed_at ?? null, date:session.date,
         sort_order:session.sort_order ?? 0, updated_at:session.updated_at || new Date().toISOString()
       }).eq('id', session.id);
       if(r.error) throw r.error;
@@ -2294,7 +2334,10 @@ function renderDashboard(){
   const dayIdx = getViewDayIdx();
   const res = Session.resolve(viewKey());
   const session = res.source === 'row' ? res.session : null;
-  const day = session ? Session.toLegacyWorkout(session) : getWorkout(dayIdx);
+  const day = session ? Session.toLegacyWorkout(session)
+    : !session && res.spec?.coveredBy ? {label: DAY_LABELS[dayIdx], name: 'Rest', desc: res.spec.desc, exercises: [], hiit: [], rest: true}
+    : getWorkout(dayIdx);
+  const kind = res.session?.kind, status = res.session?.status, future = isViewingFuture();
   const viewingToday = isViewingToday();
   const sessionDone = !day.rest && (session ? session.status === 'done' : state.workoutsCompleted.includes(viewKey()+'-'+dayIdx));
   const sessionLabel = document.getElementById('today-session-label');
@@ -2311,7 +2354,8 @@ function renderDashboard(){
       const exLog = dayLog[ei]||{};
       Object.values(exLog).forEach(s=>{ if(s.done) setsLogged++; });
     });
-    const desc = viewingToday
+    const desc = kind === 'sport' ? 'Optional session done.'
+      : viewingToday
       ? `Logged ${setsLogged}/${setsTotal} sets. Recovery starts now — hit your protein.`
       : `Logged ${setsLogged}/${setsTotal} sets.`;
     const undoLink = viewingToday
@@ -2332,14 +2376,21 @@ function renderDashboard(){
         </button>
       </div>`;
   } else {
-    const eyebrow = viewingToday
+    const skipped = status === 'skipped', optional = kind === 'sport' && !day.rest;
+    const eyebrow = skipped ? `${day.label} · Skipped`
+      : optional ? `${day.label} · Optional`
+      : future ? `${day.label} · ${day.rest ? 'Rest day' : 'Planned'}`
+      : viewingToday
       ? `${day.label} · ${day.rest?'Recovery':'Training'}`
       : (day.rest ? `${day.label} · Rest day` : `${day.label} · Not logged`);
-    const meta = viewingToday
+    const meta = skipped ? "Doesn't count against your streak"
+      : optional ? (viewingToday ? 'Optional — tap Did it when done' : 'Optional session')
+      : future ? (day.rest ? 'Rest day' : `${day.exercises.length} exercises${day.hiit.length?' + HIIT':''}`)
+      : viewingToday
       ? (day.rest ? 'Eat your protein.' : `${day.exercises.length} exercises${day.hiit.length?' + HIIT':''}`)
       : (day.rest ? 'Rest day — nothing to log' : 'No session logged on this day');
-    const ctaLabel = viewingToday ? (day.rest ? 'View plan' : 'Start session') : 'View session';
-    const ctaClass = viewingToday && !day.rest ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm';
+    const ctaLabel = skipped || optional ? 'View session' : future ? 'View plan' : viewingToday ? (day.rest ? 'View plan' : 'Start session') : 'View session';
+    const ctaClass = viewingToday && !day.rest && !skipped && !optional ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm';
     html=`
       <div class="today-eyebrow">${eyebrow}</div>
       <div class="today-name">${day.name}</div>
@@ -3081,13 +3132,13 @@ function toLegacyWorkout(dayIdx){
   const spec = prog.schedule?.[dayIdx];
   if(!spec) return undefined;
   const tpl = spec.templateId ? prog.templates[spec.templateId] : null;
-  const rest = spec.kind === 'rest';
+  const rest = spec.kind === 'rest', sport = spec.kind === 'sport';
   const items = type => (tpl?.blocks || []).filter(b => b.type === type).flatMap(b => b.items || []);
   const lib = id => prog.library[id] || {};
   const w = {
     label: DAY_LABELS[dayIdx],
-    name: rest ? spec.name : tpl?.name,
-    desc: rest ? spec.desc : tpl?.desc,
+    name: rest ? spec.name : sport ? spec.name ?? tpl?.name : tpl?.name,
+    desc: rest ? spec.desc : sport ? spec.desc ?? tpl?.desc ?? '' : tpl?.desc,
     exercises: items('strength').map(it => ({name: lib(it.exerciseId).name, sets: it.sets, reps: it.repsText, rest: it.restText, weight: it.weightText, desc: it.cues ?? lib(it.exerciseId).cues})),
     hiit: items('conditioning').map(it => ({name: lib(it.exerciseId).name, detail: it.detail}))
   };
@@ -3145,8 +3196,11 @@ function matchStrengthItems(prog, tpl, oldItems, exercises){
 // Write a v1 workout into the program without saving (callers batch, then savePlan()).
 function writeLegacyWorkout(prog, dayIdx, legacy){
   const exercises = legacy.exercises || [], hiit = legacy.hiit || [];
+  const prev = prog.schedule[dayIdx] || {};
+  const keepKind = !legacy.rest && (prev.kind === 'sport' || prev.kind === 'flex');   // schedule v2 kinds survive plan edits
+  const bareSport = keepKind && prev.kind === 'sport' && !prev.templateId && !exercises.length && !hiit.length;
   let tplId = null;
-  if(!legacy.rest || exercises.length || hiit.length){
+  if(!bareSport && (!legacy.rest || exercises.length || hiit.length)){
     tplId = prog.schedule[dayIdx]?.templateId;
     if(!tplId){
       const base = LEGACY_TEMPLATE_IDS[dayIdx] || `day-${dayIdx}`;
@@ -3164,6 +3218,7 @@ function writeLegacyWorkout(prog, dayIdx, legacy){
   }
   prog.schedule[dayIdx] = legacy.rest
     ? {kind: 'rest', name: legacy.name, desc: legacy.desc, ...(tplId ? {templateId: tplId} : {})}
+    : keepKind ? {...prev, ...(prev.kind === 'sport' ? {name: legacy.name, desc: legacy.desc} : {}), ...(tplId ? {templateId: tplId} : {})}
     : {kind: 'template', templateId: tplId};
 }
 function setLegacyWorkout(dayIdx, legacy){
@@ -3198,8 +3253,13 @@ function savePlan(){
 // self-contained snapshot of what was prescribed (it renders with no plan or library
 // lookups); training_session_sets holds what was logged against it, keyed
 // (block_idx, item_idx, set_idx) — block 0 strength, block 1 conditioning.
-// Today's in-progress session follows edits to its own workout until it's marked done;
-// a completed session, or one whose day has passed, never changes again.
+// A planned session (today or ahead) and today's in-progress one follow edits to their own
+// workout; a completed session, or one whose day has passed, never changes again.
+// Schedule entries (program.schedule[weekday]): {kind:'template', templateId},
+// {kind:'sport', templateId?, name, optional:true}, {kind:'flex', flexGroup, templateId},
+// {kind:'rest', name, desc}. Within a flex group, the first session materialized (or moved
+// in) that week claims the group's workout — the claim is the session row's flex_group —
+// and the group's other days resolve to rest until that session is skipped or removed.
 // Legacy logs (training_set_log / training_hiit_log) are a read-only archive. state.setLog
 // also carries a local copy of session strength sets in the legacy shape (never pushed,
 // rebuilt on every pull) so the stats helpers and story cards read them unchanged.
@@ -3220,11 +3280,11 @@ const Session = {
   buildSnapshot(spec){
     const prog = getActiveProgram();
     const tpl = spec?.templateId ? prog?.templates?.[spec.templateId] : null;
-    const rest = spec?.kind === 'rest';
+    const rest = spec?.kind === 'rest', sport = spec?.kind === 'sport';
     const lib = id => prog?.library?.[id] || {};
     const items = type => (tpl?.blocks || []).filter(b => b.type === type).flatMap(b => b.items || []);
     const snap = {programId: prog?.id ?? null, programName: prog?.name ?? '', templateId: spec?.templateId ?? null,
-      name: rest ? spec.name : tpl?.name, desc: rest ? spec.desc : tpl?.desc};
+      name: rest ? spec.name : sport ? spec.name ?? tpl?.name : tpl?.name, desc: rest ? spec.desc : sport ? spec.desc ?? tpl?.desc ?? '' : tpl?.desc};
     if(!rest && tpl?.fullHiit) snap.fullHiit = true;
     snap.frozenAt = new Date().toISOString();
     snap.blocks = [
@@ -3267,14 +3327,35 @@ const Session = {
   newRow(date, spec){
     const snapshot = this.buildSnapshot(spec), now = new Date().toISOString();
     return {id: this.idFor(date, spec), date, program_id: snapshot.programId, template_id: spec?.templateId || null,
-      title: snapshot.name || '', kind: spec?.kind === 'rest' ? 'rest' : 'template', status: 'in_progress',
-      optional: false, flex_group: null, sort_order: 0, snapshot, started_at: now, completed_at: null, updated_at: now};
+      title: snapshot.name || '', kind: ['rest', 'sport', 'flex'].includes(spec?.kind) ? spec.kind : 'template', status: 'in_progress',
+      optional: !!spec?.optional, flex_group: spec?.flexGroup ?? null, sort_order: 0, snapshot, started_at: now, completed_at: null, updated_at: now};
   },
+  // The week (Mon–Sun) date holding the live (not skipped) session that claims a flex group, if any.
+  flexClaim(date, group){
+    const monday = shiftDateKey(date, -getDayIdxFromDate(date));
+    for(let i = 0; i < 7; i++){
+      const d = shiftDateKey(monday, i), s = state.sessions?.[d];
+      if(s && s.flex_group === group && s.status !== 'skipped') return d;
+    }
+    return null;
+  },
+  // A date's schedule entry with flex claims applied: a flex day whose group another day has claimed is rest.
+  specFor(date){
+    const spec = getSessionSpecForDay(getDayIdxFromDate(date)) || null;
+    if(spec?.kind !== 'flex') return spec;
+    const by = this.flexClaim(date, spec.flexGroup);
+    if(!by || by === date) return spec;
+    const name = getActiveProgram()?.templates?.[spec.templateId]?.name || 'session';
+    return {kind: 'rest', name: 'Rest', desc: `This week's ${name} is on ${formatViewDateLabel(by)}`, coveredBy: by};
+  },
+  // Session ids start with the date they were created for, so a move leaves a trace of where it came from.
+  originDate(s){ return /^s_(\d{4}-\d{2}-\d{2})_/.exec(s?.id || '')?.[1] || s?.date; },
+  movedAway(date){ return Object.values(state.sessions || {}).some(s => s.date !== date && this.originDate(s) === date); },
   // row: a stored session; legacy: pre-sessions logs exist (render from the current plan, as
   // before); schedule: nothing yet — a virtual, unsaved session from the weekday's schedule.
   resolve(date){
     const dayIdx = getDayIdxFromDate(date);
-    const spec = getSessionSpecForDay(dayIdx) || null;
+    const spec = this.specFor(date);
     const row = state.sessions?.[date];
     if(row) return {session: row, spec, source: 'row'};
     if(this.hasLegacyLog(date, dayIdx)) return {session: null, spec, source: 'legacy'};
@@ -3285,13 +3366,13 @@ const Session = {
   // Imports that day's legacy rows by position so a day already under way isn't split in two
   // (legacy rows stay in place). The server copy is made by flush(); until it lands the session
   // sits in state.pendingSessionSync and shows as not synced.
-  async materialize(date){
+  // status 'planned' is for schedule actions (move/skip/optional) on a day nobody has started.
+  async materialize(date, {status = 'in_progress'} = {}){
     if(state.sessions?.[date]) return state.sessions[date];
     const dayIdx = getDayIdxFromDate(date);
-    const spec = getSessionSpecForDay(dayIdx);
-    if(!spec) return null;
+    const spec = this.specFor(date);
+    if(!spec || spec.kind === 'rest') return null;
     const session = this.newRow(date, spec);
-    if((state.workoutsCompleted || []).includes(`${date}-${dayIdx}`)){ session.status = 'done'; session.completed_at = session.started_at; }
     const sb = this.blockIdx(session, 'strength'), cb = this.blockIdx(session, 'conditioning');
     const imported = {};
     const put = (b, i, s, v) => { ((imported[b] ||= {})[i] ||= {})[s] = v; };
@@ -3303,6 +3384,8 @@ const Session = {
       const i = cond.findIndex(it => it.name === name);
       if(i >= 0) put(cb, i, 0, {reps: null, weight: null, duration_sec: null, done: !!done});
     });
+    if((state.workoutsCompleted || []).includes(`${date}-${dayIdx}`)){ session.status = 'done'; session.completed_at = session.started_at; }
+    else if(status === 'planned' && !Object.keys(imported).length){ session.status = 'planned'; session.started_at = null; }
     (state.sessions ||= {})[date] = session;
     (state.sessionSets ||= {})[session.id] = imported;
     this.projectSession(session);
@@ -3311,6 +3394,16 @@ const Session = {
     save();
     this.flush();
     return session;
+  },
+  // The session to log into on a date: created if needed, started if only planned. Skipped and
+  // optional (sport) sessions don't take set logs.
+  async begin(date){
+    const r = this.resolve(date);
+    if(r.session?.status === 'skipped'){ toast('Undo the skip to log this session'); return null; }
+    if(r.session?.kind === 'sport'){ toast("Optional sessions don't log sets — tap Did it"); return null; }
+    const s = await this.materialize(date);
+    if(s && s.status === 'planned') this.setStatus(s, 'in_progress');
+    return s;
   },
   // Local write of one set (plus its legacy-shaped copy), then a fire-and-forget push.
   commit(session, b, i, s){
@@ -3354,20 +3447,29 @@ const Session = {
   // Change a session's status locally (plus the legacy flag) and push it. statusDirty tells a later
   // flush to re-send both, so a change made offline still reaches a row another device created.
   setStatus(s, status){
-    const wasDone = s.status === 'done';
+    const now = new Date().toISOString();
     s.status = status;
-    s.completed_at = status === 'done' ? (wasDone && s.completed_at) || new Date().toISOString() : null;
-    s.updated_at = new Date().toISOString();
+    if(status === 'done') s.completed_at ||= now;
+    else if(status !== 'skipped') s.completed_at = null;   // a skip keeps it, so Undo can restore a completion
+    if(status === 'done' || status === 'in_progress') s.started_at ||= now;
+    s.updated_at = now;
     s.statusDirty = true;
     this.bump(s.id);
     this.setLegacyDone(s, status === 'done');
     save();
     Sync.pushSessionStatus(s);
   },
-  // Not wired to UI yet (Phase 3). One session per date for now, so a move onto an occupied date is refused.
+  // Why a session can't move to a date (one session per date), or null if it can.
+  moveRefusal(s, date){
+    if(!s) return 'There is no session to move';
+    if(!date || date === s.date) return 'The session is already on that day';
+    if(state.sessions?.[date]) return `${formatViewDateLabel(date)} already has a session`;
+    if(this.hasLegacyLog(date, getDayIdxFromDate(date))) return `${formatViewDateLabel(date)} already has a logged session`;
+    return null;
+  },
   move(sessionId, newDate){
     const s = this.byId(sessionId);
-    if(!s || !newDate || s.date === newDate || state.sessions[newDate]) return false;
+    if(this.moveRefusal(s, newDate)) return false;
     const done = s.status === 'done';
     if(done) this.setLegacyDone(s, false);
     this.unproject(s);
@@ -3391,23 +3493,26 @@ const Session = {
   unskip(sessionId){
     const s = this.byId(sessionId);
     if(!s || s.status !== 'skipped') return false;
-    this.setStatus(s, s.started_at ? 'in_progress' : 'planned');
+    this.setStatus(s, s.completed_at ? 'done' : s.started_at ? 'in_progress' : 'planned');   // back to where it was
     return true;
   },
-  // Today's in-progress session tracks edits to its own workout (renames, HIIT picks, the
-  // plan editor, approved Artemis changes) until it's marked done.
+  // Sessions not yet under way — planned ones today or ahead, and today's in-progress one — track
+  // edits to their own workout (renames, HIIT picks, the plan editor, approved Artemis changes).
   followPlan(){
-    const s = state.sessions?.[todayKey()];
-    if(!s || s.status !== 'in_progress' || s.kind !== 'template' || !getActiveProgram()?.templates?.[s.template_id]) return;
-    const next = this.buildSnapshot({kind: 'template', templateId: s.template_id});
-    // Key-order-insensitive (a pulled snapshot comes back from jsonb with its keys reordered).
-    const canon = v => Array.isArray(v) ? v.map(canon) : v && typeof v === 'object'
-      ? Object.keys(v).sort().reduce((o, k) => (o[k] = canon(v[k]), o), {}) : v;
-    if(JSON.stringify(canon({...next, frozenAt: 0})) === JSON.stringify(canon({...s.snapshot, frozenAt: 0}))) return;
-    s.snapshot = next; s.title = next.name || ''; s.updated_at = new Date().toISOString();
-    s.snapshotDirty = true;
-    this.bump(s.id);
-    Sync.pushSession(s, {overwrite: true}).then(ok => this.afterPush(s.id, ok));
+    const today = todayKey(), prog = getActiveProgram();
+    Object.values(state.sessions || {}).forEach(s => {
+      const open = (s.status === 'in_progress' && s.date === today) || (s.status === 'planned' && s.date >= today);
+      if(!open || s.kind === 'rest' || !prog?.templates?.[s.template_id]) return;
+      const next = this.buildSnapshot({kind: s.kind, templateId: s.template_id, ...(s.kind === 'sport' ? {name: s.snapshot?.name, desc: s.snapshot?.desc} : {})});
+      // Key-order-insensitive (a pulled snapshot comes back from jsonb with its keys reordered).
+      const canon = v => Array.isArray(v) ? v.map(canon) : v && typeof v === 'object'
+        ? Object.keys(v).sort().reduce((o, k) => (o[k] = canon(v[k]), o), {}) : v;
+      if(JSON.stringify(canon({...next, frozenAt: 0})) === JSON.stringify(canon({...s.snapshot, frozenAt: 0}))) return;
+      s.snapshot = next; s.title = next.name || ''; s.updated_at = new Date().toISOString();
+      s.snapshotDirty = true;
+      this.bump(s.id);
+      Sync.pushSession(s, {overwrite: true}).then(ok => this.afterPush(s.id, ok));
+    });
   },
 
   // ----- Offline queue -----
@@ -3503,6 +3608,74 @@ const Session = {
 };
 const UNSYNCED_NOTE = '<span class="workout-meta-note" data-unsynced>Saved on this device · not synced yet</span>';
 window.addEventListener('online', () => Session.flush());
+// ----- Schedule actions (Train tab): skip / undo, optional "Did it", move -----
+async function skipViewedSession(){
+  const d = viewKey();
+  if(!assertPlannable(d)) return;
+  const s = await Session.materialize(d, {status: 'planned'});
+  if(!s || !Session.skip(s.id)) return;
+  renderActivePage();
+  toast('Session skipped');
+}
+function unskipViewedSession(){
+  const d = viewKey();
+  if(!assertPlannable(d)) return;
+  const s = state.sessions?.[d];
+  if(!s || !Session.unskip(s.id)) return;
+  renderActivePage();
+  toast('Skip undone');
+}
+async function toggleOptionalDone(){
+  if(!assertEditable('Marking it done')) return;
+  const s = await Session.materialize(viewKey(), {status: 'planned'});
+  if(!s || s.kind !== 'sport') return;
+  Session.setStatus(s, s.status === 'done' ? 'planned' : 'done');
+  renderActivePage();
+}
+const MoveSheet = {
+  from: null,
+  open(){
+    if(!assertPlannable(viewKey())) return;
+    this.from = viewKey();
+    document.getElementById('move-sheet').classList.add('open');
+    document.body.classList.add('plan-editor-open');
+    this.render();
+  },
+  close(){
+    document.getElementById('move-sheet').classList.remove('open');
+    if(!document.getElementById('plan-editor').classList.contains('open')) document.body.classList.remove('plan-editor-open');
+    this.from = null;
+  },
+  render(){
+    const from = this.from, name = Session.resolve(from).session?.title || getWorkout(getDayIdxFromDate(from))?.name || 'session';
+    document.getElementById('move-title').textContent = `Move ${name}`;
+    let html = `<div class="note">Pick a day in the next ${PLAN_AHEAD_DAYS} days. Days that already have a session can't take another.</div><div class="move-list">`;
+    for(let i = 0; i <= PLAN_AHEAD_DAYS; i++){
+      const d = shiftDateKey(todayKey(), i);
+      if(d === from) continue;
+      const why = Session.moveRefusal({date: from}, d);
+      const there = Session.resolve(d).session;
+      const value = why ? (Session.hasLegacyLog(d, getDayIdxFromDate(d)) && !state.sessions?.[d] ? 'Has a logged session' : 'Has a session')
+        : !there || there.kind === 'rest' ? 'Rest day' : `Replaces ${escapeHtml(there.title || 'session')}`;
+      html += `<button class="row row-btn" type="button" ${why ? 'disabled' : ''} onclick="MoveSheet.pick('${d}')">
+        <span class="row-title">${formatViewDateLabel(d)}${i === 0 ? ' · Today' : ''}</span><span class="row-value">${value}</span>
+      </button>`;
+    }
+    document.getElementById('move-body').innerHTML = html + '</div>';
+  },
+  async pick(date){
+    const from = this.from;
+    if(!from || !assertPlannable(date)) return;
+    const why = Session.moveRefusal({date: from}, date);
+    if(why){ toast(why); return; }
+    const s = await Session.materialize(from, {status: 'planned'});
+    if(!s || !Session.move(s.id, date)){ toast(Session.moveRefusal(s, date) || "That session can't be moved"); return; }
+    this.close();
+    setViewDate(date);
+    toast(`Moved to ${formatViewDateLabel(date)}`);
+  }
+};
+
 // Session writes belong to the viewed date's own weekday; other day pills preview the plan.
 function isSessionDay(dayIdx){ return dayIdx === getDayIdxFromDate(viewKey()); }
 function assertSessionDay(dayIdx){
@@ -3708,7 +3881,7 @@ function isHiitDone(dayIdx, name){
 }
 async function toggleHiitDone(dayIdx, name){
   if(!assertEditable('Marking HIIT') || !assertSessionDay(dayIdx)) return;
-  const session = await Session.materialize(viewKey());
+  const session = await Session.begin(viewKey());
   if(!session) return;
   const cb = Session.blockIdx(session, 'conditioning');
   const items = session.snapshot?.blocks?.[cb]?.items || [];
@@ -3806,7 +3979,17 @@ function renderWorkoutContent(){
   // Completed sessions, and any session whose day has passed, no longer follow plan edits — hide the item edit controls.
   const frozen = !!session && (session.status === 'done' || session.date !== todayKey());
   const preview = !live && isViewingToday();
-  const day = session ? Session.toLegacyWorkout(session) : getWorkout(activeDay);
+  const shown = res?.session || null;   // the stored or virtual session (null when legacy logs render from the plan)
+  const covered = !session && res?.spec?.coveredBy;   // a flex day whose group another day this week has claimed
+  const day = session ? Session.toLegacyWorkout(session)
+    : covered ? {label: DAY_LABELS[activeDay], name: 'Rest', desc: res.spec.desc, exercises: [], hiit: [], rest: true}
+    : getWorkout(activeDay);
+  const doneNow = shown ? shown.status === 'done' : (state.workoutsCompleted || []).includes(`${dateKey}-${activeDay}`);
+  // Schedule actions for the date's own session, today or ahead (logging itself stays today-only).
+  const actions = live && isPlannable(dateKey) && !day.rest && !doneNow && shown?.status !== 'skipped' ? `<div class="session-actions">
+      <button class="btn btn-secondary btn-sm" onclick="MoveSheet.open()">Move to…</button>
+      <button class="btn btn-ghost btn-sm" onclick="skipViewedSession()">Skip</button>
+    </div>` : '';
   const sb = session ? Session.blockIdx(session, 'strength') : 0, cb = session ? Session.blockIdx(session, 'conditioning') : 1;
   // (Creating the empty legacy containers is long-standing behaviour the restore banner's emptiness check relies on.)
   if(!state.setLog[dateKey]) state.setLog[dateKey]={};
@@ -3817,7 +4000,23 @@ function renderWorkoutContent(){
   else delete document.getElementById('workout-content').dataset.session;
 
   let html='';
-  if(day.rest){
+  if(live && shown?.status === 'skipped'){
+    html=`<div class="rest-state">
+      <div class="rest-title">Skipped</div>
+      <div class="rest-desc">${day.name || 'Session'}${day.desc ? ' · ' + day.desc : ''}</div>
+      <div class="rest-sub">Skipped sessions don't count against your streak.</div>
+      ${isPlannable(dateKey) ? `<div class="rest-actions"><button class="btn btn-secondary" onclick="unskipViewedSession()">Undo skip</button></div>` : ''}
+    </div>`;
+  } else if(live && shown?.kind === 'sport'){
+    html=`<div class="rest-state">
+      <div class="rest-title">${day.name || 'Optional session'}</div>
+      <div class="rest-desc">${day.desc || 'No sets to log.'}</div>
+      <div class="rest-sub">${doneNow ? 'Done · counts as a session.' : "Optional · skipping it won't break your streak."}</div>
+      ${isViewingToday() ? `<div class="rest-actions"><button class="btn ${doneNow ? 'btn-secondary' : 'btn-primary'}" aria-pressed="${doneNow}" onclick="toggleOptionalDone()">
+        <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="${doneNow ? 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' : 'M5 13l4 4L19 7'}"/></svg>
+        ${doneNow ? 'Did it · undo' : 'Did it'}</button></div>` : ''}
+    </div>${actions}`;
+  } else if(day.rest){
     html=`<div class="rest-state">
       <div class="rest-title">Rest</div>
       <div class="rest-desc">${day.name === 'Rest' ? day.desc : 'Take it easy'}</div>
@@ -3837,7 +4036,7 @@ function renderWorkoutContent(){
       <span class="workout-meta-time">~${estMin} min</span>
       <span class="workout-meta-info">${parts.join(' · ')}${metaNote}${session && Session.isUnsynced(session.id) ? UNSYNCED_NOTE : ''}</span>
       <button class="btn btn-ghost btn-sm editable-only" onclick="PlanEditor.open(${activeDay})" title="Edit workout">Edit</button>
-    </div>`;
+    </div>${actions}`;
     if(day.exercises.length){
       html+=`<div class="section-label">Lifting · ${day.desc}</div>`;
       day.exercises.forEach((ex,ei)=>{
@@ -3989,7 +4188,7 @@ function renderWorkoutContent(){
 // The first write on a day creates its session locally (synced in the background); sets push fire-and-forget.
 async function logSet(dayIdx, exIdx, setIdx, field, value){
   if(!assertEditable('Logging sets') || !assertSessionDay(dayIdx)) return;
-  const session = await Session.materialize(viewKey());
+  const session = await Session.begin(viewKey());
   if(!session) return;
   const sb = Session.blockIdx(session, 'strength');
   Session.cell(session, sb, exIdx, setIdx)[field] = numOrNull(value);
@@ -4012,7 +4211,7 @@ async function logSet(dayIdx, exIdx, setIdx, field, value){
 
 async function toggleSet(dayIdx, exIdx, setIdx){
   if(!assertEditable('Marking sets') || !assertSessionDay(dayIdx)) return;
-  const session = await Session.materialize(viewKey());
+  const session = await Session.begin(viewKey());
   if(!session) return;
   const sb = Session.blockIdx(session, 'strength');
   const cell = Session.cell(session, sb, exIdx, setIdx);
@@ -4023,7 +4222,7 @@ async function toggleSet(dayIdx, exIdx, setIdx){
 
 async function markWorkoutDone(){
   if(!assertEditable('Marking session complete') || !assertSessionDay(activeDay)) return;
-  const session = await Session.materialize(viewKey());
+  const session = await Session.begin(viewKey());
   if(!session) return;
   // Dual-write: the stats helpers and story cards read the legacy completion flag.
   if(session.status !== 'done') Session.setStatus(session, 'done');
@@ -4820,17 +5019,27 @@ function statsMonthDates(){
   }
   return {dates, monthLabel: today.toLocaleDateString('en-US',{month:'long'}), year:y};
 }
+// 'done' | 'missed' | 'rest', where 'rest' means neutral: a rest day, a skipped or optional-not-done
+// session, a flex day nobody claimed (or another day did), or the day a session was moved away from.
+// Sessions count on the date they're on now. Days with only legacy logs keep the original rule.
 function statsTrainedOn(date){
   const dayIdx = getDayIdxFromDate(date);
-  if(getWorkout(dayIdx).rest) return 'rest';
-  return (state.workoutsCompleted||[]).includes(date+'-'+dayIdx) ? 'done' : 'missed';
+  const r = Session.resolve(date);
+  if(r.source === 'legacy'){
+    if(getWorkout(dayIdx).rest) return 'rest';
+    return (state.workoutsCompleted||[]).includes(date+'-'+dayIdx) ? 'done' : 'missed';
+  }
+  const s = r.session;
+  if(s.status === 'done') return 'done';
+  if(s.kind === 'rest' || s.status === 'skipped' || s.optional) return 'rest';
+  if(r.source === 'schedule' && (s.kind === 'flex' || Session.movedAway(date))) return 'rest';
+  return 'missed';
 }
 function statsCurrentStreak(){
   let streak = 0;
   let cursor = todayKey();
   // If today is a training day not yet completed, don't break streak — start counting from yesterday
-  const todayIdx = getDayIdxFromDate(cursor);
-  if(!getWorkout(todayIdx).rest && !(state.workoutsCompleted||[]).includes(cursor+'-'+todayIdx)){
+  if(statsTrainedOn(cursor) === 'missed'){
     cursor = shiftDateKey(cursor, -1);
   }
   for(let i=0; i<400; i++){
@@ -4902,7 +5111,8 @@ function statsToday(){
   // Snapshot of the just-completed (or in-progress) session for today's day-of-week
   const dk = todayKey();
   const dayIdx = getTodayDayIdx();
-  const day = getWorkout(dayIdx);
+  const r = Session.resolve(dk);   // today's session as it stands (moved-in, flex, optional), else the plan
+  const day = r.source === 'row' ? Session.toLegacyWorkout(r.session) : r.spec?.coveredBy ? {...getWorkout(dayIdx), name: 'Rest', exercises: [], hiit: [], rest: true} : getWorkout(dayIdx);
   let setsLogged = 0, setsTotal = 0, totalReps = 0;
   let topLift = {name:null, weight:0};
   (day.exercises || []).forEach((ex, ei) => {
@@ -4922,8 +5132,9 @@ function statsToday(){
 
 function statsDiscipline(period = 30){
   const dates = statsBetween(period);
-  const trainingDays = dates.filter(d => !getWorkout(getDayIdxFromDate(d)).rest);
-  const trainedCount = trainingDays.filter(d => (state.workoutsCompleted||[]).includes(d+'-'+getDayIdxFromDate(d))).length;
+  const status = Object.fromEntries(dates.map(d => [d, statsTrainedOn(d)]));
+  const trainingDays = dates.filter(d => status[d] !== 'rest');   // neutral days are out of the denominator
+  const trainedCount = trainingDays.filter(d => status[d] === 'done').length;
   const workoutHitRate = trainingDays.length ? trainedCount / trainingDays.length : 0;
   const proteinTarget = 190;
   const proteinHitDays = dates.filter(d => {
