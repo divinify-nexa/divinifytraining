@@ -1535,7 +1535,10 @@ let state = {
   usdaKey:null,usdaKeyFormOpen:false
 };
 
-function todayKey(){return new Date().toISOString().split('T')[0]}
+// YYYY-MM-DD for the device's local calendar day. (toISOString() is UTC, which filed
+// evening entries under tomorrow west of UTC and shifted day math back a day east of it.)
+function localDateKey(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function todayKey(){ return localDateKey(new Date()); }
 function getWeekNum(){
   if(!state.startDate) return 1;
   const diff = (new Date() - new Date(state.startDate)) / (1000*60*60*24*7);
@@ -1557,7 +1560,7 @@ function getViewDayIdx(){ return getDayIdxFromDate(viewDate); }
 function shiftDateKey(dateStr, deltaDays){
   const d = new Date(dateStr + 'T00:00:00');
   d.setDate(d.getDate() + deltaDays);
-  return d.toISOString().split('T')[0];
+  return localDateKey(d);
 }
 function formatViewDateLabel(dateStr){
   const d = new Date(dateStr + 'T00:00:00');
