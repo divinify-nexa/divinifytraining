@@ -1541,8 +1541,10 @@ function localDateKey(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).pa
 function todayKey(){ return localDateKey(new Date()); }
 function getWeekNum(){
   if(!state.startDate) return 1;
-  const diff = (new Date() - new Date(state.startDate + 'T00:00:00')) / (1000*60*60*24*7);
-  return Math.min(16, Math.max(1, Math.ceil(diff+0.01)));
+  // Whole local calendar days since the start date (round absorbs 23/25-hour DST days),
+  // so each program week turns over exactly at local midnight.
+  const days = Math.round((new Date(todayKey() + 'T00:00:00') - new Date(state.startDate + 'T00:00:00')) / 864e5);
+  return Math.min(16, Math.max(1, Math.floor(days / 7) + 1));
 }
 function getTodayDayIdx(){return new Date().getDay() === 0 ? 6 : new Date().getDay()-1}
 
