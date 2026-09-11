@@ -1688,8 +1688,9 @@ const Sync = {
     }
     if(!plan.error && plan.data?.data){
       const cloudPlan = plan.data.data;
-      if(cloudPlan && cloudPlan.workouts && cloudPlan.workouts.length){
+      if(cloudPlan && ((cloudPlan.version === 2 && cloudPlan.programs) || cloudPlan.workouts?.length)){
         state.plan = cloudPlan;
+        initializePlan();   // migrates a v1 blob; backfills a v2 one
       }
     }
     if(!water.error){
@@ -1820,7 +1821,7 @@ const Sync = {
       tasks.push(this.client.from('training_profile').upsert({id:1, data: state.profile, updated_at: new Date().toISOString()}));
     }
     // Plan (single row)
-    if(state.plan && state.plan.workouts && state.plan.workouts.length){
+    if(state.plan && (state.plan.version === 2 || state.plan.workouts?.length)){
       tasks.push(this.client.from('training_plan').upsert({id:1, data: state.plan, updated_at: new Date().toISOString()}));
     }
     // Water log (one row per day the goal was hit)
@@ -2907,48 +2908,215 @@ let editingExKey = null;
 const openCues = new Set();
 function onCueToggle(el){ if(el.open) openCues.add(el.dataset.cue); else openCues.delete(el.dataset.cue); }
 // ===== Plan data model =====
-// state.plan is the single source of truth for the active training plan.
-// It's a deep clone of DAYS on first run, then editable freely (by the user via
-// the Train tab edit sheet, or by Artemis via approved tool-use diffs).
-// All workout reads in the app go through getWorkout(i) so Train + Artemis +
-// Dashboard + Cards + stats helpers stay in sync.
+// state.plan (synced as training_plan.data) is v2: programs, each with a stable exercise
+// library, reusable workout templates, a Mon..Sun schedule and a conditioning pool.
+//   { version:2, activeId, programs:{ [id]:{ id, name, weeks, startDate, status, phases,
+//     library, blocks, templates, schedule, conditioningPool } }, updatedAt }
+// The rest of the app still reads and writes the v1 per-day workout shape
+// ({label, name, desc, exercises[], hiit[], rest?, fullHiit?}) through the adapter below —
+// toLegacyWorkout / setLegacyWorkout are the only places that touch templates or the
+// library, so Train, Today, Artemis, the plan editor and the stats helpers stay in sync.
+const LEGACY_PROGRAM_ID = 'legacy16';
+const LEGACY_TEMPLATE_IDS = ['mon','tue','wed','thu','fri','sat','sun'].map(d => 'legacy-' + d);
+
+function slugifyExerciseName(name){
+  return String(name ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'exercise';
+}
+function findLibraryId(library, name){
+  for(const id in library) if(library[id].name === name) return id;
+  return null;
+}
+// Same name → same entry. A new name whose slug belongs to a different name gets -2, -3, …
+function ensureLibraryEntry(library, name, category, extra){
+  name = name ?? '';
+  const found = findLibraryId(library, name);
+  if(found) return found;
+  const base = slugifyExerciseName(name);
+  let id = base;
+  for(let n = 2; library[id]; n++) id = `${base}-${n}`;
+  library[id] = {id, name, category, muscle:null, equipment:null, cues:'', ...extra};
+  return id;
+}
+// An empty pool shows the built-in defaults (as v1 did), so seed them before editing it.
+function ensureConditioningPool(prog){
+  if(!Array.isArray(prog.conditioningPool) || !prog.conditioningPool.length){
+    prog.conditioningPool = HIIT_POOL.map(h => ensureLibraryEntry(prog.library, h.name, 'conditioning', {detail:h.detail}));
+  }
+  return prog.conditioningPool;
+}
+function legacyPhases(){
+  return PHASES.map(p => {
+    const [from, to] = p.weeks.split(/[–-]/).map(Number);
+    return {from, to, label:p.label, sets:p.sets, reps:p.reps, rest:p.rest, note:p.note};
+  });
+}
+
+// Build the v2 blob from v1 inputs: workouts[0..6] (missing days fall back to DAYS) + pool.
+// Deterministic for a given input and start date, so re-migrating a v1 cloud blob is stable.
+function buildPlanV2(workouts, pool, meta){
+  const prog = {
+    id: LEGACY_PROGRAM_ID, name: meta.name || '16-Week Strength + Hypertrophy', weeks: 16,
+    startDate: state.startDate, status: 'active', phases: legacyPhases(),
+    library: {}, blocks: {}, templates: {},
+    schedule: LEGACY_TEMPLATE_IDS.map(() => ({kind:'rest'})),
+    conditioningPool: []
+  };
+  // Pool first, so each shared conditioning entry keeps the pool's default detail.
+  prog.conditioningPool = (Array.isArray(pool) && pool.length ? pool : HIIT_POOL)
+    .map(h => ensureLibraryEntry(prog.library, h?.name, 'conditioning', {detail: h?.detail ?? ''}));
+  LEGACY_TEMPLATE_IDS.forEach((_, i) => {
+    const w = workouts?.[i] && typeof workouts[i] === 'object' ? workouts[i] : JSON.parse(JSON.stringify(DAYS[i]));
+    writeLegacyWorkout(prog, i, w);
+  });
+  return {version: 2, activeId: LEGACY_PROGRAM_ID, programs: {[LEGACY_PROGRAM_ID]: prog}, updatedAt: meta.updatedAt ?? null};
+}
+function migrateV1toV2(v1){
+  return buildPlanV2(v1.workouts, v1.hiitPool, {name: v1.name, updatedAt: v1.updatedAt});
+}
 function initializePlan(){
-  const planExists = state.plan && Array.isArray(state.plan.workouts) && state.plan.workouts.length === DAYS.length;
-  if(!planExists){
-    const cloned = JSON.parse(JSON.stringify(DAYS));
-    // Migrate any legacy per-exercise name overrides into plan.workouts
-    Object.entries(state.customExercises || {}).forEach(([dayIdx, exMap]) => {
-      Object.entries(exMap || {}).forEach(([exIdx, customName]) => {
-        const ex = cloned[+dayIdx]?.exercises?.[+exIdx];
-        if(ex && customName && customName.trim()) ex.name = customName.trim();
-      });
+  const p = state.plan;
+  if(p && p.version === 2 && p.programs){
+    // Backfill fields added after a blob was written; never rebuild an existing plan.
+    Object.values(p.programs).forEach(prog => {
+      if(!prog || typeof prog !== 'object') return;
+      if(!Array.isArray(prog.phases)) prog.phases = legacyPhases();
+      if(!prog.library) prog.library = {};
+      ensureConditioningPool(prog);
     });
-    // Migrate legacy HIIT picker overrides
-    Object.entries(state.customHiit || {}).forEach(([dayIdx, list]) => {
-      if(Array.isArray(list) && cloned[+dayIdx]) cloned[+dayIdx].hiit = list;
-    });
-    state.plan = {
-      id: 'default',
-      name: '16-Week Strength + Hypertrophy',
-      workouts: cloned,
-      hiitPool: JSON.parse(JSON.stringify(HIIT_POOL)),
-      updatedAt: new Date().toISOString()
-    };
     return;
   }
-  // Plan exists — backfill any newer fields added in later releases
-  if(!Array.isArray(state.plan.hiitPool) || !state.plan.hiitPool.length){
-    state.plan.hiitPool = JSON.parse(JSON.stringify(HIIT_POOL));
-  }
+  if(p && Array.isArray(p.workouts)){ state.plan = migrateV1toV2(p); return; }
+  // No plan yet: the built-in program, with any legacy per-exercise overrides applied.
+  const cloned = JSON.parse(JSON.stringify(DAYS));
+  Object.entries(state.customExercises || {}).forEach(([dayIdx, exMap]) => {
+    Object.entries(exMap || {}).forEach(([exIdx, customName]) => {
+      const ex = cloned[+dayIdx]?.exercises?.[+exIdx];
+      if(ex && customName && customName.trim()) ex.name = customName.trim();
+    });
+  });
+  Object.entries(state.customHiit || {}).forEach(([dayIdx, list]) => {
+    if(Array.isArray(list) && cloned[+dayIdx]) cloned[+dayIdx].hiit = list;
+  });
+  state.plan = buildPlanV2(cloned, HIIT_POOL, {updatedAt: new Date().toISOString()});
 }
-function getPlanWorkouts(){ return state.plan?.workouts || DAYS; }
-function getWorkout(dayIdx){ return getPlanWorkouts()[dayIdx]; }
+
+// ----- Adapter: v2 program ⇄ v1 per-day workout -----
+function getActiveProgram(){
+  const p = state.plan;
+  return p && p.version === 2 && p.programs ? p.programs[p.activeId] || null : null;
+}
+function getSessionSpecForDay(dayIdx){ return getActiveProgram()?.schedule?.[dayIdx]; }
+// A fresh v1 workout object each call, keys in the same order as DAYS, so callers may
+// mutate it freely and hand it to setLegacyWorkout().
+function toLegacyWorkout(dayIdx){
+  const prog = getActiveProgram();
+  if(!prog) return DAYS[dayIdx] && JSON.parse(JSON.stringify(DAYS[dayIdx]));
+  const spec = prog.schedule?.[dayIdx];
+  if(!spec) return undefined;
+  const tpl = spec.templateId ? prog.templates[spec.templateId] : null;
+  const rest = spec.kind === 'rest';
+  const items = type => (tpl?.blocks || []).filter(b => b.type === type).flatMap(b => b.items || []);
+  const lib = id => prog.library[id] || {};
+  const w = {
+    label: DAY_LABELS[dayIdx],
+    name: rest ? spec.name : tpl?.name,
+    desc: rest ? spec.desc : tpl?.desc,
+    exercises: items('strength').map(it => ({name: lib(it.exerciseId).name, sets: it.sets, reps: it.repsText, rest: it.restText, weight: it.weightText, desc: it.cues ?? lib(it.exerciseId).cues})),
+    hiit: items('conditioning').map(it => ({name: lib(it.exerciseId).name, detail: it.detail}))
+  };
+  if(rest) w.rest = true;
+  else if(tpl?.fullHiit) w.fullHiit = true;
+  return w;
+}
+function templateBlock(tpl, type){
+  const [first, ...extra] = tpl.blocks.filter(b => b.type === type);
+  if(extra.length) tpl.blocks = tpl.blocks.filter(b => !extra.includes(b));   // the v1 shape holds one of each
+  if(first) return first;
+  const b = {type, items: []};
+  tpl.blocks.push(b);
+  return b;
+}
+// Resolve each v1 exercise to a library id: same position + same name, then same name
+// elsewhere in the workout (reorder/delete), then an in-place rename that keeps the id —
+// only when no other day or the pool uses that entry and the new name isn't already in
+// the library — then by name across the library, creating an entry for a new name.
+function matchStrengthItems(prog, tpl, oldItems, exercises){
+  const lib = prog.library;
+  const nameOf = it => lib[it.exerciseId]?.name;
+  const shared = new Set(prog.conditioningPool || []), sharedStrength = new Set();
+  Object.values(prog.templates).forEach(t => (t.blocks || []).forEach(b => {
+    if(t === tpl && b.type === 'strength') return;
+    (b.items || []).forEach(it => { shared.add(it.exerciseId); if(b.type === 'strength') sharedStrength.add(it.exerciseId); });
+  }));
+  const ids = exercises.map(() => null), used = new Set();
+  const take = (k, j) => { ids[k] = oldItems[j].exerciseId; used.add(j); };
+  exercises.forEach((ex, k) => { if(oldItems[k] && nameOf(oldItems[k]) === ex.name) take(k, k); });
+  exercises.forEach((ex, k) => {
+    if(ids[k]) return;
+    const j = oldItems.findIndex((o, j) => !used.has(j) && nameOf(o) === ex.name);
+    if(j >= 0) take(k, j);
+  });
+  exercises.forEach((ex, k) => {
+    if(ids[k] || !oldItems[k] || used.has(k)) return;
+    const id = oldItems[k].exerciseId;
+    if(!lib[id] || shared.has(id) || ids.includes(id) || findLibraryId(lib, ex.name ?? '')) return;
+    lib[id].name = ex.name ?? '';
+    take(k, k);
+  });
+  const seen = new Set();
+  return exercises.map((ex, k) => {
+    const id = ids[k] || ensureLibraryEntry(lib, ex.name, 'strength', {});
+    const cue = ex.desc ?? '';
+    const item = {exerciseId: id, sets: ex.sets, repsText: ex.reps, restText: ex.rest, weightText: ex.weight};
+    // Cues live on the library entry; an item keeps its own only where the entry is shared and differs.
+    if(sharedStrength.has(id) || seen.has(id)){ if(cue !== lib[id].cues) item.cues = cue; }
+    else lib[id].cues = cue;
+    seen.add(id);
+    return item;
+  });
+}
+// Write a v1 workout into the program without saving (callers batch, then savePlan()).
+function writeLegacyWorkout(prog, dayIdx, legacy){
+  const exercises = legacy.exercises || [], hiit = legacy.hiit || [];
+  let tplId = null;
+  if(!legacy.rest || exercises.length || hiit.length){
+    tplId = prog.schedule[dayIdx]?.templateId;
+    if(!tplId){
+      const base = LEGACY_TEMPLATE_IDS[dayIdx] || `day-${dayIdx}`;
+      const taken = id => prog.schedule.some((s, i) => i !== +dayIdx && s?.templateId === id);
+      tplId = base;
+      for(let n = 2; taken(tplId); n++) tplId = `${base}-${n}`;
+    }
+    const tpl = prog.templates[tplId] || (prog.templates[tplId] = {id: tplId, name: '', desc: '', legacyDayIdx: +dayIdx, fullHiit: false, blocks: []});
+    tpl.name = legacy.name;
+    tpl.desc = legacy.desc;
+    tpl.fullHiit = !!legacy.fullHiit;
+    const strength = templateBlock(tpl, 'strength'), conditioning = templateBlock(tpl, 'conditioning');
+    strength.items = matchStrengthItems(prog, tpl, strength.items || [], exercises);
+    conditioning.items = hiit.map(h => ({exerciseId: ensureLibraryEntry(prog.library, h?.name, 'conditioning', {detail: h?.detail ?? ''}), detail: h?.detail}));
+  }
+  prog.schedule[dayIdx] = legacy.rest
+    ? {kind: 'rest', name: legacy.name, desc: legacy.desc, ...(tplId ? {templateId: tplId} : {})}
+    : {kind: 'template', templateId: tplId};
+}
+function setLegacyWorkout(dayIdx, legacy){
+  const prog = getActiveProgram();
+  if(!prog || !legacy || !prog.schedule?.[dayIdx]) return;
+  writeLegacyWorkout(prog, dayIdx, legacy);
+  savePlan();
+}
+
+function getPlanWorkouts(){ return [0,1,2,3,4,5,6].map(i => toLegacyWorkout(i)); }
+function getWorkout(dayIdx){ return toLegacyWorkout(dayIdx); }
 function getExercise(dayIdx, exIdx){ return getWorkout(dayIdx)?.exercises?.[exIdx]; }
-function getDefaultExercise(dayIdx, exIdx){ return DAYS[dayIdx]?.exercises?.[exIdx]; }
+// Built-in defaults only exist for the legacy program (drives the per-exercise Reset).
+function getDefaultExercise(dayIdx, exIdx){
+  return getActiveProgram()?.id === LEGACY_PROGRAM_ID ? DAYS[dayIdx]?.exercises?.[exIdx] : undefined;
+}
 function getHiitPool(){
-  return Array.isArray(state.plan?.hiitPool) && state.plan.hiitPool.length
-    ? state.plan.hiitPool
-    : HIIT_POOL;
+  const prog = getActiveProgram();
+  if(!prog?.conditioningPool?.length) return HIIT_POOL;
+  return prog.conditioningPool.map(id => ({name: prog.library[id]?.name, detail: prog.library[id]?.detail}));
 }
 function savePlan(){
   if(!state.plan) return;
@@ -2975,18 +3143,20 @@ function startEditExName(dayIdx, exIdx){
 }
 function finishEditExName(dayIdx, exIdx, value){
   const trimmed = (value||'').trim();
-  const ex = getExercise(dayIdx, exIdx);
+  const w = getWorkout(dayIdx);
+  const ex = w?.exercises?.[exIdx];
   if(!ex) return;
   const original = getDefaultExercise(dayIdx, exIdx)?.name;
-  ex.name = trimmed || original;
-  savePlan();
+  ex.name = trimmed || original || ex.name;
+  setLegacyWorkout(dayIdx, w);
   editingExKey = null;
   renderWorkoutContent();
 }
 function resetExName(dayIdx, exIdx){
-  const ex = getExercise(dayIdx, exIdx);
+  const w = getWorkout(dayIdx);
+  const ex = w?.exercises?.[exIdx];
   const original = getDefaultExercise(dayIdx, exIdx)?.name;
-  if(ex && original){ ex.name = original; savePlan(); }
+  if(ex && original){ ex.name = original; setLegacyWorkout(dayIdx, w); }
   renderWorkoutContent(); toast('Reset');
 }
 
@@ -3037,8 +3207,7 @@ function getDayHiit(dayIdx){
 }
 function setDayHiit(dayIdx, list){
   const w = getWorkout(dayIdx);
-  if(w) w.hiit = list;
-  savePlan();
+  if(w){ w.hiit = list; setLegacyWorkout(dayIdx, w); }
 }
 let hiitPickerOpen = {};
 let hiitPoolEditIdx = null;     // index of pool item being edited inline
@@ -3085,9 +3254,15 @@ function saveEditHiitPool(idx){
   const name = (nameEl?.value || '').trim();
   const detail = (detailEl?.value || '').trim();
   if(!name){ toast('Name required'); return; }
-  const pool = getHiitPool();
-  if(!pool[idx]){ hiitPoolEditIdx = null; renderWorkoutContent(); return; }
-  pool[idx] = {name, detail};
+  const prog = getActiveProgram();
+  const pool = prog && ensureConditioningPool(prog);
+  const id = pool?.[idx];
+  if(!id || !prog.library[id]){ hiitPoolEditIdx = null; renderWorkoutContent(); return; }
+  // Keep the entry's id; a name that already belongs to another entry points this slot there (one id per name).
+  const other = findLibraryId(prog.library, name);
+  if(other && other !== id) pool[idx] = other;
+  else prog.library[id].name = name;
+  prog.library[pool[idx]].detail = detail;
   savePlan();
   hiitPoolEditIdx = null;
   renderWorkoutContent();
@@ -3110,16 +3285,22 @@ function saveNewHiitPool(){
   const name = (document.getElementById('hiit-new-name')?.value || '').trim();
   const detail = (document.getElementById('hiit-new-detail')?.value || '').trim();
   if(!name){ toast('Name required'); return; }
-  const pool = getHiitPool();
-  pool.push({name, detail});
+  const prog = getActiveProgram();
+  if(!prog) return;
+  const pool = ensureConditioningPool(prog);
+  const id = ensureLibraryEntry(prog.library, name, 'conditioning', {detail});
+  prog.library[id].detail = detail;
+  if(!pool.includes(id)) pool.push(id);
   savePlan();
   hiitPoolAddOpen = false;
   renderWorkoutContent();
   toast(`${name} added to pool`);
 }
 function removeHiitPoolItem(idx){
-  const pool = getHiitPool();
-  const item = pool[idx];
+  const prog = getActiveProgram();
+  if(!prog) return;
+  const pool = ensureConditioningPool(prog);
+  const item = prog.library[pool[idx]];
   if(!item) return;
   if(!confirm(`Remove "${item.name}" from the HIIT pool? Workouts that already use it will keep it — this only hides it from the picker.`)) return;
   pool.splice(idx, 1);
@@ -5830,11 +6011,12 @@ const PlanProposal = {
   approve(msgIdx){
     const m = state.artemisChat?.[msgIdx];
     if(!m || !m.toolUse || m.toolUseStatus !== 'pending') return;
-    // Apply operations to state.plan
+    // Apply operations to a v1 copy of each touched day, then write each day back once
     const ops = m.toolUse.operations || [];
+    const drafts = {};
     let appliedCount = 0;
     for(const op of ops){
-      const w = getWorkout(op.day_idx);
+      const w = drafts[op.day_idx] || (drafts[op.day_idx] = getWorkout(op.day_idx));
       if(!w) continue;
       if(op.type === 'update_exercise'){
         const ex = w.exercises?.[op.exercise_idx];
@@ -5846,6 +6028,8 @@ const PlanProposal = {
         appliedCount++;
       }
     }
+    const prog = getActiveProgram();
+    if(prog) Object.entries(drafts).forEach(([d, w]) => { if(w) writeLegacyWorkout(prog, +d, w); });
     m.toolUseStatus = 'approved';
     savePlan();
     renderArtemis();
@@ -5969,9 +6153,8 @@ const PlanEditor = {
   save(){
     if(!this.draft) return;
     const idx = this.dayIdx;
-    if(!state.plan?.workouts?.[idx]){ this.close(); return; }
-    state.plan.workouts[idx] = this.draft;
-    savePlan();
+    if(!getSessionSpecForDay(idx)){ this.close(); return; }
+    setLegacyWorkout(idx, this.draft);
     this.close();
     // Re-render any active page that might depend on plan
     if(typeof renderActivePage === 'function') renderActivePage();
