@@ -707,6 +707,7 @@ body.scanner-open{overflow:hidden}
 .set-head{margin-top:var(--s-3);margin-bottom:var(--s-1)}
 .set-table + .set-table{margin-top:var(--s-2)}
 .set-table{display:grid;grid-template-columns:32px 1fr 1fr var(--tap);gap:var(--s-2);align-items:center}
+.set-table.has-duration{grid-template-columns:32px 1fr 1fr 1fr var(--tap)}
 .set-th{text-align:center;font-size:var(--fs-micro);line-height:var(--lh-micro);font-weight:500;color:var(--text-secondary)}
 .set-num{text-align:center;font-family:var(--font-mono);font-size:var(--fs-caption);font-weight:500;color:var(--text-tertiary)}
 
@@ -776,6 +777,34 @@ body.plan-editor-open{overflow:hidden}
 .pe-ex-num{padding:2px var(--s-2);background:var(--fill);border-radius:var(--r-sm);font-family:var(--font-mono);font-size:var(--fs-micro);line-height:var(--lh-micro);font-weight:500;color:var(--text-secondary)}
 .pe-row{display:grid;gap:var(--s-2)}
 .pe-row.cols-3{grid-template-columns:1fr 1fr 1fr}
+.pe-row.cols-2{grid-template-columns:1fr 1fr}
+.pe-foot[hidden]{display:none}
+.pe-block{padding:var(--s-4);background:var(--fill);border-radius:var(--r-lg)}
+.pe-block-head{display:flex;align-items:center;justify-content:space-between;gap:var(--s-2)}
+.pe-tools{display:flex;align-items:center;gap:0;margin-right:calc(-1 * var(--s-2))}
+.pe-ex-name{display:flex;align-items:center;gap:var(--s-2)}
+.pe-ex-name .pe-input{flex:1;min-width:0}
+.pe-ex-name .btn{flex-shrink:0;height:var(--tap)}
+.pe-block > .btn{height:var(--tap)}
+.pe-confirm{flex-direction:column;align-items:stretch;gap:var(--s-3)}
+.pe-confirm-actions{display:flex;flex-wrap:wrap;gap:var(--s-2)}
+.pe-confirm-actions .btn{height:var(--tap)}
+.pe-actions{display:flex;flex-wrap:wrap;gap:var(--s-3)}
+.pe-actions .btn{flex:1;min-width:140px}
+/* <select> isn't covered by the shared input base, so it gets the same look here */
+select.pe-input{
+  width:100%;min-height:var(--tap);
+  padding:0 var(--s-8) 0 var(--s-3);
+  background:var(--fill);
+  border:1px solid transparent;border-radius:var(--r-md);
+  color:var(--text-primary);
+  font-family:var(--font-sans);font-size:var(--fs-input);font-weight:400;line-height:1.25;letter-spacing:-0.01em;
+  outline:none;appearance:none;-webkit-appearance:none;
+  transition:var(--t-ui);
+  background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);
+  background-position:calc(100% - 18px) 55%,calc(100% - 13px) 55%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;
+}
+select.pe-input:focus{border-color:var(--text-tertiary)}
 .pe-field{display:flex;flex-direction:column;gap:var(--s-1)}
 .pe-field-label{font-size:var(--fs-caption);line-height:var(--lh-caption);color:var(--text-secondary);font-weight:500;}
 .pe-foot{flex:0 0 auto;display:flex;gap:var(--s-3);padding:var(--s-3) var(--s-5) calc(var(--s-5) + env(safe-area-inset-bottom));background:var(--bg)}
@@ -783,6 +812,17 @@ body.plan-editor-open{overflow:hidden}
 .workout-meta-time{flex-shrink:0;font-family:var(--font-mono);font-size:var(--fs-caption);font-weight:500;color:var(--text-primary)}
 .workout-meta-info{flex:1;min-width:0;font-size:var(--fs-caption);line-height:var(--lh-caption);font-weight:400;color:var(--text-secondary)}
 .workout-meta-info:not(:empty)::before{content:'·';margin-right:var(--s-2);color:var(--text-tertiary)}
+.rest-timer{position:fixed;z-index:99;left:50%;transform:translateX(-50%);
+  bottom:calc(var(--nav-h) + var(--nav-offset) + env(safe-area-inset-bottom) + var(--s-2));
+  width:calc(100% - 2 * var(--s-4));max-width:608px;
+  display:flex;align-items:center;gap:var(--s-2);padding:var(--s-1) var(--s-2) var(--s-1) var(--s-4);
+  background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:var(--r-lg);box-shadow:var(--shadow-elevated)}
+.rest-timer[hidden]{display:none}
+.rest-timer .btn{height:var(--tap);padding:0 var(--s-3)}
+.rest-timer-info{flex:1;min-width:0;display:flex;align-items:baseline;gap:var(--s-2)}
+.rest-timer-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--fs-caption);line-height:var(--lh-caption);color:var(--text-secondary)}
+.rest-timer-time{flex-shrink:0;font-family:var(--font-mono);font-size:var(--fs-body);font-weight:600;color:var(--text-primary);font-variant-numeric:tabular-nums}
+body.rest-timer-on .page{padding-bottom:calc(var(--nav-h) + var(--nav-offset) + env(safe-area-inset-bottom) + var(--s-6) + 60px)}
 .session-actions{display:flex;flex-wrap:wrap;gap:var(--s-2);margin:calc(-1 * var(--s-2)) 0 var(--s-4)}
 .session-actions .btn{height:var(--tap)}
 .rest-state + .session-actions{margin-top:var(--s-4)}
@@ -1363,6 +1403,10 @@ body[data-theme="dark"] .theme-switch::after{transform:translateX(20px)}
         <span class="row-title">Dark mode</span>
         <span class="switch theme-switch" aria-hidden="true"></span>
       </button>
+      <button class="row row-btn" onclick="toggleRestTimerSetting()" aria-label="Toggle rest timer">
+        <span class="row-title">Rest timer</span>
+        <span class="switch" id="rest-timer-switch" aria-hidden="true"></span>
+      </button>
       <button class="row row-btn" onclick="Profile.open(true)">
         <span class="row-title">Edit profile</span>
         <svg class="row-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
@@ -1406,6 +1450,19 @@ body[data-theme="dark"] .theme-switch::after{transform:translateX(20px)}
       </div>
     </div>
   </div>
+</div>
+
+<!-- Rest timer: module-level only — never persisted or synced -->
+<div class="rest-timer" id="rest-timer" hidden>
+  <div class="rest-timer-info">
+    <span class="rest-timer-label" id="rest-timer-label">Rest</span>
+    <span class="rest-timer-time mono" id="rest-timer-time">0:00</span>
+  </div>
+  <button class="icon-btn" id="rest-timer-pause" onclick="RestTimer.togglePause()" aria-label="Pause rest timer">
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 9v6m4-6v6"/></svg>
+  </button>
+  <button class="btn btn-secondary btn-sm" onclick="RestTimer.add(30)">+30s</button>
+  <button class="btn btn-ghost btn-sm" onclick="RestTimer.skip()">Skip</button>
 </div>
 
 <nav>
@@ -1554,7 +1611,7 @@ let state = {
   startDate:null,foodLog:{},setLog:{},weights:[],workoutsCompleted:[],prs:{},theme:'dark',
   customExercises:{},customHiit:{},meals:null,hiitLog:{},sessions:{},sessionSets:{},pendingSessionSync:[],
   apiKey:null,coachStyle:'friendly',artemisChat:[],dailyFocus:null,artemisSettingsOpen:false,
-  usdaKey:null,usdaKeyFormOpen:false
+  usdaKey:null,usdaKeyFormOpen:false,settings:{restTimer:true}
 };
 
 // YYYY-MM-DD for the device's local calendar day. (toISOString() is UTC, which filed
@@ -2213,6 +2270,7 @@ function load(){
     if(!state.sessions || typeof state.sessions !== 'object') state.sessions={};
     if(!state.sessionSets || typeof state.sessionSets !== 'object') state.sessionSets={};
     if(!Array.isArray(state.pendingSessionSync)) state.pendingSessionSync=[];
+    if(!state.settings || typeof state.settings !== 'object') state.settings={restTimer:true};
     if(!state.coachStyle) state.coachStyle='friendly';
     if(!Array.isArray(state.artemisChat)) state.artemisChat=[];
     if(!state.meals||!Array.isArray(state.meals)) state.meals=JSON.parse(JSON.stringify(DEFAULT_MEALS));
@@ -2347,9 +2405,10 @@ function renderDashboard(){
   let html;
   if(sessionDone){
     const dk = viewKey();
-    const dayLog = session ? (state.sessionSets?.[session.id]?.[Session.blockIdx(session, 'strength')] || {}) : (state.setLog?.[dk]?.[dayIdx] || {});
+    const dayLog = state.setLog?.[dk]?.[dayIdx] || {};
     let setsLogged = 0, setsTotal = 0;
-    (day.exercises||[]).forEach((ex,ei)=>{
+    if(session) ({logged: setsLogged, total: setsTotal} = Session.progress(session));
+    else (day.exercises||[]).forEach((ex,ei)=>{
       setsTotal += ex.sets;
       const exLog = dayLog[ei]||{};
       Object.values(exLog).forEach(s=>{ if(s.done) setsLogged++; });
@@ -2594,10 +2653,16 @@ function buildArtemisSystemPrompt(){
   const todayWeekday = new Date().toLocaleDateString('en-US',{weekday:'long'});
   const todayDate = new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
 
-  const todayExercises = (today.exercises||[]).map((ex,i)=>
-    `  - ${getExName(dayIdx,i)} (${ex.sets}x${ex.reps}, ${ex.weight}, rest ${ex.rest})`
-  ).join('\n');
-  const todayHiit = getDayHiit(dayIdx).map(h=>`  - ${h.name} (${h.detail})`).join('\n');
+  // Today's session block by block, with the ids the plan-change tool addresses.
+  const todayRes = Session.resolve(todayKey());
+  const todayBlocksList = (todayRes.source === 'row' ? todayRes.session.snapshot?.blocks : Session.buildSnapshot(todayRes.spec).blocks) || [];
+  const todayTemplateId = todayRes.session?.template_id || todayRes.spec?.templateId || null;
+  const todayBlocks = todayBlocksList.map((blk, b) => {
+    const rows = (blk.items || []).filter(it => !it.removed).map((it, i) =>
+      `    [${i}] ${it.name} (id ${it.exerciseId})${isSetItem(it) ? ` — ${it.sets}x${it.repsText || '?'}${it.weightText ? ', ' + it.weightText : ''}${it.restText ? ', rest ' + it.restText : ''}` : ''}${it.durationSec ? `, ${it.durationSec}s` : ''}${it.detail ? ` — ${it.detail}` : ''}`
+    ).join('\n');
+    return `  Block ${b} · ${blockLabel(blk)} (type ${blk.type}):\n${rows || '    (empty)'}`;
+  }).join('\n');
   const todayEst = estimateWorkoutMinutes(dayIdx);
 
   // Today's set log progress
@@ -2724,8 +2789,7 @@ ${profileBlock}
 
 TODAY'S PRESCRIBED SESSION (${todayWeekday}): ${today.name}${today.rest?' — REST DAY':''}
 ${today.rest ? '(Rest / recovery day)' : `Estimated time: ~${todayEst} min`}
-${todayExercises ? `Lifting:\n${todayExercises}` : ''}
-${todayHiit ? `HIIT:\n${todayHiit}` : ''}
+${todayBlocks ? `Blocks${todayTemplateId ? ` (templateId ${todayTemplateId})` : ''}:\n${todayBlocks}` : ''}
 ${!today.rest ? `Sets completed today so far: ${setsLogged} / ${setsTotal}` : ''}
 
 ALL-TIME PRs:
@@ -2754,7 +2818,7 @@ Respond in character per the personality guidance above.`;
 // send a tool_result block back to the API.
 const PLAN_CHANGE_TOOL = {
   name: 'propose_plan_change',
-  description: "Propose specific, structured changes to the user's training plan. Use whenever the user asks to swap an exercise, change sets/reps/weight target/rest, rename a workout, change a form cue, etc. ALWAYS include a clear, data-grounded rationale tied to their goals, struggles, or recent performance. The user reviews each proposal as a diff card and approves or rejects before anything is applied. Phase 1 supports updating fields on existing exercises and workouts only — adding/removing/reordering exercises is not yet supported (tell the user to come back when that's available).",
+  description: "Propose specific, structured changes to the user's training plan. Use whenever the user asks to swap an exercise, change sets/reps/weight target/rest/duration, rename a workout, change a form cue, or add, remove or reorder exercises and blocks. ALWAYS include a clear, data-grounded rationale tied to their goals, struggles, or recent performance. The user reviews each proposal as a diff card and approves or rejects before anything is applied. Address things by id where you can: templateId, blockIdx and itemIdx come from the session blocks listed in the prompt. For another day, give day_idx instead and the day's scheduled workout is used. Workouts are lists of blocks (warm-up, strength, core, conditioning, …); each block holds items, and an item either prescribes sets and reps or is a single timed/described effort.",
   input_schema: {
     type: 'object',
     properties: {
@@ -2770,8 +2834,22 @@ const PLAN_CHANGE_TOOL = {
           properties: {
             type: {
               type: 'string',
-              enum: ['update_exercise', 'update_workout'],
-              description: "'update_exercise' to change fields on an existing exercise. 'update_workout' to change the workout's name or description."
+              enum: ['update_exercise', 'update_workout', 'add_item', 'remove_item', 'reorder_item', 'add_block', 'swap_exercise'],
+              description: "'update_exercise' changes fields on an existing item. 'swap_exercise' puts a different exercise in its place, keeping the prescription. 'add_item' / 'remove_item' / 'reorder_item' change a block's items. 'add_block' appends a block. 'update_workout' changes the workout's name or description."
+            },
+            templateId: {type: 'string', description: 'Workout template id (from the session blocks in the prompt). Preferred over day_idx.'},
+            blockIdx: {type: 'integer', minimum: 0, description: 'Which block within the workout (0-based), as listed in the prompt.'},
+            itemIdx: {type: 'integer', minimum: 0, description: 'Which item within the block (0-based). For add_item, where to insert; omit to append.'},
+            toIdx: {type: 'integer', minimum: 0, description: 'Destination index within the block, for reorder_item.'},
+            exerciseId: {type: 'string', description: 'Library exercise id: the new exercise for swap_exercise / add_item, or a check that itemIdx still holds the exercise you mean.'},
+            exerciseName: {type: 'string', description: 'Use instead of exerciseId when the exercise is not in the library yet — it will be added.'},
+            block: {
+              type: 'object',
+              description: 'For add_block: the block to append.',
+              properties: {
+                type: {type: 'string', enum: ['warmup','strength','hypertrophy','power','core','agility','mobility','conditioning','sport','cooldown']},
+                name: {type: 'string', description: 'Optional label, e.g. "Core finisher".'}
+              }
             },
             day_idx: {
               type: 'integer',
@@ -2793,11 +2871,13 @@ const PLAN_CHANGE_TOOL = {
                 reps: {type: 'string', description: 'Rep range as a string (e.g. "8-10", "6-8") (update_exercise only).'},
                 weight: {type: 'string', description: 'Weight target / loading guidance (e.g. "start 135 lbs", "moderate-heavy") (update_exercise only).'},
                 rest: {type: 'string', description: 'Rest period (e.g. "90s", "2 min") (update_exercise only).'},
+                duration: {type: 'integer', description: 'Work duration in seconds, for timed items (update_exercise / add_item).'},
+                detail: {type: 'string', description: 'Prescription for an item with no sets, e.g. "30s on · 30s rest · 4 rounds".'},
                 desc: {type: 'string', description: 'Form cue (update_exercise) or workout description (update_workout).'}
               }
             }
           },
-          required: ['type', 'day_idx', 'changes']
+          required: ['type']
         }
       }
     },
@@ -3118,6 +3198,30 @@ function initializePlan(){
   state.plan = buildPlanV2(cloned, HIIT_POOL, {updatedAt: new Date().toISOString()});
 }
 
+// ----- Blocks -----
+// A template or session is a list of blocks {type, name?, items[]}. An item with sets logs a set
+// table; one without logs a single done tick (detail and/or durationSec). The original two-bucket
+// shape (unnamed strength + conditioning blocks) keeps its original rendering and v1 mapping.
+const BLOCK_TYPES = ['warmup','strength','hypertrophy','power','core','agility','mobility','conditioning','sport','cooldown'];
+const BLOCK_LABELS = {warmup:'Warm-up', strength:'Strength', hypertrophy:'Hypertrophy', power:'Power', core:'Core', agility:'Agility', mobility:'Mobility', conditioning:'Conditioning', sport:'Sport', cooldown:'Cool-down'};
+const LIBRARY_CATEGORIES = ['strength','hypertrophy','power','core','agility','mobility','jointHealth','warmup','conditioning','sport'];
+const CATEGORY_LABELS = {strength:'Strength', hypertrophy:'Hypertrophy', power:'Power', core:'Core', agility:'Agility', mobility:'Mobility', jointHealth:'Joint health', warmup:'Warm-up', conditioning:'Conditioning', sport:'Sport'};
+const SET_BLOCK_TYPES = new Set(['strength','hypertrophy','power','core']);
+function isSetItem(item){ return Number(item?.sets) > 0; }
+function isLegacyShape(blocks){
+  return Array.isArray(blocks) && blocks.length === 2 && blocks[0]?.type === 'strength' && blocks[1]?.type === 'conditioning' && !blocks[0].name && !blocks[1].name;
+}
+// The v1 view of a block list: set-logged items → exercises[], the rest → hiit[] (the legacy shape keeps its buckets).
+function flattenBlocks(blocks){
+  const legacy = isLegacyShape(blocks), sets = [], ticks = [];
+  (blocks || []).forEach((blk, b) => (blk.items || []).forEach((item, i) => {
+    if(!item.removed) ((legacy ? blk.type === 'strength' : isSetItem(item)) ? sets : ticks).push({b, i, item});
+  }));
+  return {sets, ticks};
+}
+function blockLabel(blk){ return blk?.name || BLOCK_LABELS[blk?.type] || 'Block'; }
+function tickDetail(item){ return item.detail ?? (item.durationSec ? `${item.durationSec}s` : undefined); }
+
 // ----- Adapter: v2 program ⇄ v1 per-day workout -----
 function getActiveProgram(){
   const p = state.plan;
@@ -3133,14 +3237,14 @@ function toLegacyWorkout(dayIdx){
   if(!spec) return undefined;
   const tpl = spec.templateId ? prog.templates[spec.templateId] : null;
   const rest = spec.kind === 'rest', sport = spec.kind === 'sport';
-  const items = type => (tpl?.blocks || []).filter(b => b.type === type).flatMap(b => b.items || []);
+  const flat = flattenBlocks(tpl?.blocks);
   const lib = id => prog.library[id] || {};
   const w = {
     label: DAY_LABELS[dayIdx],
     name: rest ? spec.name : sport ? spec.name ?? tpl?.name : tpl?.name,
     desc: rest ? spec.desc : sport ? spec.desc ?? tpl?.desc ?? '' : tpl?.desc,
-    exercises: items('strength').map(it => ({name: lib(it.exerciseId).name, sets: it.sets, reps: it.repsText, rest: it.restText, weight: it.weightText, desc: it.cues ?? lib(it.exerciseId).cues})),
-    hiit: items('conditioning').map(it => ({name: lib(it.exerciseId).name, detail: it.detail}))
+    exercises: flat.sets.map(({item: it}) => ({name: lib(it.exerciseId).name, sets: it.sets, reps: it.repsText, rest: it.restText, weight: it.weightText, desc: it.cues ?? lib(it.exerciseId).cues})),
+    hiit: flat.ticks.map(({item: it}) => ({name: lib(it.exerciseId).name, detail: tickDetail(it)}))
   };
   if(rest) w.rest = true;
   else if(tpl?.fullHiit) w.fullHiit = true;
@@ -3282,26 +3386,29 @@ const Session = {
     const tpl = spec?.templateId ? prog?.templates?.[spec.templateId] : null;
     const rest = spec?.kind === 'rest', sport = spec?.kind === 'sport';
     const lib = id => prog?.library?.[id] || {};
-    const items = type => (tpl?.blocks || []).filter(b => b.type === type).flatMap(b => b.items || []);
     const snap = {programId: prog?.id ?? null, programName: prog?.name ?? '', templateId: spec?.templateId ?? null,
       name: rest ? spec.name : sport ? spec.name ?? tpl?.name : tpl?.name, desc: rest ? spec.desc : sport ? spec.desc ?? tpl?.desc ?? '' : tpl?.desc};
     if(!rest && tpl?.fullHiit) snap.fullHiit = true;
     snap.frozenAt = new Date().toISOString();
-    snap.blocks = [
-      {type: 'strength', items: items('strength').map(it => ({exerciseId: it.exerciseId, name: lib(it.exerciseId).name, cues: it.cues ?? lib(it.exerciseId).cues,
-        sets: it.sets, repsText: it.repsText, restText: it.restText, weightText: it.weightText}))},
-      {type: 'conditioning', items: items('conditioning').map(it => ({exerciseId: it.exerciseId, name: lib(it.exerciseId).name, cues: lib(it.exerciseId).cues, detail: it.detail}))}
-    ];
+    // Each block as the template has it, items denormalized (name and cue copied in) so the snapshot
+    // renders with no lookups. No template (rest, a bare optional session): two empty buckets, as before.
+    const snapItem = it => {
+      const o = {exerciseId: it.exerciseId, name: lib(it.exerciseId).name, cues: it.cues ?? lib(it.exerciseId).cues};
+      ['sets', 'repsText', 'restText', 'weightText', 'durationSec', 'detail'].forEach(k => { if(it[k] !== undefined) o[k] = it[k]; });
+      return o;
+    };
+    snap.blocks = tpl ? (tpl.blocks || []).map(blk => ({type: blk.type, ...(blk.name ? {name: blk.name} : {}), items: (blk.items || []).map(snapItem)}))
+      : [{type: 'strength', items: []}, {type: 'conditioning', items: []}];
     return snap;
   },
   // Legacy workout shape built only from the snapshot (same keys and order as toLegacyWorkout).
   toLegacyWorkout(session){
     const snap = session.snapshot || {};
-    const items = type => (snap.blocks || []).find(b => b.type === type)?.items || [];
+    const flat = flattenBlocks(snap.blocks);
     const w = {
       label: DAY_LABELS[getDayIdxFromDate(session.date)], name: snap.name, desc: snap.desc,
-      exercises: items('strength').map(it => ({name: it.name, sets: it.sets, reps: it.repsText, rest: it.restText, weight: it.weightText, desc: it.cues})),
-      hiit: items('conditioning').map(it => ({name: it.name, detail: it.detail}))
+      exercises: flat.sets.map(({item: it}) => ({name: it.name, sets: it.sets, reps: it.repsText, rest: it.restText, weight: it.weightText, desc: it.cues})),
+      hiit: flat.ticks.map(({item: it}) => ({name: it.name, detail: tickDetail(it)}))
     };
     if(session.kind === 'rest') w.rest = true;
     else if(snap.fullHiit) w.fullHiit = true;
@@ -3312,6 +3419,18 @@ const Session = {
     return i >= 0 ? i : (type === 'strength' ? 0 : 1);
   },
   sets(session, blockIdx, itemIdx){ return state.sessionSets?.[session.id]?.[blockIdx]?.[itemIdx] || {}; },
+  // Position of a set-logged item in the v1 exercises[] list (what state.setLog and the stats helpers index by).
+  flatSetIndex(session, b, i){ return flattenBlocks(session.snapshot?.blocks).sets.findIndex(x => x.b === +b && x.i === +i); },
+  hasLoggedSets(s){ return Object.values(state.sessionSets?.[s.id] || {}).some(items => Object.values(items || {}).some(sets => Object.keys(sets || {}).length)); },
+  // Sets done / prescribed across every set-logged item.
+  progress(session){
+    let logged = 0, total = 0;
+    flattenBlocks(session.snapshot?.blocks).sets.forEach(({b, i, item}) => {
+      total += +item.sets || 0;
+      Object.values(this.sets(session, b, i)).forEach(c => { if(c?.done) logged++; });
+    });
+    return {logged, total};
+  },
   cell(session, b, i, s){
     const t = (state.sessionSets ||= {})[session.id] ||= {};
     return ((t[b] ||= {})[i] ||= {})[s] ||= {reps: null, weight: null, duration_sec: null, done: false};
@@ -3373,16 +3492,16 @@ const Session = {
     const spec = this.specFor(date);
     if(!spec || spec.kind === 'rest') return null;
     const session = this.newRow(date, spec);
-    const sb = this.blockIdx(session, 'strength'), cb = this.blockIdx(session, 'conditioning');
+    const flat = flattenBlocks(session.snapshot.blocks);
     const imported = {};
     const put = (b, i, s, v) => { ((imported[b] ||= {})[i] ||= {})[s] = v; };
-    Object.entries(state.setLog?.[date]?.[dayIdx] || {}).forEach(([i, sets]) => Object.entries(sets || {}).forEach(([s, v]) => {
-      if(v) put(sb, +i, +s, {reps: numOrNull(v.reps), weight: numOrNull(v.weight), duration_sec: null, done: !!v.done});
+    Object.entries(state.setLog?.[date]?.[dayIdx] || {}).forEach(([k, sets]) => Object.entries(sets || {}).forEach(([s, v]) => {
+      const at = flat.sets[+k];
+      if(v && at) put(at.b, at.i, +s, {reps: numOrNull(v.reps), weight: numOrNull(v.weight), duration_sec: null, done: !!v.done});
     }));
-    const cond = session.snapshot.blocks[cb]?.items || [];
     Object.entries(state.hiitLog?.[date]?.[dayIdx] || {}).forEach(([name, done]) => {
-      const i = cond.findIndex(it => it.name === name);
-      if(i >= 0) put(cb, i, 0, {reps: null, weight: null, duration_sec: null, done: !!done});
+      const at = flat.ticks.find(t => t.item.name === name);
+      if(at) put(at.b, at.i, 0, {reps: null, weight: null, duration_sec: null, done: !!done});
     });
     if((state.workoutsCompleted || []).includes(`${date}-${dayIdx}`)){ session.status = 'done'; session.completed_at = session.started_at; }
     else if(status === 'planned' && !Object.keys(imported).length){ session.status = 'planned'; session.started_at = null; }
@@ -3415,25 +3534,27 @@ const Session = {
   },
 
   project(session, b, i, s){
-    if(b !== this.blockIdx(session, 'strength')) return;
+    const k = this.flatSetIndex(session, b, i);
     const c = state.sessionSets?.[session.id]?.[b]?.[i]?.[s];
-    if(!c) return;
+    if(k < 0 || !c) return;
     const e = {};
     if(c.reps != null) e.reps = c.reps;
     if(c.weight != null) e.weight = c.weight;
     e.done = !!c.done;
-    ((((state.setLog ||= {})[session.date] ||= {})[getDayIdxFromDate(session.date)] ||= {})[i] ||= {})[s] = e;
+    ((((state.setLog ||= {})[session.date] ||= {})[getDayIdxFromDate(session.date)] ||= {})[k] ||= {})[s] = e;
   },
   projectSession(session){
-    const b = this.blockIdx(session, 'strength');
-    Object.entries(state.sessionSets?.[session.id]?.[b] || {}).forEach(([i, sets]) => Object.keys(sets || {}).forEach(s => this.project(session, b, +i, +s)));
+    Object.entries(state.sessionSets?.[session.id] || {}).forEach(([b, items]) => Object.entries(items || {}).forEach(([i, sets]) =>
+      Object.keys(sets || {}).forEach(s => this.project(session, +b, +i, +s))));
   },
   projectAll(){ Object.values(state.sessions || {}).forEach(s => this.projectSession(s)); },
   unproject(session){
     const day = state.setLog?.[session.date]?.[getDayIdxFromDate(session.date)];
     if(!day) return;
-    Object.entries(state.sessionSets?.[session.id]?.[this.blockIdx(session, 'strength')] || {}).forEach(([i, sets]) =>
-      Object.keys(sets || {}).forEach(s => { if(day[i]) delete day[i][s]; }));
+    Object.entries(state.sessionSets?.[session.id] || {}).forEach(([b, items]) => Object.entries(items || {}).forEach(([i, sets]) => {
+      const k = this.flatSetIndex(session, b, i);
+      if(k >= 0 && day[k]) Object.keys(sets || {}).forEach(s => { delete day[k][s]; });
+    }));
   },
 
   // Keep the legacy completion flag (read by the stats helpers) in step with a session's status.
@@ -3496,13 +3617,14 @@ const Session = {
     this.setStatus(s, s.completed_at ? 'done' : s.started_at ? 'in_progress' : 'planned');   // back to where it was
     return true;
   },
-  // Sessions not yet under way — planned ones today or ahead, and today's in-progress one — track
-  // edits to their own workout (renames, HIIT picks, the plan editor, approved Artemis changes).
+  // Sessions not yet under way — planned ones today or ahead, and today's in-progress one while it has
+  // no logged sets — re-derive their snapshot when their workout is edited. Once any set is logged the
+  // session is started and frozen: its snapshot and (block, item, set) rows are never renumbered.
   followPlan(){
     const today = todayKey(), prog = getActiveProgram();
     Object.values(state.sessions || {}).forEach(s => {
       const open = (s.status === 'in_progress' && s.date === today) || (s.status === 'planned' && s.date >= today);
-      if(!open || s.kind === 'rest' || !prog?.templates?.[s.template_id]) return;
+      if(!open || s.kind === 'rest' || !prog?.templates?.[s.template_id] || this.hasLoggedSets(s)) return;
       const next = this.buildSnapshot({kind: s.kind, templateId: s.template_id, ...(s.kind === 'sport' ? {name: s.snapshot?.name, desc: s.snapshot?.desc} : {})});
       // Key-order-insensitive (a pulled snapshot comes back from jsonb with its keys reordered).
       const canon = v => Array.isArray(v) ? v.map(canon) : v && typeof v === 'object'
@@ -3513,6 +3635,23 @@ const Session = {
       this.bump(s.id);
       Sync.pushSession(s, {overwrite: true}).then(ok => this.afterPush(s.id, ok));
     });
+  },
+
+  // A started session is frozen, but HIIT picks made on the Train tab still reach today's: new
+  // movements are appended and dropped ones hidden, so no logged (block, item, set) row moves.
+  patchConditioning(date, list){
+    const s = state.sessions?.[date], prog = getActiveProgram();
+    if(!s || date !== todayKey() || s.status === 'done' || !this.hasLoggedSets(s) || !isLegacyShape(s.snapshot?.blocks)) return;
+    const blk = s.snapshot.blocks[1], want = list.map(h => h.name);
+    blk.items.forEach(it => { if(want.includes(it.name)) delete it.removed; else it.removed = true; });
+    list.forEach(h => {
+      if(blk.items.some(it => it.name === h.name)) return;
+      const id = findLibraryId(prog?.library || {}, h.name);
+      blk.items.push({exerciseId: id, name: h.name, cues: prog?.library?.[id]?.cues ?? '', detail: h.detail});
+    });
+    s.snapshotDirty = true; s.updated_at = new Date().toISOString();
+    this.bump(s.id); save();
+    Sync.pushSession(s, {overwrite: true}).then(ok => this.afterPush(s.id, ok));
   },
 
   // ----- Offline queue -----
@@ -3608,6 +3747,82 @@ const Session = {
 };
 const UNSYNCED_NOTE = '<span class="workout-meta-note" data-unsynced>Saved on this device · not synced yet</span>';
 window.addEventListener('online', () => Session.flush());
+// ===== Rest timer =====
+// Counts down from the item's rest between sets. Module-level only: never written to state,
+// localStorage or Supabase. Remaining time always comes from the end timestamp, so a spell in the
+// background (where intervals are throttled) still shows the right number on return.
+const RestTimer = {
+  endAt: 0, left: 0, paused: false, name: '', iv: null,
+  enabled(){ return state.settings?.restTimer !== false; },
+  startFor(item){
+    if(!item || !this.enabled()) return;
+    this.start(item.name || 'Rest', parseRestSeconds(item.restText));
+  },
+  start(name, seconds){
+    this.name = name; this.paused = false; this.left = 0;
+    this.endAt = Date.now() + Math.max(1, seconds) * 1000;
+    document.body.classList.add('rest-timer-on');
+    document.getElementById('rest-timer').hidden = false;
+    this.loop();
+  },
+  remaining(){ return this.paused ? this.left : Math.max(0, this.endAt - Date.now()); },
+  add(seconds){
+    if(!this.endAt) return;
+    if(this.paused) this.left += seconds * 1000; else this.endAt += seconds * 1000;
+    this.render();
+  },
+  togglePause(){
+    if(!this.endAt) return;
+    if(this.paused){ this.endAt = Date.now() + this.left; this.paused = false; this.loop(); }
+    else { this.left = this.remaining(); this.paused = true; clearInterval(this.iv); this.iv = null; }
+    this.render();
+  },
+  skip(){ this.stop(); },
+  stop(){
+    clearInterval(this.iv); this.iv = null; this.endAt = 0; this.left = 0; this.paused = false;
+    document.body.classList.remove('rest-timer-on');
+    const el = document.getElementById('rest-timer');
+    if(el) el.hidden = true;
+  },
+  loop(){ clearInterval(this.iv); this.iv = setInterval(() => this.tick(), 250); this.tick(); },
+  tick(){
+    if(!this.endAt) return;
+    if(!this.paused && this.remaining() <= 0){ this.finish(); return; }
+    this.render();
+  },
+  finish(){
+    try { if(navigator.vibrate) navigator.vibrate([180, 90, 180]); } catch(e){}
+    this.stop();
+  },
+  render(){
+    const ms = this.remaining(), total = Math.ceil(ms / 1000);
+    const label = document.getElementById('rest-timer-label'), time = document.getElementById('rest-timer-time');
+    if(!label || !time) return;
+    label.textContent = `${this.paused ? 'Paused' : 'Rest'} · ${this.name}`;
+    time.textContent = `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+    const pause = document.getElementById('rest-timer-pause');
+    if(pause){
+      pause.setAttribute('aria-label', this.paused ? 'Resume rest timer' : 'Pause rest timer');
+      pause.innerHTML = this.paused
+        ? '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M14.752 11.168l-5.197-3.03A1 1 0 008 9.002v5.996a1 1 0 001.555.832l5.197-3.03a1 1 0 000-1.632z"/></svg>'
+        : '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 9v6m4-6v6"/></svg>';
+    }
+  }
+};
+document.addEventListener('visibilitychange', () => { if(!document.hidden) RestTimer.tick(); });
+function toggleRestTimerSetting(){
+  state.settings = state.settings || {};
+  state.settings.restTimer = state.settings.restTimer === false;
+  if(!state.settings.restTimer) RestTimer.stop();
+  save();
+  renderRestTimerSetting();
+  toast(state.settings.restTimer ? 'Rest timer on' : 'Rest timer off');
+}
+function renderRestTimerSetting(){
+  const el = document.getElementById('rest-timer-switch');
+  if(el) el.classList.toggle('on', state.settings?.restTimer !== false);
+}
+
 // ----- Schedule actions (Train tab): skip / undo, optional "Did it", move -----
 async function skipViewedSession(){
   const d = viewKey();
@@ -3692,13 +3907,12 @@ function isExCustomized(dayIdx, exIdx){
   const orig = getDefaultExercise(dayIdx, exIdx)?.name;
   return !!(cur && orig && cur !== orig);
 }
+// Renaming happens in the template editor, where it can ask whether to rename the exercise
+// everywhere or swap just this workout.
 function startEditExName(dayIdx, exIdx){
-  editingExKey = `${dayIdx}-${exIdx}`;
-  renderWorkoutContent();
-  setTimeout(()=>{
-    const input = document.querySelector(`[data-ex-edit="${dayIdx}-${exIdx}"]`);
-    if(input){ input.focus(); input.select(); }
-  }, 30);
+  const prog = getActiveProgram();
+  const at = flattenBlocks(prog?.templates?.[getSessionSpecForDay(dayIdx)?.templateId]?.blocks).sets[exIdx];
+  PlanEditor.open(dayIdx, at ? {b: at.b, i: at.i} : null);
 }
 function finishEditExName(dayIdx, exIdx, value){
   const trimmed = (value||'').trim();
@@ -3764,9 +3978,15 @@ function renderIngredientList(containerId, items){
 function getDayHiit(dayIdx){
   return getWorkout(dayIdx)?.hiit || [];
 }
+// The HIIT list the Train tab is showing: a stored session's own list on its day, else the plan's.
+function shownHiit(dayIdx){
+  const s = isSessionDay(dayIdx) ? state.sessions?.[viewKey()] : null;
+  return s ? Session.toLegacyWorkout(s).hiit : getDayHiit(dayIdx);
+}
 function setDayHiit(dayIdx, list){
   const w = getWorkout(dayIdx);
   if(w){ w.hiit = list; setLegacyWorkout(dayIdx, w); }
+  if(isSessionDay(dayIdx)) Session.patchConditioning(viewKey(), list);
 }
 let hiitPickerOpen = {};
 let hiitPoolEditIdx = null;     // index of pool item being edited inline
@@ -3781,7 +4001,7 @@ function toggleHiitPicker(dayIdx){
   renderWorkoutContent();
 }
 function toggleHiitItem(dayIdx, name){
-  const current = getDayHiit(dayIdx).slice();
+  const current = shownHiit(dayIdx).slice();
   const idx = current.findIndex(h=>h.name===name);
   if(idx>=0){
     current.splice(idx,1);
@@ -3870,7 +4090,7 @@ function removeHiitPoolItem(idx){
   toast('Removed');
 }
 function removeHiitItem(dayIdx, idx){
-  const current = getDayHiit(dayIdx).slice();
+  const current = shownHiit(dayIdx).slice();
   current.splice(idx,1);
   setDayHiit(dayIdx, current);
   renderWorkoutContent();
@@ -3969,6 +4189,85 @@ function renderWorkout(){
 
 function setDay(i){ activeDay=i; renderWorkout(); }
 
+function snapshotNote(session){
+  return `<span class="workout-meta-note">Snapshot · frozen ${formatViewDateLabel(localDateKey(new Date(session.snapshot?.frozenAt || session.started_at || session.date + 'T00:00:00')))}</span>`;
+}
+const CHECK_SVG = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
+// Block-by-block Train view. Each block: a section label with items done / items, then its items —
+// a set table for items with sets (plus a seconds column when the item also has a duration) and a
+// single done tick for the rest, reusing the existing row and card styles.
+function renderBlockWorkout({day, blocks, session, dateKey, preview, actions, metaNote}){
+  const flat = flattenBlocks(blocks);
+  const legacyCells = (b, i, item) => {
+    if(!isSetItem(item)) return {0: {done: isHiitDone(activeDay, item.name)}};
+    const k = flat.sets.findIndex(x => x.b === b && x.i === i);
+    return state.setLog?.[dateKey]?.[activeDay]?.[k] || {};
+  };
+  const cellsFor = (b, i, item) => session ? Session.sets(session, b, i) : legacyCells(b, i, item);
+  const itemCount = flat.sets.length + flat.ticks.length;
+  const only = preview ? ' session-only' : '';
+  let html = `<div class="workout-meta">
+      <span class="workout-meta-time">~${estimateWorkoutMinutes(activeDay, day)} min</span>
+      <span class="workout-meta-info">${itemCount} exercise${itemCount === 1 ? '' : 's'} · ${blocks.length} block${blocks.length === 1 ? '' : 's'}${metaNote}${session && Session.isUnsynced(session.id) ? UNSYNCED_NOTE : ''}</span>
+      <button class="btn btn-ghost btn-sm editable-only" onclick="PlanEditor.open(${activeDay})" title="Edit workout">Edit</button>
+    </div>${actions}`;
+  blocks.forEach((blk, b) => {
+    const items = (blk.items || []).map((item, i) => ({item, i})).filter(x => !x.item.removed);
+    const complete = items.filter(({item, i}) => {
+      const cells = cellsFor(b, i, item);
+      return isSetItem(item) ? Array.from({length: +item.sets}, (_, s) => cells[s]?.done).every(Boolean) : !!cells[0]?.done;
+    }).length;
+    html += `<div class="section block-${escapeHtml(blk.type)}"><div class="section-label">${escapeHtml(blockLabel(blk))} · ${complete}/${items.length}</div>`;
+    if(!items.length) html += `<div class="empty">Nothing in this block yet</div>`;
+    let ticks = [];
+    const flushTicks = () => {
+      if(!ticks.length) return;
+      html += `<div class="card hiit-card">${ticks.join('')}</div>`;
+      ticks = [];
+    };
+    items.forEach(({item, i}, n) => {
+      const cells = cellsFor(b, i, item);
+      if(!isSetItem(item)){
+        const done = !!cells[0]?.done, detail = tickDetail(item);
+        ticks.push(`<div class="hiit-row ${done ? 'done' : ''}">
+          <div class="hiit-num">${String(n + 1).padStart(2, '0')}</div>
+          <div class="hiit-info"><div class="hiit-name">${escapeHtml(item.name || '')}</div>${detail ? `<div class="hiit-detail">${escapeHtml(detail)}</div>` : ''}</div>
+          <button class="set-check ${done ? 'done' : ''}${only}" title="Mark complete" onclick="toggleBlockTick(${activeDay},${b},${i})">${CHECK_SVG}</button>
+        </div>`);
+        return;
+      }
+      flushTicks();
+      const dur = +item.durationSec > 0, grid = dur ? ' has-duration' : '';
+      const meta = [`<span class="mono">${item.sets} × ${escapeHtml(item.repsText || '—')}</span>`, item.restText && `<span class="mono">${escapeHtml(item.restText)}</span>`,
+        dur && `<span class="mono">${item.durationSec}s</span>`, item.weightText && `<span>${escapeHtml(item.weightText)}</span>`].filter(Boolean).join('<span class="ex-meta-sep">·</span>');
+      const cue = `${activeDay}-${b}-${i}`;
+      html += `<div class="ex-row">
+        <div class="ex-head"><div class="ex-name-wrap"><div class="ex-name-display">${escapeHtml(item.name || '')}</div></div></div>
+        <div class="ex-meta">${meta}</div>
+        ${item.cues ? `<details class="ex-cue" data-cue="${cue}" ontoggle="onCueToggle(this)"${openCues.has(cue) ? ' open' : ''}><summary>Form cue</summary><p>${escapeHtml(item.cues)}</p></details>` : ''}
+        <div class="set-table set-head${grid}"><div class="set-th">Set</div><div class="set-th">Reps</div><div class="set-th">lbs</div>${dur ? '<div class="set-th">Sec</div>' : ''}<div></div></div>`;
+      for(let s = 0; s < +item.sets; s++){
+        const c = cells[s] || {};
+        html += `<div class="set-table editable-only${only}${grid}">
+          <div class="set-num">${s + 1}</div>
+          <input type="number" class="set-input" placeholder="${escapeHtml(String(item.repsText || '').split('–')[0])}" value="${c.reps ?? ''}" inputmode="numeric" onchange="logBlockSet(${activeDay},${b},${i},${s},'reps',this.value)">
+          <input type="number" class="set-input" placeholder="—" value="${c.weight ?? ''}" inputmode="decimal" step="0.5" onchange="logBlockSet(${activeDay},${b},${i},${s},'weight',this.value)">
+          ${dur ? `<input type="number" class="set-input" placeholder="${item.durationSec}" value="${c.duration_sec ?? ''}" inputmode="numeric" onchange="logBlockSet(${activeDay},${b},${i},${s},'duration_sec',this.value)">` : ''}
+          <button class="set-check ${c.done ? 'done' : ''}" onclick="toggleBlockSet(${activeDay},${b},${i},${s})">${CHECK_SVG}</button>
+        </div>`;
+      }
+      html += `</div>`;
+    });
+    flushTicks();
+    html += `</div>`;
+  });
+  html += `<button class="btn btn-primary btn-lg btn-full editable-only${only} workout-done" onclick="markWorkoutDone()">
+      <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+      Mark session complete
+    </button>`;
+  return html;
+}
+
 function renderWorkoutContent(){
   const dateKey = viewKey();
   // The viewed date's own weekday shows its session: a stored one renders from its snapshot and
@@ -3985,6 +4284,9 @@ function renderWorkoutContent(){
     : covered ? {label: DAY_LABELS[activeDay], name: 'Rest', desc: res.spec.desc, exercises: [], hiit: [], rest: true}
     : getWorkout(activeDay);
   const doneNow = shown ? shown.status === 'done' : (state.workoutsCompleted || []).includes(`${dateKey}-${activeDay}`);
+  // Blocks on screen: the session's snapshot, else the plan's workout for this pill. The original
+  // two-bucket shape keeps its original markup below; anything else renders block by block.
+  const viewBlocks = (session || shown)?.snapshot?.blocks || Session.buildSnapshot(live ? res?.spec : getSessionSpecForDay(activeDay)).blocks;
   // Schedule actions for the date's own session, today or ahead (logging itself stays today-only).
   const actions = live && isPlannable(dateKey) && !day.rest && !doneNow && shown?.status !== 'skipped' ? `<div class="session-actions">
       <button class="btn btn-secondary btn-sm" onclick="MoveSheet.open()">Move to…</button>
@@ -4022,6 +4324,9 @@ function renderWorkoutContent(){
       <div class="rest-desc">${day.name === 'Rest' ? day.desc : 'Take it easy'}</div>
       <div class="rest-sub">Recovery is when growth happens.</div>
     </div>`;
+  } else if(!isLegacyShape(viewBlocks)){
+    html = renderBlockWorkout({day, blocks: viewBlocks, session, dateKey, preview, actions,
+      metaNote: session?.status === 'done' ? snapshotNote(session) : preview ? `<span class="workout-meta-note">Plan preview · today's session is ${DAY_LABELS[getDayIdxFromDate(dateKey)]}</span>` : ''});
   } else {
     const estMin = estimateWorkoutMinutes(activeDay, day);
     const exCount = day.exercises.length;
@@ -4030,7 +4335,7 @@ function renderWorkoutContent(){
     if(exCount) parts.push(`${exCount} exercise${exCount===1?'':'s'}`);
     if(hiitCount) parts.push(`${hiitCount} HIIT`);
     const metaNote = session?.status === 'done'
-      ? `<span class="workout-meta-note">Snapshot · frozen ${formatViewDateLabel(localDateKey(new Date(session.snapshot?.frozenAt || session.started_at || session.date + 'T00:00:00')))}</span>`
+      ? snapshotNote(session)
       : preview ? `<span class="workout-meta-note">Plan preview · today's session is ${DAY_LABELS[getDayIdxFromDate(dateKey)]}</span>` : '';
     html+=`<div class="workout-meta">
       <span class="workout-meta-time">~${estMin} min</span>
@@ -4217,6 +4522,43 @@ async function toggleSet(dayIdx, exIdx, setIdx){
   const cell = Session.cell(session, sb, exIdx, setIdx);
   cell.done = !cell.done;
   Session.commit(session, sb, exIdx, setIdx);
+  if(cell.done) RestTimer.startFor(session.snapshot?.blocks?.[sb]?.items?.[exIdx]);
+  renderWorkoutContent();
+}
+
+// Block-addressed writes (block view). Same rules as logSet / toggleSet.
+async function logBlockSet(dayIdx, b, i, s, field, value){
+  if(!assertEditable('Logging sets') || !assertSessionDay(dayIdx)) return;
+  const session = await Session.begin(viewKey());
+  if(!session) return;
+  Session.cell(session, b, i, s)[field] = numOrNull(value);
+  let prChanged = null;
+  const exName = session.snapshot?.blocks?.[b]?.items?.[i]?.name;
+  if(field === 'weight' && exName){
+    const w = parseFloat(value);
+    if(!state.prs) state.prs = {};
+    if(w && (!state.prs[exName] || w > state.prs[exName])){ state.prs[exName] = w; prChanged = {name: exName, weight: w}; }
+  }
+  Session.commit(session, b, i, s);
+  if(prChanged) Sync.pushPR(prChanged.name, prChanged.weight);
+}
+async function toggleBlockSet(dayIdx, b, i, s){
+  if(!assertEditable('Marking sets') || !assertSessionDay(dayIdx)) return;
+  const session = await Session.begin(viewKey());
+  if(!session) return;
+  const cell = Session.cell(session, b, i, s);
+  cell.done = !cell.done;
+  Session.commit(session, b, i, s);
+  if(cell.done) RestTimer.startFor(session.snapshot?.blocks?.[b]?.items?.[i]);
+  renderWorkoutContent();
+}
+async function toggleBlockTick(dayIdx, b, i){
+  if(!assertEditable('Marking complete') || !assertSessionDay(dayIdx)) return;
+  const session = await Session.begin(viewKey());
+  if(!session) return;
+  const cell = Session.cell(session, b, i, 0);
+  cell.done = !cell.done;
+  Session.commit(session, b, i, 0);
   renderWorkoutContent();
 }
 
@@ -4233,10 +4575,10 @@ async function markWorkoutDone(){
 function showSessionCelebration(){
   const session = state.sessions?.[viewKey()];
   const day = session ? Session.toLegacyWorkout(session) : getWorkout(activeDay);
-  const sb = session ? Session.blockIdx(session, 'strength') : 0;
-  const dayLog = session ? (state.sessionSets?.[session.id]?.[sb] || {}) : (state.setLog?.[viewKey()]?.[activeDay] || {});
+  const dayLog = state.setLog?.[viewKey()]?.[activeDay] || {};
   let setsLogged = 0, setsTotal = 0;
-  (day.exercises || []).forEach((ex, ei) => {
+  if(session) ({logged: setsLogged, total: setsTotal} = Session.progress(session));
+  else (day.exercises || []).forEach((ex, ei) => {
     setsTotal += ex.sets;
     Object.values(dayLog[ei] || {}).forEach(s => { if(s.done) setsLogged++; });
   });
@@ -4989,6 +5331,7 @@ function renderProgress(){
     </div>`).join('');
   document.getElementById('weekly-overview').innerHTML=wo;
   renderSettingsKeys();
+  renderRestTimerSetting();
 }
 
 // Settings → Artemis key row. Presentation only: reflects state.apiKey and reuses the
@@ -6567,6 +6910,126 @@ async function fetchOpenFoodFactsByBarcode(barcode){
 const DAY_LABELS = ['MON','TUE','WED','THU','FRI','SAT','SUN'];
 const FIELD_LABELS = {name:'Name', sets:'Sets', reps:'Reps', weight:'Weight', rest:'Rest', desc:'Cue'};
 
+// Applying a proposal's operations to the plan. Ops address a template, block and item by id/index;
+// older proposals (day_idx + exercise_idx) still resolve through the v1 view of the workout.
+const PlanOps = {
+  target(prog, op){
+    const spec = op.day_idx != null ? prog.schedule?.[op.day_idx] : null;
+    const tplId = op.templateId || spec?.templateId;
+    const tpl = tplId ? prog.templates?.[tplId] : null;
+    if(!tpl) return {error: 'that workout no longer exists'};
+    return {tpl, tplId};
+  },
+  itemAt(tpl, op){
+    // For swap_exercise / add_item, exerciseId names the incoming exercise; elsewhere it's a check
+    // that the position still holds the exercise the proposal meant.
+    const guard = !['swap_exercise', 'add_item'].includes(op.type) ? op.exerciseId : null;
+    if(op.blockIdx != null){
+      const blk = tpl.blocks?.[op.blockIdx];
+      if(!blk) return {error: `block ${op.blockIdx} no longer exists`};
+      const idx = op.itemIdx ?? op.exercise_idx;
+      const item = blk.items?.[idx];
+      if(!item) return {error: 'that exercise is no longer in the block'};
+      if(guard && item.exerciseId !== guard) return {error: 'that exercise has moved — reopen the plan and try again'};
+      return {blk, item, b: op.blockIdx, i: idx};
+    }
+    const at = flattenBlocks(tpl.blocks).sets[op.exercise_idx ?? op.itemIdx];   // legacy addressing
+    if(!at) return {error: 'that exercise is no longer in the workout'};
+    return {blk: tpl.blocks[at.b], item: at.item, b: at.b, i: at.i};
+  },
+  // An exercise id from the op, adding it to the library when only a name is given.
+  exerciseId(prog, op){
+    if(op.exerciseId) return prog.library?.[op.exerciseId] ? op.exerciseId : null;
+    const name = op.exerciseName || op.changes?.name;
+    if(!name) return null;
+    return ensureLibraryEntry(prog.library, name, 'strength', {});
+  },
+  fields(item, changes, prog){
+    Object.entries(changes || {}).forEach(([k, v]) => {
+      // A name change is a rename of this exercise (its cue and history come with it) unless another
+      // library entry already has that name, in which case the item points at that one instead.
+      if(k === 'name'){
+        const other = findLibraryId(prog.library, v);
+        if(other && other !== item.exerciseId){ item.exerciseId = other; delete item.cues; }
+        else if(prog.library[item.exerciseId]) prog.library[item.exerciseId].name = v;
+        else item.exerciseId = ensureLibraryEntry(prog.library, v, 'strength', {});
+      }
+      else if(k === 'sets') item.sets = parseInt(v) || 0;
+      else if(k === 'reps') item.repsText = v;
+      else if(k === 'rest') item.restText = v;
+      else if(k === 'weight') item.weightText = v;
+      else if(k === 'duration') item.durationSec = parseInt(v) || 0;
+      else if(k === 'detail') item.detail = v;
+      else if(k === 'desc') item.cues = v;
+    });
+    if(!item.sets) delete item.sets;
+  },
+  apply(prog, op){
+    const t = this.target(prog, op);
+    if(t.error) return {ok: false, reason: t.error};
+    const {tpl} = t;
+    if(op.type === 'update_workout'){
+      Object.entries(op.changes || {}).forEach(([k, v]) => { if(k === 'name') tpl.name = v; else if(k === 'desc') tpl.desc = v; });
+      if(op.day_idx != null){
+        const spec = prog.schedule[op.day_idx];
+        if(spec && (spec.kind === 'rest' || spec.kind === 'sport')){ if(op.changes?.name != null) spec.name = op.changes.name; if(op.changes?.desc != null) spec.desc = op.changes.desc; }
+        if(op.changes?.rest !== undefined && spec) spec.kind = op.changes.rest ? 'rest' : spec.kind;
+      }
+      return {ok: true};
+    }
+    if(op.type === 'add_block'){
+      const type = BLOCK_TYPES.includes(op.block?.type) ? op.block.type : 'strength';
+      tpl.blocks = tpl.blocks || [];
+      tpl.blocks.push({type, ...(op.block?.name ? {name: op.block.name} : {}), items: []});
+      return {ok: true};
+    }
+    if(op.type === 'add_item'){
+      const blk = tpl.blocks?.[op.blockIdx ?? (tpl.blocks.length - 1)];
+      if(!blk) return {ok: false, reason: `block ${op.blockIdx} no longer exists`};
+      const id = this.exerciseId(prog, op);
+      if(!id) return {ok: false, reason: 'that exercise is not in the library'};
+      const item = SET_BLOCK_TYPES.has(blk.type) ? {exerciseId: id, sets: 3, repsText: '8–12', restText: '90s', weightText: ''} : {exerciseId: id, detail: prog.library[id]?.detail || ''};
+      this.fields(item, {...op.changes, name: undefined}, prog);
+      blk.items = blk.items || [];
+      blk.items.splice(op.itemIdx ?? blk.items.length, 0, item);
+      return {ok: true};
+    }
+    const at = this.itemAt(tpl, op);
+    if(at.error) return {ok: false, reason: at.error};
+    if(op.type === 'remove_item'){ at.blk.items.splice(at.i, 1); return {ok: true}; }
+    if(op.type === 'reorder_item'){
+      const to = Math.max(0, Math.min((op.toIdx ?? at.i), at.blk.items.length - 1));
+      at.blk.items.splice(to, 0, at.blk.items.splice(at.i, 1)[0]);
+      return {ok: true};
+    }
+    if(op.type === 'swap_exercise'){
+      const id = this.exerciseId(prog, op);
+      if(!id) return {ok: false, reason: 'that exercise is not in the library'};
+      at.item.exerciseId = id;
+      delete at.item.cues;
+      this.fields(at.item, op.changes, prog);
+      return {ok: true};
+    }
+    if(op.type === 'update_exercise'){ this.fields(at.item, op.changes, prog); return {ok: true}; }
+    return {ok: false, reason: `unsupported change "${op.type}"`};
+  },
+  // One line per operation for the diff card.
+  describe(prog, op){
+    const t = this.target(prog, op);
+    if(t.error) return {label: 'Change', before: '—', after: '—', error: t.error};
+    const name = id => prog.library?.[id]?.name || id || '—';
+    const blk = op.blockIdx != null ? t.tpl.blocks?.[op.blockIdx] : null;
+    const at = ['remove_item', 'reorder_item', 'swap_exercise'].includes(op.type) ? this.itemAt(t.tpl, op) : null;
+    if(at?.error) return {label: 'Change', before: '—', after: '—', error: at.error};
+    if(op.type === 'add_block') return {label: 'Add block', before: '—', after: BLOCK_LABELS[op.block?.type] || 'Block'};
+    if(op.type === 'add_item') return {label: blk ? `Add to ${blockLabel(blk)}` : 'Add exercise', before: '—', after: name(op.exerciseId) !== op.exerciseId ? name(op.exerciseId) : (op.exerciseName || name(op.exerciseId))};
+    if(op.type === 'remove_item') return {label: `Remove from ${blockLabel(at.blk)}`, before: name(at.item.exerciseId), after: '—'};
+    if(op.type === 'reorder_item') return {label: `Move in ${blockLabel(at.blk)}`, before: `#${at.i + 1}`, after: `#${(op.toIdx ?? at.i) + 1}`};
+    if(op.type === 'swap_exercise') return {label: 'Swap', before: name(at.item.exerciseId), after: op.exerciseId ? name(op.exerciseId) : (op.exerciseName || '—')};
+    return null;
+  }
+};
+
 const PlanProposal = {
   renderCard(message, msgIdx){
     const tu = message.toolUse;
@@ -6600,14 +7063,29 @@ const PlanProposal = {
   },
 
   renderOp(op){
-    const dayLabel = DAY_LABELS[op.day_idx] || `Day ${op.day_idx}`;
+    const prog = getActiveProgram();
+    const dayLabel = op.day_idx != null ? (DAY_LABELS[op.day_idx] || `Day ${op.day_idx}`) : (prog?.templates?.[op.templateId]?.name || op.templateId || 'Workout');
+    const summary = op.type === 'update_exercise' || op.type === 'update_workout' ? null : PlanOps.describe(prog, op);
+    if(summary){
+      const blk = op.blockIdx != null ? prog?.templates?.[op.templateId || (op.day_idx != null ? getSessionSpecForDay(op.day_idx)?.templateId : null)]?.blocks?.[op.blockIdx] : null;
+      return `<div class="proposal-op">
+        <div class="proposal-op-target">${escapeHtml(`${dayLabel}${blk ? ' · ' + blockLabel(blk) : ''}`)}</div>
+        <div class="proposal-op-field">
+          <span class="proposal-op-field-label">${escapeHtml(summary.label)}</span>
+          <span class="proposal-op-change"><span class="proposal-op-before">${escapeHtml(summary.before)}</span><span class="proposal-op-arrow">→</span><span class="proposal-op-after">${escapeHtml(summary.after)}</span></span>
+        </div>
+        ${summary.error ? `<div class="proposal-op-field"><span class="proposal-op-field-label">Can't apply</span><span class="proposal-op-change"><span class="proposal-op-before">${escapeHtml(summary.error)}</span></span></div>` : ''}
+      </div>`;
+    }
     let target, current;
     if(op.type === 'update_exercise'){
-      const cur = getExercise(op.day_idx, op.exercise_idx);
-      target = `${dayLabel} · exercise ${(op.exercise_idx ?? 0)+1}${cur?.name ? ` (${cur.name})` : ''}`;
+      const t = PlanOps.target(prog, op), at = t.tpl ? PlanOps.itemAt(t.tpl, op) : null;
+      const cur = at && !at.error ? {name: prog.library?.[at.item.exerciseId]?.name, sets: at.item.sets, reps: at.item.repsText, rest: at.item.restText, weight: at.item.weightText, desc: at.item.cues ?? prog.library?.[at.item.exerciseId]?.cues} : getExercise(op.day_idx, op.exercise_idx);
+      target = `${dayLabel} · exercise ${((op.itemIdx ?? op.exercise_idx) ?? 0)+1}${cur?.name ? ` (${cur.name})` : ''}`;
       current = cur || {};
     } else if(op.type === 'update_workout'){
-      const cur = getWorkout(op.day_idx);
+      const t = PlanOps.target(prog, op);
+      const cur = op.day_idx != null ? getWorkout(op.day_idx) : t.tpl;
       target = `${dayLabel} · workout${cur?.name ? ` (${cur.name})` : ''}`;
       current = cur || {};
     } else {
@@ -6632,30 +7110,21 @@ const PlanProposal = {
   approve(msgIdx){
     const m = state.artemisChat?.[msgIdx];
     if(!m || !m.toolUse || m.toolUseStatus !== 'pending') return;
-    // Apply operations to a v1 copy of each touched day, then write each day back once
+    // Apply every operation to the plan, then save once.
     const ops = m.toolUse.operations || [];
-    const drafts = {};
-    let appliedCount = 0;
-    for(const op of ops){
-      const w = drafts[op.day_idx] || (drafts[op.day_idx] = getWorkout(op.day_idx));
-      if(!w) continue;
-      if(op.type === 'update_exercise'){
-        const ex = w.exercises?.[op.exercise_idx];
-        if(!ex) continue;
-        Object.entries(op.changes || {}).forEach(([k, v]) => { ex[k] = v; });
-        appliedCount++;
-      } else if(op.type === 'update_workout'){
-        Object.entries(op.changes || {}).forEach(([k, v]) => { w[k] = v; });
-        appliedCount++;
-      }
-    }
     const prog = getActiveProgram();
-    if(prog) Object.entries(drafts).forEach(([d, w]) => { if(w) writeLegacyWorkout(prog, +d, w); });
+    let appliedCount = 0;
+    const failures = [];
+    for(const op of ops){
+      if(!prog){ failures.push('no active program'); continue; }
+      const r = PlanOps.apply(prog, op);
+      if(r.ok) appliedCount++; else failures.push(r.reason);
+    }
     m.toolUseStatus = 'approved';
     savePlan();
     renderArtemis();
     scrollChatToBottom();
-    toast(`${appliedCount} change${appliedCount===1?'':'s'} applied`);
+    toast(`${appliedCount} change${appliedCount===1?'':'s'} applied${failures.length ? ` · ${failures.length} skipped: ${failures[0]}` : ''}`);
   },
 
   reject(msgIdx){
@@ -6669,118 +7138,461 @@ const PlanProposal = {
   }
 };
 
-// ===== Plan editor (Train tab → Edit workout) =====
-// Full-screen sheet to edit a single workout: name, description, and per-exercise
-// fields (name, sets, reps, weight target, rest, cue/desc). Writes go through
-// savePlan() so Supabase + Train tab + Artemis context stay in sync.
+// ===== Template editor (Train tab → Edit workout) =====
+// Full-screen sheet over the whole workout: blocks (add / remove / reorder / rename / retype) and
+// their items (add / remove / reorder, every field, swap, rename). It also hosts the exercise
+// library and the picker. Everything happens on a draft — a clone of the template plus a clone of
+// the library — and lands in one savePlan() on Save, so nothing is half-applied.
+// Renaming an exercise is library-wide and always asks first; swapping changes this template only.
+const ARROW_UP = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>';
+const ARROW_DOWN = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>';
+const CLOSE_SVG = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>';
+function defaultCategoryFor(blockType){ return LIBRARY_CATEGORIES.includes(blockType) ? blockType : blockType === 'cooldown' ? 'mobility' : 'strength'; }
+// How many of the program's workouts use an exercise (the draft template standing in for its saved copy).
+function exerciseUsage(id, draft){
+  const prog = getActiveProgram();
+  const templates = Object.values(prog?.templates || {}).map(t => draft?.tplId === t.id ? draft.tpl : t);
+  if(draft?.tplId && !templates.some(t => t?.id === draft.tplId)) templates.push(draft.tpl);
+  return templates.filter(t => (t?.blocks || []).some(b => (b.items || []).some(it => it.exerciseId === id))).length;
+}
+function exerciseInSessions(id){
+  return Object.values(state.sessions || {}).some(s => (s.snapshot?.blocks || []).some(b => (b.items || []).some(it => it.exerciseId === id)));
+}
 const PlanEditor = {
   dayIdx: 0,
   draft: null,
+  view: 'template',   // 'template' | 'picker' | 'library' | 'exercise'
+  pick: null,         // {mode:'add'|'swap', b, i}
+  query: '', category: '',
+  exForm: null,       // {id|null, name, category, muscle, equipment, cues, detail, error, confirm}
+  confirm: null,      // {b, i, kind:'rename'|'exists', name, otherId}
+  focus: null,
 
-  open(dayIdx){
-    this.dayIdx = dayIdx;
-    const w = getWorkout(dayIdx);
-    if(!w) return;
-    // Deep clone so cancel doesn't mutate state
-    this.draft = JSON.parse(JSON.stringify(w));
+  open(dayIdx, focus = null){
+    const prog = getActiveProgram();
+    const spec = prog?.schedule?.[dayIdx];
+    if(!prog || !spec) return;
+    const clone = v => JSON.parse(JSON.stringify(v));
+    const tplId = spec.templateId && prog.templates?.[spec.templateId] ? spec.templateId : null;
+    this.draft = {
+      dayIdx, tplId, spec: clone(spec), lib: clone(prog.library || {}), tpl: tplId ? clone(prog.templates[tplId]) : null,
+      get name(){ return (this.spec.kind === 'sport' ? this.spec.name ?? this.tpl?.name : this.tpl ? this.tpl.name : this.spec.name) ?? ''; },
+      set name(v){ if(this.spec.kind === 'sport' || !this.tpl) this.spec.name = v; if(this.tpl) this.tpl.name = v; },
+      get desc(){ return (this.spec.kind === 'sport' ? this.spec.desc ?? this.tpl?.desc : this.tpl ? this.tpl.desc : this.spec.desc) ?? ''; },
+      set desc(v){ if(this.spec.kind === 'sport' || !this.tpl) this.spec.desc = v; if(this.tpl) this.tpl.desc = v; },
+      get exercises(){ return flattenBlocks(this.tpl?.blocks).sets.map(x => x.item); },
+      get blocks(){ return this.tpl?.blocks || []; }
+    };
+    this.dayIdx = dayIdx; this.view = 'template'; this.pick = null; this.confirm = null; this.exForm = null;
+    this.query = ''; this.category = ''; this.focus = focus;
     document.getElementById('plan-editor').classList.add('open');
     document.body.classList.add('plan-editor-open');
     this.render();
   },
-
-  close(){
+  close(force){
+    if(!force && this.view !== 'template'){ this.view = 'template'; this.exForm = null; this.confirm = null; this.render(); return; }
     document.getElementById('plan-editor').classList.remove('open');
-    document.body.classList.remove('plan-editor-open');
-    this.draft = null;
+    if(!document.getElementById('move-sheet').classList.contains('open')) document.body.classList.remove('plan-editor-open');
+    this.draft = null; this.view = 'template'; this.exForm = null; this.confirm = null; this.focus = null;
   },
+  item(b, i){ return this.draft?.tpl?.blocks?.[b]?.items?.[i] || null; },
 
+  // ----- field writes -----
+  // Legacy paths ("name", "desc", "exercises.2.sets") still work; the editor itself calls the
+  // block-addressed setters below.
   set(path, value){
-    // path examples: "name", "desc", "exercises.0.sets"
+    const d = this.draft;
+    if(!d) return;
     const parts = path.split('.');
-    let cur = this.draft;
-    for(let i=0; i<parts.length-1; i++){
-      const key = isNaN(+parts[i]) ? parts[i] : +parts[i];
-      cur = cur[key];
+    if(parts.length === 1){ d[parts[0]] = value; return; }
+    const [coll, idx, field] = parts;
+    const flat = flattenBlocks(d.tpl?.blocks);
+    const at = (coll === 'exercises' ? flat.sets : flat.ticks)[+idx];
+    if(at) this.setItem(at.b, at.i, field, value);
+  },
+  setItem(b, i, field, value){
+    const it = this.item(b, i);
+    if(!it) return;
+    if(field === 'name'){ this.renameLibrary(it.exerciseId, value, b, i); return; }
+    if(field === 'desc' || field === 'cues'){
+      const libCues = this.draft.lib[it.exerciseId]?.cues ?? '';
+      if((value ?? '') === libCues) delete it.cues; else it.cues = value;
+      return;
     }
-    const last = parts[parts.length-1];
-    cur[isNaN(+last) ? last : +last] = value;
+    const key = {sets:'sets', reps:'repsText', rest:'restText', weight:'weightText', duration:'durationSec', detail:'detail'}[field] || field;
+    if(key === 'sets' || key === 'durationSec'){
+      const n = parseInt(value);
+      if(!n || n <= 0) delete it[key]; else it[key] = n;
+    } else if(!value && key === 'detail') delete it[key];
+    else it[key] = value;
+  },
+  setBlock(b, field, value){
+    const blk = this.draft?.tpl?.blocks?.[b];
+    if(!blk) return;
+    if(field === 'name'){ if(value) blk.name = value; else delete blk.name; return; }
+    if(field === 'type' && BLOCK_TYPES.includes(value)){ blk.type = value; this.render(); }
+  },
+  // ----- structure -----
+  ensureTemplate(){
+    const d = this.draft;
+    if(d.tpl) return d.tpl;
+    const prog = getActiveProgram();
+    const base = LEGACY_TEMPLATE_IDS[d.dayIdx] || `day-${d.dayIdx}`;
+    let id = base;
+    for(let n = 2; prog.templates[id]; n++) id = `${base}-${n}`;
+    d.tplId = id;
+    d.tpl = {id, name: d.spec.name || '', desc: d.spec.desc || '', legacyDayIdx: +d.dayIdx, fullHiit: false, blocks: []};
+    return d.tpl;
+  },
+  addBlock(){
+    const tpl = this.ensureTemplate();
+    tpl.blocks = tpl.blocks || [];
+    tpl.blocks.push({type: 'strength', items: []});
+    this.render();
+  },
+  removeBlock(b){
+    const blocks = this.draft?.tpl?.blocks;
+    if(!blocks?.[b]) return;
+    if(blocks[b].items?.length && !confirm(`Remove the ${blockLabel(blocks[b])} block and its ${blocks[b].items.length} exercise(s)?`)) return;
+    blocks.splice(b, 1);
+    this.render();
+  },
+  moveBlock(b, delta){
+    const blocks = this.draft?.tpl?.blocks, to = b + delta;
+    if(!blocks?.[b] || to < 0 || to >= blocks.length) return;
+    blocks.splice(to, 0, blocks.splice(b, 1)[0]);
+    this.render();
+  },
+  removeItem(b, i){
+    const blk = this.draft?.tpl?.blocks?.[b];
+    if(!blk?.items?.[i]) return;
+    blk.items.splice(i, 1);
+    this.confirm = null;
+    this.render();
+  },
+  moveItem(b, i, delta){
+    const items = this.draft?.tpl?.blocks?.[b]?.items, to = i + delta;
+    if(!items?.[i] || to < 0 || to >= items.length) return;
+    items.splice(to, 0, items.splice(i, 1)[0]);
+    this.confirm = null;
+    this.render();
+  },
+  // ----- rename (library-wide, always confirmed) vs swap (this template only) -----
+  proposeRename(b, i, value){
+    const it = this.item(b, i), name = (value || '').trim();
+    const lib = this.draft.lib;
+    if(!it || !name || name === lib[it.exerciseId]?.name){ this.confirm = null; this.render(); return; }
+    const otherId = findLibraryId(lib, name);
+    this.confirm = otherId && otherId !== it.exerciseId ? {b, i, kind: 'exists', name, otherId} : {b, i, kind: 'rename', name};
+    this.render();
+  },
+  renameLibrary(id, value, b, i){
+    const name = (value || '').trim(), lib = this.draft.lib;
+    if(!name || !lib[id]) return;
+    const otherId = findLibraryId(lib, name);
+    if(otherId && otherId !== id){ if(b != null) this.swap(b, i, otherId); return; }
+    lib[id].name = name;
+  },
+  confirmRename(){
+    const c = this.confirm;
+    if(!c) return;
+    const it = this.item(c.b, c.i);
+    if(it) this.draft.lib[it.exerciseId].name = c.name;
+    this.confirm = null;
+    this.render();
+  },
+  confirmUseExisting(){
+    const c = this.confirm;
+    if(c) this.swap(c.b, c.i, c.otherId);
+    this.confirm = null;
+    this.render();
+  },
+  cancelRename(){ this.confirm = null; this.render(); },
+  swapInstead(){
+    const c = this.confirm;
+    this.confirm = null;
+    if(c) this.openPicker('swap', c.b, c.i, c.name);
+  },
+  swap(b, i, exerciseId){
+    const it = this.item(b, i);
+    if(!it || !this.draft.lib[exerciseId]) return;
+    it.exerciseId = exerciseId;
+    delete it.cues;   // the cue belongs to the exercise
+  },
+  // ----- picker / library -----
+  openPicker(mode, b, i, query = ''){
+    this.pick = {mode, b, i};
+    this.query = query; this.category = '';
+    this.view = 'picker';
+    this.render();
+  },
+  setQuery(v){ this.query = v; this.renderList(); },
+  setCategory(v){ this.category = v; this.renderList(); },
+  choose(id){
+    const {mode, b, i} = this.pick || {};
+    if(mode === 'swap') this.swap(b, i, id);
+    else if(mode === 'add'){
+      const blk = this.draft.tpl.blocks[b], entry = this.draft.lib[id];
+      blk.items = blk.items || [];
+      blk.items.push(SET_BLOCK_TYPES.has(blk.type)
+        ? {exerciseId: id, sets: 3, repsText: '8–12', restText: '90s', weightText: ''}
+        : {exerciseId: id, detail: entry?.detail || ''});
+    }
+    this.view = 'template';
+    this.render();
+  },
+  addFromQuery(){
+    const name = this.query.trim();
+    if(!name) return;
+    const blk = this.draft.tpl?.blocks?.[this.pick?.b];
+    const id = ensureLibraryEntry(this.draft.lib, name, this.category || defaultCategoryFor(blk?.type || 'strength'), {});
+    this.choose(id);
+  },
+  showLibrary(){ this.view = 'library'; this.query = ''; this.category = ''; this.exForm = null; this.render(); },
+  editExercise(id){
+    const e = this.draft.lib[id];
+    if(!e) return;
+    this.exForm = {id, name: e.name, category: e.category || 'strength', muscle: e.muscle || '', equipment: e.equipment || '', cues: e.cues || '', detail: e.detail || ''};
+    this.view = 'exercise';
+    this.render();
+  },
+  newExercise(){
+    this.exForm = {id: null, name: this.query.trim(), category: this.category || 'strength', muscle: '', equipment: '', cues: '', detail: ''};
+    this.view = 'exercise';
+    this.render();
+  },
+  setExField(field, value){ if(this.exForm) this.exForm[field] = value; },
+  saveExercise(confirmed){
+    const f = this.exForm, lib = this.draft.lib;
+    if(!f) return;
+    const name = (f.name || '').trim();
+    f.error = ''; f.confirm = false;
+    if(!name){ f.error = 'Name required'; this.render(); return; }
+    const clash = findLibraryId(lib, name);
+    if(clash && clash !== f.id){ f.error = `"${name}" is already in your library`; this.render(); return; }
+    if(f.id){
+      const used = exerciseUsage(f.id, this.draft);
+      if(name !== lib[f.id].name && used > 1 && !confirmed){ f.confirm = used; this.render(); return; }
+      Object.assign(lib[f.id], {name, category: f.category, muscle: f.muscle || null, equipment: f.equipment || null, cues: f.cues || '', ...(f.detail ? {detail: f.detail} : {})});
+      if(!f.detail) delete lib[f.id].detail;
+    } else {
+      const id = ensureLibraryEntry(lib, name, f.category, {});
+      Object.assign(lib[id], {muscle: f.muscle || null, equipment: f.equipment || null, cues: f.cues || '', ...(f.detail ? {detail: f.detail} : {})});
+    }
+    this.exForm = null;
+    this.view = 'library';
+    this.render();
+  },
+  deleteExercise(){
+    const f = this.exForm, lib = this.draft.lib;
+    if(!f?.id) return;
+    const used = exerciseUsage(f.id, this.draft);
+    if(used){ f.error = `Used in ${used} workout${used === 1 ? '' : 's'} — remove it there first`; this.render(); return; }
+    if(exerciseInSessions(f.id)){ f.error = 'Logged in a session already — it stays in the library'; this.render(); return; }
+    if((getActiveProgram()?.conditioningPool || []).includes(f.id)){ f.error = 'In the HIIT picker list — remove it there first'; this.render(); return; }
+    delete lib[f.id];
+    this.exForm = null;
+    this.view = 'library';
+    this.render();
   },
 
+  // ----- render -----
   render(){
+    const body = document.getElementById('pe-body'), title = document.getElementById('pe-title');
+    const foot = document.querySelector('#plan-editor .pe-foot');
+    if(!body) return;
+    if(foot) foot.hidden = this.view !== 'template';
+    const back = document.querySelector('#plan-editor .pe-close');
+    if(back) back.setAttribute('aria-label', this.view === 'template' ? 'Close' : 'Back');
+    if(this.view === 'picker'){ title.textContent = this.pick?.mode === 'swap' ? 'Swap exercise' : 'Add exercise'; body.innerHTML = this.searchHtml() + `<div class="hiit-pool" id="pe-list"></div>`; this.renderList(); }
+    else if(this.view === 'library'){ title.textContent = 'Exercise library'; body.innerHTML = this.searchHtml() + `<div class="hiit-pool" id="pe-list"></div>` + `<button class="btn btn-secondary" onclick="PlanEditor.newExercise()">+ Add exercise</button>`; this.renderList(); }
+    else if(this.view === 'exercise'){ title.textContent = this.exForm?.id ? 'Edit exercise' : 'New exercise'; body.innerHTML = this.exerciseHtml(); }
+    else { title.textContent = `Edit · ${DAY_LABELS[this.dayIdx]} ${this.draft?.name || ''}`.trim(); body.innerHTML = this.templateHtml(); }
+    this.afterRender();
+  },
+  afterRender(){
+    if(this.view === 'picker' || this.view === 'library'){ const q = document.getElementById('pe-search'); if(q && this.query) q.setSelectionRange(q.value.length, q.value.length); }
+    if(this.view === 'template' && this.focus){
+      const el = document.querySelector(`[data-item-name="${this.focus.b}-${this.focus.i}"]`);
+      this.focus = null;
+      if(el){ el.scrollIntoView({block: 'center'}); el.focus(); el.select(); }
+    }
+  },
+  searchHtml(){
+    const cats = ['', ...LIBRARY_CATEGORIES].map(c => `<option value="${c}"${c === this.category ? ' selected' : ''}>${c ? CATEGORY_LABELS[c] : 'All categories'}</option>`).join('');
+    return `<div class="pe-section">
+      <div class="pe-field"><span class="pe-field-label">Search</span>
+        <input class="pe-input" id="pe-search" type="text" value="${escapeHtml(this.query)}" placeholder="Search exercises" autocapitalize="none" oninput="PlanEditor.setQuery(this.value)"></div>
+      <div class="pe-field"><span class="pe-field-label">Category</span>
+        <select class="pe-input" onchange="PlanEditor.setCategory(this.value)">${cats}</select></div>
+    </div>`;
+  },
+  matches(){
+    const q = this.query.trim().toLowerCase();
+    return Object.values(this.draft?.lib || {})
+      .filter(e => (!this.category || e.category === this.category) && (!q || (e.name || '').toLowerCase().includes(q)))
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  },
+  renderList(){
+    const list = document.getElementById('pe-list');
+    if(!list) return;
+    const picking = this.view === 'picker';
+    const rows = this.matches().map(e => {
+      const sub = [CATEGORY_LABELS[e.category] || e.category, e.muscle, e.equipment].filter(Boolean).join(' · ');
+      return `<div class="hiit-pool-item">
+        <div class="hiit-pool-toggle" onclick="PlanEditor.${picking ? `choose('${e.id}')` : `editExercise('${e.id}')`}">
+          <div class="hiit-pool-check">${CHECK_SVG}</div>
+          <div class="hiit-pool-info"><div class="hiit-pool-name">${escapeHtml(e.name || '')}</div><div class="hiit-pool-detail">${escapeHtml(sub)}</div></div>
+        </div>
+      </div>`;
+    }).join('');
+    const q = this.query.trim();
+    const canAdd = q && !findLibraryId(this.draft.lib, q);
+    list.innerHTML = (rows || `<div class="empty">No exercises match</div>`) +
+      (picking && canAdd ? `<button class="hiit-pool-add-btn" onclick="PlanEditor.addFromQuery()">+ Add "${escapeHtml(q)}" as a new exercise</button>` : '');
+  },
+  templateHtml(){
     const d = this.draft;
-    document.getElementById('pe-title').textContent = `Edit · ${d.label} ${d.name}`;
-    const body = document.getElementById('pe-body');
-
-    // Workout-level fields
     let html = `
       <div class="pe-section">
         <span class="pe-section-label">Workout</span>
         <div class="pe-field">
           <span class="pe-field-label">Name</span>
-          <input class="pe-input" type="text" value="${escapeHtml(d.name||'')}" oninput="PlanEditor.set('name', this.value)">
+          <input class="pe-input" type="text" value="${escapeHtml(d.name || '')}" oninput="PlanEditor.set('name', this.value)">
         </div>
         <div class="pe-field">
           <span class="pe-field-label">Description</span>
-          <input class="pe-input" type="text" value="${escapeHtml(d.desc||'')}" placeholder="e.g. Chest · Shoulders · Triceps" oninput="PlanEditor.set('desc', this.value)">
+          <input class="pe-input" type="text" value="${escapeHtml(d.desc || '')}" placeholder="e.g. Chest · Shoulders · Triceps" oninput="PlanEditor.set('desc', this.value)">
         </div>
       </div>`;
-
-    // Rest day toggle / handling — keep simple for v1
-    if(d.rest){
-      html += `<div class="pe-section"><div class="note">This is a rest day. Lifting fields aren't editable here in v1 — ask Artemis to convert it to a training day if you want exercises.</div></div>`;
-    } else if(d.exercises && d.exercises.length){
-      html += `<div class="pe-section"><span class="pe-section-label">Exercises</span></div>`;
-      d.exercises.forEach((ex, ei) => {
-        html += `
-          <div class="pe-ex-card">
-            <div class="pe-ex-head">
-              <span class="pe-ex-num">EX ${String(ei+1).padStart(2,'0')}</span>
+    if(d.spec.kind === 'rest' && !d.tpl) html += `<div class="pe-section"><div class="note">This is a rest day. Add a block below to give it a workout, or ask Artemis to convert it.</div></div>`;
+    (d.tpl?.blocks || []).forEach((blk, b, blocks) => {
+      const items = blk.items || [];
+      html += `<div class="pe-section pe-block">
+        <div class="pe-block-head">
+          <span class="pe-section-label">Block ${b + 1} · ${escapeHtml(blockLabel(blk))}</span>
+          <div class="pe-tools">
+            <button class="icon-btn" ${b === 0 ? 'disabled' : ''} onclick="PlanEditor.moveBlock(${b},-1)" aria-label="Move block up">${ARROW_UP}</button>
+            <button class="icon-btn" ${b === blocks.length - 1 ? 'disabled' : ''} onclick="PlanEditor.moveBlock(${b},1)" aria-label="Move block down">${ARROW_DOWN}</button>
+            <button class="icon-btn danger" onclick="PlanEditor.removeBlock(${b})" aria-label="Remove block">${CLOSE_SVG}</button>
+          </div>
+        </div>
+        <div class="pe-row cols-2">
+          <div class="pe-field"><span class="pe-field-label">Block name</span>
+            <input class="pe-input" type="text" value="${escapeHtml(blk.name || '')}" placeholder="${BLOCK_LABELS[blk.type] || ''}" oninput="PlanEditor.setBlock(${b},'name',this.value)"></div>
+          <div class="pe-field"><span class="pe-field-label">Type</span>
+            <select class="pe-input" onchange="PlanEditor.setBlock(${b},'type',this.value)">${BLOCK_TYPES.map(t => `<option value="${t}"${t === blk.type ? ' selected' : ''}>${BLOCK_LABELS[t]}</option>`).join('')}</select></div>
+        </div>`;
+      items.forEach((it, i) => {
+        const entry = d.lib[it.exerciseId] || {};
+        const c = this.confirm && this.confirm.b === b && this.confirm.i === i ? this.confirm : null;
+        html += `<div class="pe-ex-card">
+          <div class="pe-ex-head">
+            <span class="pe-ex-num">EX ${String(i + 1).padStart(2, '0')}</span>
+            <div class="pe-tools">
+              <button class="icon-btn" ${i === 0 ? 'disabled' : ''} onclick="PlanEditor.moveItem(${b},${i},-1)" aria-label="Move exercise up">${ARROW_UP}</button>
+              <button class="icon-btn" ${i === items.length - 1 ? 'disabled' : ''} onclick="PlanEditor.moveItem(${b},${i},1)" aria-label="Move exercise down">${ARROW_DOWN}</button>
+              <button class="icon-btn danger" onclick="PlanEditor.removeItem(${b},${i})" aria-label="Remove exercise">${CLOSE_SVG}</button>
             </div>
-            <div class="pe-field">
-              <span class="pe-field-label">Name</span>
-              <input class="pe-input" type="text" value="${escapeHtml(ex.name||'')}" oninput="PlanEditor.set('exercises.${ei}.name', this.value)">
+          </div>
+          <div class="pe-field">
+            <span class="pe-field-label">Exercise</span>
+            <div class="pe-ex-name">
+              <input class="pe-input" type="text" value="${escapeHtml(entry.name || '')}" data-item-name="${b}-${i}" onchange="PlanEditor.proposeRename(${b},${i},this.value)">
+              <button class="btn btn-secondary btn-sm" onclick="PlanEditor.openPicker('swap',${b},${i})">Swap</button>
             </div>
-            <div class="pe-row cols-3">
-              <div class="pe-field">
-                <span class="pe-field-label">Sets</span>
-                <input class="pe-input" type="number" inputmode="numeric" value="${ex.sets||''}" oninput="PlanEditor.set('exercises.${ei}.sets', parseInt(this.value)||0)">
-              </div>
-              <div class="pe-field">
-                <span class="pe-field-label">Reps</span>
-                <input class="pe-input" type="text" value="${escapeHtml(ex.reps||'')}" placeholder="8–10" oninput="PlanEditor.set('exercises.${ei}.reps', this.value)">
-              </div>
-              <div class="pe-field">
-                <span class="pe-field-label">Rest</span>
-                <input class="pe-input" type="text" value="${escapeHtml(ex.rest||'')}" placeholder="90s" oninput="PlanEditor.set('exercises.${ei}.rest', this.value)">
-              </div>
+          </div>
+          ${c ? `<div class="note pe-confirm">
+            <span>${c.kind === 'exists'
+              ? `"${escapeHtml(c.name)}" is already in your library.`
+              : `Used in ${exerciseUsage(it.exerciseId, d)} workout${exerciseUsage(it.exerciseId, d) === 1 ? '' : 's'} — rename it to "${escapeHtml(c.name)}" everywhere?`}</span>
+            <div class="pe-confirm-actions">
+              ${c.kind === 'exists'
+                ? `<button class="btn btn-primary btn-sm" onclick="PlanEditor.confirmUseExisting()">Use it here</button>`
+                : `<button class="btn btn-primary btn-sm" onclick="PlanEditor.confirmRename()">Rename everywhere</button>
+                   <button class="btn btn-secondary btn-sm" onclick="PlanEditor.swapInstead()">Use a different exercise</button>`}
+              <button class="btn btn-ghost btn-sm" onclick="PlanEditor.cancelRename()">Cancel</button>
             </div>
-            <div class="pe-field">
-              <span class="pe-field-label">Weight target</span>
-              <input class="pe-input" type="text" value="${escapeHtml(ex.weight||'')}" placeholder="e.g. start 135 lbs" oninput="PlanEditor.set('exercises.${ei}.weight', this.value)">
-            </div>
-            <div class="pe-field">
-              <span class="pe-field-label">Cue / description</span>
-              <textarea class="pe-input" rows="2" oninput="PlanEditor.set('exercises.${ei}.desc', this.value)">${escapeHtml(ex.desc||'')}</textarea>
-            </div>
-          </div>`;
+          </div>` : ''}
+          <div class="pe-row cols-3">
+            <div class="pe-field"><span class="pe-field-label">Sets</span>
+              <input class="pe-input" type="number" inputmode="numeric" value="${it.sets ?? ''}" onchange="PlanEditor.setItem(${b},${i},'sets',this.value)"></div>
+            <div class="pe-field"><span class="pe-field-label">Reps</span>
+              <input class="pe-input" type="text" value="${escapeHtml(it.repsText || '')}" placeholder="8–12" oninput="PlanEditor.setItem(${b},${i},'reps',this.value)"></div>
+            <div class="pe-field"><span class="pe-field-label">Rest</span>
+              <input class="pe-input" type="text" value="${escapeHtml(it.restText || '')}" placeholder="90s" oninput="PlanEditor.setItem(${b},${i},'rest',this.value)"></div>
+          </div>
+          <div class="pe-row cols-2">
+            <div class="pe-field"><span class="pe-field-label">Weight / load</span>
+              <input class="pe-input" type="text" value="${escapeHtml(it.weightText || '')}" placeholder="e.g. start 135 lbs" oninput="PlanEditor.setItem(${b},${i},'weight',this.value)"></div>
+            <div class="pe-field"><span class="pe-field-label">Duration (sec)</span>
+              <input class="pe-input" type="number" inputmode="numeric" value="${it.durationSec ?? ''}" onchange="PlanEditor.setItem(${b},${i},'duration',this.value)"></div>
+          </div>
+          <div class="pe-field"><span class="pe-field-label">Detail</span>
+            <input class="pe-input" type="text" value="${escapeHtml(it.detail || '')}" placeholder="e.g. 30s on · 30s rest · 4 rounds" oninput="PlanEditor.setItem(${b},${i},'detail',this.value)"></div>
+          <div class="pe-field"><span class="pe-field-label">Cue</span>
+            <textarea class="pe-input" rows="2" oninput="PlanEditor.setItem(${b},${i},'cues',this.value)">${escapeHtml(it.cues ?? entry.cues ?? '')}</textarea></div>
+        </div>`;
       });
-    } else {
-      html += `<div class="empty">No exercises in this workout. Ask Artemis to add some.</div>`;
-    }
-
-    body.innerHTML = html;
+      html += `<button class="btn btn-secondary btn-sm" onclick="PlanEditor.openPicker('add',${b})">+ Add exercise</button></div>`;
+    });
+    html += `<div class="pe-actions">
+      <button class="btn btn-secondary" onclick="PlanEditor.addBlock()">+ Add block</button>
+      <button class="btn btn-ghost" onclick="PlanEditor.showLibrary()">Exercise library</button>
+    </div>`;
+    return html;
+  },
+  exerciseHtml(){
+    const f = this.exForm || {};
+    return `<div class="pe-section">
+      ${f.error ? `<div class="note">${escapeHtml(f.error)}</div>` : ''}
+      ${f.confirm ? `<div class="note pe-confirm"><span>Used in ${f.confirm} workouts — rename it everywhere?</span>
+        <div class="pe-confirm-actions">
+          <button class="btn btn-primary btn-sm" onclick="PlanEditor.saveExercise(true)">Rename everywhere</button>
+          <button class="btn btn-ghost btn-sm" onclick="PlanEditor.showLibrary()">Cancel</button>
+        </div></div>` : ''}
+      <div class="pe-field"><span class="pe-field-label">Name</span>
+        <input class="pe-input" type="text" value="${escapeHtml(f.name || '')}" oninput="PlanEditor.setExField('name', this.value)"></div>
+      <div class="pe-field"><span class="pe-field-label">Category</span>
+        <select class="pe-input" onchange="PlanEditor.setExField('category', this.value)">${LIBRARY_CATEGORIES.map(c => `<option value="${c}"${c === f.category ? ' selected' : ''}>${CATEGORY_LABELS[c]}</option>`).join('')}</select></div>
+      <div class="pe-row cols-2">
+        <div class="pe-field"><span class="pe-field-label">Muscle</span>
+          <input class="pe-input" type="text" value="${escapeHtml(f.muscle || '')}" oninput="PlanEditor.setExField('muscle', this.value)"></div>
+        <div class="pe-field"><span class="pe-field-label">Equipment</span>
+          <input class="pe-input" type="text" value="${escapeHtml(f.equipment || '')}" oninput="PlanEditor.setExField('equipment', this.value)"></div>
+      </div>
+      <div class="pe-field"><span class="pe-field-label">Default detail</span>
+        <input class="pe-input" type="text" value="${escapeHtml(f.detail || '')}" placeholder="e.g. 30s on · 30s rest · 4 rounds" oninput="PlanEditor.setExField('detail', this.value)"></div>
+      <div class="pe-field"><span class="pe-field-label">Cue</span>
+        <textarea class="pe-input" rows="3" oninput="PlanEditor.setExField('cues', this.value)">${escapeHtml(f.cues || '')}</textarea></div>
+      <div class="pe-actions">
+        <button class="btn btn-primary" onclick="PlanEditor.saveExercise()">Save exercise</button>
+        ${f.id ? `<button class="btn btn-ghost" onclick="PlanEditor.deleteExercise()">Delete</button>` : ''}
+      </div>
+    </div>`;
   },
 
   save(){
-    if(!this.draft) return;
-    const idx = this.dayIdx;
-    if(!getSessionSpecForDay(idx)){ this.close(); return; }
-    setLegacyWorkout(idx, this.draft);
-    this.close();
-    // Re-render any active page that might depend on plan
+    const d = this.draft;
+    if(!d) return;
+    const prog = getActiveProgram();
+    if(!prog || !prog.schedule?.[d.dayIdx]){ this.close(true); return; }
+    prog.library = d.lib;
+    if(d.tplId && d.tpl){
+      d.tpl.blocks = (d.tpl.blocks || []).filter(b => b && Array.isArray(b.items));
+      prog.templates[d.tplId] = d.tpl;
+      if(!prog.schedule[d.dayIdx].templateId) prog.schedule[d.dayIdx].templateId = d.tplId;
+    }
+    const spec = prog.schedule[d.dayIdx];
+    if(spec.kind === 'rest' || spec.kind === 'sport'){ spec.name = d.spec.name; spec.desc = d.spec.desc; }
+    prog.conditioningPool = (prog.conditioningPool || []).filter(id => prog.library[id]);
+    const dayIdx = d.dayIdx;
+    savePlan();
+    this.close(true);
     if(typeof renderActivePage === 'function') renderActivePage();
-    const shown = isSessionDay(idx) ? state.sessions?.[viewKey()] : null;
-    toast(shown && shown.status === 'done' ? 'Plan updated · this completed session keeps its snapshot' : 'Workout updated');
+    const shown = isSessionDay(dayIdx) ? state.sessions?.[viewKey()] : null;
+    toast(shown?.status === 'done' ? 'Plan updated · this completed session keeps its snapshot'
+      : shown && Session.hasLoggedSets(shown) ? "Plan updated · today's session keeps what you started" : 'Workout updated');
   }
 };
 
