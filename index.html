@@ -823,6 +823,16 @@ select.pe-input:focus{border-color:var(--text-tertiary)}
 .rest-timer-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--fs-caption);line-height:var(--lh-caption);color:var(--text-secondary)}
 .rest-timer-time{flex-shrink:0;font-family:var(--font-mono);font-size:var(--fs-body);font-weight:600;color:var(--text-primary);font-variant-numeric:tabular-nums}
 body.rest-timer-on .page{padding-bottom:calc(var(--nav-h) + var(--nav-offset) + env(safe-area-inset-bottom) + var(--s-6) + 60px)}
+.item-tools{display:flex;align-items:center;justify-content:flex-end;gap:0;margin-top:var(--s-1)}
+.item-tools .btn{height:var(--tap);margin-right:var(--s-1)}
+.hiit-card .item-tools{margin-bottom:var(--s-2)}
+.session-add{margin-top:var(--s-3);height:var(--tap)}
+.scope-ask{display:flex;flex-direction:column;gap:var(--s-3);margin-bottom:var(--s-4)}
+.scope-ask-title{font-size:var(--fs-body);line-height:var(--lh-body);font-weight:600;color:var(--text-primary)}
+.scope-ask-desc{font-size:var(--fs-caption);line-height:var(--lh-caption);color:var(--text-secondary)}
+.scope-ask-actions{display:flex;flex-wrap:wrap;gap:var(--s-2)}
+.scope-ask-actions .btn{flex:1;min-width:150px}
+.scope-ask .btn{height:var(--tap)}
 .session-actions{display:flex;flex-wrap:wrap;gap:var(--s-2);margin:calc(-1 * var(--s-2)) 0 var(--s-4)}
 .session-actions .btn{height:var(--tap)}
 .rest-state + .session-actions{margin-top:var(--s-4)}
@@ -968,7 +978,7 @@ body.rest-timer-on .page{padding-bottom:calc(var(--nav-h) + var(--nav-offset) + 
 .proposal-op-before{color:var(--text-tertiary);text-decoration:line-through;text-decoration-color:var(--text-tertiary)}
 .proposal-op-arrow{margin:0 var(--s-2);color:var(--text-tertiary)}
 .proposal-op-after{color:var(--text-primary);font-weight:600}
-.proposal-actions{display:flex;gap:var(--s-2);padding-top:var(--s-1)}
+.proposal-actions{flex-wrap:wrap;display:flex;gap:var(--s-2);padding-top:var(--s-1)}
 .proposal-actions .btn{flex:0 0 auto;padding:0 var(--s-3)}
 .proposal-actions .btn-primary{flex:1}
 .proposal-status{padding-top:var(--s-1);font-size:var(--fs-caption);line-height:var(--lh-caption);font-weight:500}
@@ -1107,7 +1117,7 @@ body[data-theme="dark"] .theme-switch::after{transform:translateX(20px)}
 <div class="plan-editor" id="move-sheet" role="dialog" aria-modal="true" aria-labelledby="move-title">
   <div class="pe-top">
     <div class="pe-title" id="move-title">Move session</div>
-    <button class="pe-close" onclick="MoveSheet.close()" aria-label="Close">
+    <button class="pe-close" onclick="Sheet.close()" aria-label="Close">
       <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
     </button>
   </div>
@@ -1654,6 +1664,7 @@ function lastPlannableDate(){ return shiftDateKey(todayKey(), PLAN_AHEAD_DAYS); 
 function isViewingFuture(){ return viewDate > todayKey(); }
 function setViewDate(dateStr){
   if(dateStr > lastPlannableDate()) return;
+  if(dateStr !== viewDate){ pendingScope = null; planUpdatedFor = null; }
   viewDate = dateStr;
   // When navigating dates, snap workout view to that date's day-of-week
   activeDay = getViewDayIdx();
@@ -3215,10 +3226,19 @@ function isLegacyShape(blocks){
 function flattenBlocks(blocks){
   const legacy = isLegacyShape(blocks), sets = [], ticks = [];
   (blocks || []).forEach((blk, b) => (blk.items || []).forEach((item, i) => {
-    if(!item.removed) ((legacy ? blk.type === 'strength' : isSetItem(item)) ? sets : ticks).push({b, i, item});
+    if(!itemHidden(item) && !blk.hidden) ((legacy ? blk.type === 'strength' : isSetItem(item)) ? sets : ticks).push({b, i, item});
   }));
   return {sets, ticks};
 }
+// A session's snapshot is append-only: removed items are tombstoned (hidden) and reordering writes
+// an `order` field, so a logged row's (block_idx, item_idx) never points at a different exercise.
+function itemHidden(item){ return !!(item?.hidden || item?.removed); }
+function visibleItems(blk){
+  return (blk?.items || []).map((item, i) => ({item, i}))
+    .filter(x => !itemHidden(x.item))
+    .sort((a, b) => (a.item.order ?? a.i) - (b.item.order ?? b.i));
+}
+function visibleBlocks(blocks){ return (blocks || []).map((blk, b) => ({blk, b})).filter(x => !x.blk.hidden); }
 function blockLabel(blk){ return blk?.name || BLOCK_LABELS[blk?.type] || 'Block'; }
 function tickDetail(item){ return item.detail ?? (item.durationSec ? `${item.durationSec}s` : undefined); }
 
@@ -3421,6 +3441,15 @@ const Session = {
   sets(session, blockIdx, itemIdx){ return state.sessionSets?.[session.id]?.[blockIdx]?.[itemIdx] || {}; },
   // Position of a set-logged item in the v1 exercises[] list (what state.setLog and the stats helpers index by).
   flatSetIndex(session, b, i){ return flattenBlocks(session.snapshot?.blocks).sets.findIndex(x => x.b === +b && x.i === +i); },
+  // An item is locked once anything has been logged against it: it can't be removed, reordered or swapped.
+  cellLogged(c){ return !!c && (c.done || c.reps != null || c.weight != null || c.duration_sec != null); },
+  isItemLocked(session, b, i){ return Object.values(this.sets(session, b, i)).some(c => this.cellLogged(c)); },
+  maxLoggedSet(session, b, i){
+    return Object.entries(this.sets(session, b, i)).reduce((m, [s, c]) => this.cellLogged(c) ? Math.max(m, +s) : m, -1);
+  },
+  // Today's session, under way and not finished — the one you can still reshape.
+  isLive(session){ return !!session && session.date === todayKey() && session.status !== 'done' && session.status !== 'skipped'; },
+  isStarted(session){ return this.isLive(session) && this.hasLoggedSets(session); },
   hasLoggedSets(s){ return Object.values(state.sessionSets?.[s.id] || {}).some(items => Object.values(items || {}).some(sets => Object.keys(sets || {}).length)); },
   // Sets done / prescribed across every set-logged item.
   progress(session){
@@ -3823,6 +3852,318 @@ function renderRestTimerSetting(){
   if(el) el.classList.toggle('on', state.settings?.restTimer !== false);
 }
 
+// ===== Mid-session editing =====
+// A started session is only frozen around what's already logged. Anything unlogged can still be
+// swapped, reordered, removed or added — and every structural change asks whether it applies to
+// this session only or from now on. Snapshot writes never renumber a logged row: new items are
+// appended, removals tombstoned (hidden), reordering writes an `order` field, and a set count can
+// only grow past, or shrink down to, what has been logged.
+const LOCK_SVG = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>';
+const SWAP_SVG = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4M16 17H4m0 0l4 4m-4-4l4-4"/></svg>';
+const SessionEdit = {
+  saveSnapshot(session){
+    session.snapshotDirty = true;
+    session.updated_at = new Date().toISOString();
+    Session.bump(session.id);
+    save();
+    Sync.pushSession(session, {overwrite: true}).then(ok => Session.afterPush(session.id, ok));
+  },
+  blk(session, b){ return session.snapshot?.blocks?.[b]; },
+  item(session, b, i){ return this.blk(session, b)?.items?.[i] || null; },
+  snapItem(entry, blockType){
+    return SET_BLOCK_TYPES.has(blockType)
+      ? {exerciseId: entry.id, name: entry.name, cues: entry.cues || '', sets: 3, repsText: '8–12', restText: '90s', weightText: ''}
+      : {exerciseId: entry.id, name: entry.name, cues: entry.cues || '', detail: entry.detail || ''};
+  },
+  // ----- snapshot writes -----
+  addItem(session, b, item){
+    const blk = this.blk(session, b);
+    if(!blk) return false;
+    blk.items = blk.items || [];
+    blk.items.push({...item, order: blk.items.reduce((m, it, i) => Math.max(m, it.order ?? i), -1) + 1});
+    return true;
+  },
+  removeItem(session, b, i){
+    const it = this.item(session, b, i);
+    if(!it || Session.isItemLocked(session, b, i)) return false;
+    it.hidden = true;
+    return true;
+  },
+  moveItem(session, b, i, delta){
+    const vis = visibleItems(this.blk(session, b));
+    const pos = vis.findIndex(x => x.i === i), to = pos + delta;
+    if(pos < 0 || to < 0 || to >= vis.length) return false;
+    if(Session.isItemLocked(session, b, i) || Session.isItemLocked(session, b, vis[to].i)) return false;
+    vis.forEach((x, n) => { x.item.order = n; });          // normalize, then swap the two
+    const a = vis[pos].item, c = vis[to].item, t = a.order;
+    a.order = c.order; c.order = t;
+    return true;
+  },
+  swapItem(session, b, i, entry){
+    const it = this.item(session, b, i);
+    if(!it || !entry || Session.isItemLocked(session, b, i)) return false;
+    it.exerciseId = entry.id;
+    it.name = entry.name;
+    it.cues = entry.cues || '';
+    if(it.detail !== undefined) it.detail = entry.detail || '';
+    return true;
+  },
+  setFields(session, b, i, fields){
+    const it = this.item(session, b, i);
+    if(!it) return false;
+    if(fields.sets != null){
+      const floor = Session.maxLoggedSet(session, b, i) + 1;       // never drop a logged set
+      it.sets = Math.max(1, floor, parseInt(fields.sets) || 0);
+    }
+    ['repsText', 'restText', 'weightText', 'detail'].forEach(k => { if(fields[k] != null) it[k] = fields[k]; });
+    if(fields.durationSec != null) it.durationSec = parseInt(fields.durationSec) || 0;
+    return true;
+  },
+  addBlock(session, spec){
+    (session.snapshot.blocks ||= []).push({type: spec.type, ...(spec.name ? {name: spec.name} : {}), items: []});
+    return true;
+  },
+  removeBlock(session, b){
+    const blk = this.blk(session, b);
+    if(!blk || visibleItems(blk).some(x => Session.isItemLocked(session, b, x.i))) return false;
+    visibleItems(blk).forEach(x => { x.item.hidden = true; });
+    blk.hidden = true;
+    return true;
+  },
+  // ----- the same change on the template it came from (read before the snapshot changes) -----
+  tplOf(session){
+    const prog = getActiveProgram(), tpl = prog?.templates?.[session.template_id];
+    return tpl ? {prog, tpl} : null;
+  },
+  tplAt(tpl, session, b, i){
+    const snapIt = this.item(session, b, i), blk = tpl.blocks?.[b];
+    if(!snapIt || !blk) return null;
+    if(blk.items?.[i]?.exerciseId === snapIt.exerciseId) return {blk, j: i};
+    const j = (blk.items || []).findIndex(x => x.exerciseId === snapIt.exerciseId);
+    return j >= 0 ? {blk, j} : null;
+  },
+  forward(session, kind, args){
+    const t = this.tplOf(session);
+    if(!t) return false;
+    const {prog, tpl} = t;
+    let ok = false;
+    if(kind === 'addItem'){
+      const blk = tpl.blocks?.[args.b];
+      if(blk){ blk.items = blk.items || []; blk.items.push(SET_BLOCK_TYPES.has(blk.type)
+        ? {exerciseId: args.entry.id, sets: 3, repsText: '8–12', restText: '90s', weightText: ''}
+        : {exerciseId: args.entry.id, detail: args.entry.detail || ''}); ok = true; }
+    } else if(kind === 'addBlock'){
+      tpl.blocks = tpl.blocks || [];
+      tpl.blocks.push({type: args.type, ...(args.name ? {name: args.name} : {}), items: []});
+      ok = true;
+    } else {
+      const at = this.tplAt(tpl, session, args.b, args.i);
+      if(at){
+        if(kind === 'remove'){ at.blk.items.splice(at.j, 1); ok = true; }
+        else if(kind === 'move'){
+          const to = at.j + args.delta;
+          if(to >= 0 && to < at.blk.items.length){ at.blk.items.splice(to, 0, at.blk.items.splice(at.j, 1)[0]); ok = true; }
+        }
+        else if(kind === 'swap'){ at.blk.items[at.j].exerciseId = args.entry.id; delete at.blk.items[at.j].cues; ok = true; }
+        else if(kind === 'fields'){
+          const it = at.blk.items[at.j];
+          if(args.fields.sets != null) it.sets = Math.max(1, parseInt(args.fields.sets) || 0);
+          ['repsText', 'restText', 'weightText', 'detail'].forEach(k => { if(args.fields[k] != null) it[k] = args.fields[k]; });
+          if(args.fields.durationSec != null) it.durationSec = parseInt(args.fields.durationSec) || 0;
+          ok = true;
+        }
+      }
+    }
+    if(ok) savePlan();
+    return ok;
+  }
+};
+
+// The scope question, as a card in the Train view rather than an overlay.
+let pendingScope = null;
+function askScope(what, apply){ pendingScope = {what, apply}; renderWorkoutContent(); }
+function resolveScope(scope){
+  const p = pendingScope;
+  pendingScope = null;
+  if(p && scope) p.apply(scope);
+  renderWorkoutContent();
+}
+function scopeCardHtml(){
+  if(!pendingScope) return '';
+  return `<div class="card scope-ask">
+    <div class="scope-ask-title">Just this session, or going forward?</div>
+    <div class="scope-ask-desc">${escapeHtml(pendingScope.what)}</div>
+    <div class="scope-ask-actions">
+      <button class="btn btn-secondary" onclick="resolveScope('session')">This session only</button>
+      <button class="btn btn-primary" onclick="resolveScope('forward')">Going forward</button>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="resolveScope(null)">Cancel</button>
+  </div>`;
+}
+// Structural edits: a started session asks; a planned one (or a future day) just changes the plan.
+function liveSession(dayIdx){
+  if(!isSessionDay(dayIdx) || !isViewingToday()) return null;
+  const s = state.sessions?.[viewKey()];
+  return Session.isLive(s) ? s : null;
+}
+// The handlers below all need today's live session; say why when there isn't one.
+function liveSessionOrWarn(dayIdx){
+  const s = liveSession(dayIdx);
+  if(!s) toast(isViewingToday() && state.sessions?.[viewKey()] ? 'This session is finished — it stays as you did it' : 'Sessions can only be changed on their own day');
+  return s;
+}
+function editSession(dayIdx, what, run){
+  const session = liveSession(dayIdx);
+  if(!session){ toast('Sessions can only be changed on their own day'); return; }
+  if(!Session.isStarted(session)){ run(session, 'forward'); return; }
+  askScope(what, scope => run(session, scope));
+}
+function sessionSwapItem(dayIdx, b, i){
+  const session = liveSessionOrWarn(dayIdx);
+  if(!session) return;
+  if(Session.isItemLocked(session, b, i)){ toast("Already logged — this one's locked"); return; }
+  const from = SessionEdit.item(session, b, i)?.name || 'this exercise';
+  ExercisePicker.open('Swap exercise', entry => {
+    if(!entry) return;
+    editSession(dayIdx, `Swap ${from} for ${entry.name}`, (s, scope) => {
+      if(scope === 'forward') SessionEdit.forward(s, 'swap', {b, i, entry});
+      if(SessionEdit.swapItem(s, b, i, entry)) SessionEdit.saveSnapshot(s);
+      toast(scope === 'forward' ? `Swapped in ${entry.name} from now on` : `Swapped in ${entry.name} for today`);
+    });
+  });
+}
+function sessionRemoveItem(dayIdx, b, i){
+  const session = liveSessionOrWarn(dayIdx);
+  if(!session) return;
+  if(Session.isItemLocked(session, b, i)){ toast("Already logged — this one's locked"); return; }
+  const name = SessionEdit.item(session, b, i)?.name || 'this exercise';
+  editSession(dayIdx, `Remove ${name}`, (s, scope) => {
+    if(scope === 'forward') SessionEdit.forward(s, 'remove', {b, i});
+    if(SessionEdit.removeItem(s, b, i)) SessionEdit.saveSnapshot(s);
+    toast(scope === 'forward' ? `Removed ${name} from now on` : `Removed ${name} for today`);
+  });
+}
+function sessionMoveItem(dayIdx, b, i, delta){
+  const session = liveSessionOrWarn(dayIdx);
+  if(!session) return;
+  if(Session.isItemLocked(session, b, i)){ toast("Already logged — this one's locked"); return; }
+  const name = SessionEdit.item(session, b, i)?.name || 'this exercise';
+  editSession(dayIdx, `Move ${name} ${delta < 0 ? 'up' : 'down'}`, (s, scope) => {
+    if(scope === 'forward') SessionEdit.forward(s, 'move', {b, i, delta});
+    if(SessionEdit.moveItem(s, b, i, delta)) SessionEdit.saveSnapshot(s);
+  });
+}
+function sessionAddSet(dayIdx, b, i){
+  const session = liveSessionOrWarn(dayIdx);
+  if(!session) return;
+  const it = SessionEdit.item(session, b, i);
+  if(!it) return;
+  const sets = (+it.sets || 0) + 1;
+  editSession(dayIdx, `${it.name}: ${it.sets} → ${sets} sets`, (s, scope) => {
+    if(scope === 'forward') SessionEdit.forward(s, 'fields', {b, i, fields: {sets}});
+    if(SessionEdit.setFields(s, b, i, {sets})) SessionEdit.saveSnapshot(s);
+  });
+}
+function sessionAddItem(dayIdx, b){
+  const session = liveSessionOrWarn(dayIdx);
+  if(!session) return;
+  ExercisePicker.open('Add exercise', entry => {
+    if(!entry) return;
+    editSession(dayIdx, `Add ${entry.name}`, (s, scope) => {
+      if(scope === 'forward') SessionEdit.forward(s, 'addItem', {b, entry});
+      if(SessionEdit.addItem(s, b, SessionEdit.snapItem(entry, SessionEdit.blk(s, b)?.type))) SessionEdit.saveSnapshot(s);
+      toast(scope === 'forward' ? `Added ${entry.name} from now on` : `Added ${entry.name} for today`);
+    });
+  });
+}
+// A new block takes its type from the first exercise you put in it.
+function sessionAddBlock(dayIdx){
+  const session = liveSessionOrWarn(dayIdx);
+  if(!session) return;
+  ExercisePicker.open('Add block', entry => {
+    if(!entry) return;
+    const type = BLOCK_TYPES.includes(entry.category) ? entry.category : entry.category === 'jointHealth' ? 'mobility' : 'strength';
+    editSession(dayIdx, `Add a ${BLOCK_LABELS[type]} block with ${entry.name}`, (s, scope) => {
+      if(scope === 'forward') SessionEdit.forward(s, 'addBlock', {type});
+      SessionEdit.addBlock(s, {type});
+      const b = s.snapshot.blocks.length - 1;
+      SessionEdit.addItem(s, b, SessionEdit.snapItem(entry, type));
+      if(scope === 'forward'){
+        const tpl = SessionEdit.tplOf(s)?.tpl;
+        if(tpl) SessionEdit.forward(s, 'addItem', {b: tpl.blocks.length - 1, entry});
+      }
+      SessionEdit.saveSnapshot(s);
+      toast(`${BLOCK_LABELS[type]} block added`);
+    });
+  });
+}
+
+// ===== Secondary sheet =====
+// One sheet element (the move picker's) reused by whatever opened it — no second overlay.
+const Sheet = {
+  owner: null,
+  open(owner, title){
+    this.owner = owner;
+    document.getElementById('move-title').textContent = title;
+    document.getElementById('move-sheet').classList.add('open');
+    document.body.classList.add('plan-editor-open');
+  },
+  body(html){ document.getElementById('move-body').innerHTML = html; },
+  close(){
+    const owner = this.owner;
+    this.owner = null;
+    document.getElementById('move-sheet').classList.remove('open');
+    if(!document.getElementById('plan-editor').classList.contains('open')) document.body.classList.remove('plan-editor-open');
+    owner?.onSheetClose?.();
+  }
+};
+const ExercisePicker = {
+  query: '', category: '', onPick: null,
+  open(title, onPick){
+    this.query = ''; this.category = ''; this.onPick = onPick;
+    Sheet.open(this, title);
+    Sheet.body(`<div class="pe-section">
+      <div class="pe-field"><span class="pe-field-label">Search</span>
+        <input class="pe-input" type="text" placeholder="Search exercises" autocapitalize="none" oninput="ExercisePicker.setQuery(this.value)"></div>
+      <div class="pe-field"><span class="pe-field-label">Category</span>
+        <select class="pe-input" onchange="ExercisePicker.setCategory(this.value)">${['', ...LIBRARY_CATEGORIES].map(c => `<option value="${c}">${c ? CATEGORY_LABELS[c] : 'All categories'}</option>`).join('')}</select></div>
+    </div><div class="hiit-pool" id="picker-list"></div>`);
+    this.renderList();
+  },
+  setQuery(v){ this.query = v; this.renderList(); },
+  setCategory(v){ this.category = v; this.renderList(); },
+  renderList(){
+    const list = document.getElementById('picker-list');
+    if(!list) return;
+    const lib = getActiveProgram()?.library || {}, q = this.query.trim().toLowerCase();
+    const rows = Object.values(lib)
+      .filter(e => (!this.category || e.category === this.category) && (!q || (e.name || '').toLowerCase().includes(q)))
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+      .map(e => `<div class="hiit-pool-item"><div class="hiit-pool-toggle" onclick="ExercisePicker.pick('${e.id}')">
+        <div class="hiit-pool-check">${CHECK_SVG}</div>
+        <div class="hiit-pool-info"><div class="hiit-pool-name">${escapeHtml(e.name || '')}</div>
+          <div class="hiit-pool-detail">${escapeHtml([CATEGORY_LABELS[e.category] || e.category, e.muscle, e.equipment].filter(Boolean).join(' · '))}</div></div>
+      </div></div>`).join('');
+    const canAdd = this.query.trim() && !findLibraryId(lib, this.query.trim());
+    list.innerHTML = (rows || `<div class="empty">No exercises match</div>`) +
+      (canAdd ? `<button class="hiit-pool-add-btn" onclick="ExercisePicker.addNew()">+ Add "${escapeHtml(this.query.trim())}" as a new exercise</button>` : '');
+  },
+  addNew(){
+    const prog = getActiveProgram(), name = this.query.trim();
+    if(!prog || !name) return;
+    const id = ensureLibraryEntry(prog.library, name, this.category || 'strength', {});
+    savePlan();
+    this.pick(id);
+  },
+  pick(id){
+    const cb = this.onPick;
+    this.onPick = null;
+    Sheet.close();
+    cb?.(getActiveProgram()?.library?.[id] || null);
+  },
+  onSheetClose(){ const cb = this.onPick; this.onPick = null; if(cb) cb(null); }
+};
+
 // ----- Schedule actions (Train tab): skip / undo, optional "Did it", move -----
 async function skipViewedSession(){
   const d = viewKey();
@@ -3852,18 +4193,15 @@ const MoveSheet = {
   open(){
     if(!assertPlannable(viewKey())) return;
     this.from = viewKey();
-    document.getElementById('move-sheet').classList.add('open');
-    document.body.classList.add('plan-editor-open');
+    Sheet.open(this, 'Move session');
     this.render();
   },
-  close(){
-    document.getElementById('move-sheet').classList.remove('open');
-    if(!document.getElementById('plan-editor').classList.contains('open')) document.body.classList.remove('plan-editor-open');
-    this.from = null;
-  },
+  close(){ if(Sheet.owner === this) Sheet.close(); this.from = null; },
+  onSheetClose(){ this.from = null; },
   render(){
     const from = this.from, name = Session.resolve(from).session?.title || getWorkout(getDayIdxFromDate(from))?.name || 'session';
     document.getElementById('move-title').textContent = `Move ${name}`;
+    const body = html => Sheet.body(html);
     let html = `<div class="note">Pick a day in the next ${PLAN_AHEAD_DAYS} days. Days that already have a session can't take another.</div><div class="move-list">`;
     for(let i = 0; i <= PLAN_AHEAD_DAYS; i++){
       const d = shiftDateKey(todayKey(), i);
@@ -3876,7 +4214,7 @@ const MoveSheet = {
         <span class="row-title">${formatViewDateLabel(d)}${i === 0 ? ' · Today' : ''}</span><span class="row-value">${value}</span>
       </button>`;
     }
-    document.getElementById('move-body').innerHTML = html + '</div>';
+    body(html + '</div>');
   },
   async pick(date){
     const from = this.from;
@@ -4189,6 +4527,13 @@ function renderWorkout(){
 
 function setDay(i){ activeDay=i; renderWorkout(); }
 
+// Set when the template behind a started session is edited from the template editor; the Train tab
+// says so until the session is finished or the day moves on. Module-level: nothing to persist.
+let planUpdatedFor = null;
+function planUpdatedNote(session){
+  return planUpdatedFor && session && planUpdatedFor === session.id
+    ? `<span class="workout-meta-note">Plan updated · applies from your next session</span>` : '';
+}
 function snapshotNote(session){
   return `<span class="workout-meta-note">Snapshot · frozen ${formatViewDateLabel(localDateKey(new Date(session.snapshot?.frozenAt || session.started_at || session.date + 'T00:00:00')))}</span>`;
 }
@@ -4196,6 +4541,22 @@ const CHECK_SVG = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><p
 // Block-by-block Train view. Each block: a section label with items done / items, then its items —
 // a set table for items with sets (plus a seconds column when the item also has a duration) and a
 // single done tick for the rest, reusing the existing row and card styles.
+// Controls for one item of a live session: locked items show a lock, unlogged ones can be
+// re-set, swapped, reordered or removed.
+function itemToolsHtml(session, b, i, {canUp, canDown, sets}){
+  if(Session.isItemLocked(session, b, i))
+    return `<div class="item-tools"><button class="icon-btn" disabled title="Logged — locked for this session">${LOCK_SVG}</button></div>`;
+  return `<div class="item-tools">
+    ${sets ? `<button class="btn btn-ghost btn-sm" onclick="sessionAddSet(${activeDay},${b},${i})">+ Set</button>` : ''}
+    <button class="icon-btn" title="Swap exercise" onclick="sessionSwapItem(${activeDay},${b},${i})">${SWAP_SVG}</button>
+    <button class="icon-btn" title="Move up"${canUp ? '' : ' disabled'} onclick="sessionMoveItem(${activeDay},${b},${i},-1)">${ARROW_UP}</button>
+    <button class="icon-btn" title="Move down"${canDown ? '' : ' disabled'} onclick="sessionMoveItem(${activeDay},${b},${i},1)">${ARROW_DOWN}</button>
+    <button class="icon-btn danger" title="Remove from this session" onclick="sessionRemoveItem(${activeDay},${b},${i})">${CLOSE_SVG}</button>
+  </div>`;
+}
+function addItemBtn(b){ return `<button class="btn btn-secondary btn-sm session-add editable-only" onclick="sessionAddItem(${activeDay},${b})">+ Add exercise</button>`; }
+function addBlockBtn(){ return `<button class="btn btn-ghost session-add editable-only" onclick="sessionAddBlock(${activeDay})">+ Add block</button>`; }
+
 function renderBlockWorkout({day, blocks, session, dateKey, preview, actions, metaNote}){
   const flat = flattenBlocks(blocks);
   const legacyCells = (b, i, item) => {
@@ -4210,9 +4571,10 @@ function renderBlockWorkout({day, blocks, session, dateKey, preview, actions, me
       <span class="workout-meta-time">~${estimateWorkoutMinutes(activeDay, day)} min</span>
       <span class="workout-meta-info">${itemCount} exercise${itemCount === 1 ? '' : 's'} · ${blocks.length} block${blocks.length === 1 ? '' : 's'}${metaNote}${session && Session.isUnsynced(session.id) ? UNSYNCED_NOTE : ''}</span>
       <button class="btn btn-ghost btn-sm editable-only" onclick="PlanEditor.open(${activeDay})" title="Edit workout">Edit</button>
-    </div>${actions}`;
-  blocks.forEach((blk, b) => {
-    const items = (blk.items || []).map((item, i) => ({item, i})).filter(x => !x.item.removed);
+    </div>${actions}${scopeCardHtml()}`;
+  const editable = !!session && Session.isLive(session) && !preview && isViewingToday();
+  visibleBlocks(blocks).forEach(({blk, b}) => {
+    const items = visibleItems(blk);
     const complete = items.filter(({item, i}) => {
       const cells = cellsFor(b, i, item);
       return isSetItem(item) ? Array.from({length: +item.sets}, (_, s) => cells[s]?.done).every(Boolean) : !!cells[0]?.done;
@@ -4233,7 +4595,7 @@ function renderBlockWorkout({day, blocks, session, dateKey, preview, actions, me
           <div class="hiit-num">${String(n + 1).padStart(2, '0')}</div>
           <div class="hiit-info"><div class="hiit-name">${escapeHtml(item.name || '')}</div>${detail ? `<div class="hiit-detail">${escapeHtml(detail)}</div>` : ''}</div>
           <button class="set-check ${done ? 'done' : ''}${only}" title="Mark complete" onclick="toggleBlockTick(${activeDay},${b},${i})">${CHECK_SVG}</button>
-        </div>`);
+        </div>${editable ? itemToolsHtml(session, b, i, {canUp: n > 0, canDown: n < items.length - 1, sets: false}) : ''}`);
         return;
       }
       flushTicks();
@@ -4256,11 +4618,14 @@ function renderBlockWorkout({day, blocks, session, dateKey, preview, actions, me
           <button class="set-check ${c.done ? 'done' : ''}" onclick="toggleBlockSet(${activeDay},${b},${i},${s})">${CHECK_SVG}</button>
         </div>`;
       }
+      if(editable) html += itemToolsHtml(session, b, i, {canUp: n > 0, canDown: n < items.length - 1, sets: true});
       html += `</div>`;
     });
     flushTicks();
+    if(editable) html += addItemBtn(b);
     html += `</div>`;
   });
+  if(editable) html += addBlockBtn();
   html += `<button class="btn btn-primary btn-lg btn-full editable-only${only} workout-done" onclick="markWorkoutDone()">
       <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
       Mark session complete
@@ -4326,7 +4691,7 @@ function renderWorkoutContent(){
     </div>`;
   } else if(!isLegacyShape(viewBlocks)){
     html = renderBlockWorkout({day, blocks: viewBlocks, session, dateKey, preview, actions,
-      metaNote: session?.status === 'done' ? snapshotNote(session) : preview ? `<span class="workout-meta-note">Plan preview · today's session is ${DAY_LABELS[getDayIdxFromDate(dateKey)]}</span>` : ''});
+      metaNote: (session?.status === 'done' ? snapshotNote(session) : preview ? `<span class="workout-meta-note">Plan preview · today's session is ${DAY_LABELS[getDayIdxFromDate(dateKey)]}</span>` : '') + planUpdatedNote(session)});
   } else {
     const estMin = estimateWorkoutMinutes(activeDay, day);
     const exCount = day.exercises.length;
@@ -4334,17 +4699,22 @@ function renderWorkoutContent(){
     const parts = [];
     if(exCount) parts.push(`${exCount} exercise${exCount===1?'':'s'}`);
     if(hiitCount) parts.push(`${hiitCount} HIIT`);
-    const metaNote = session?.status === 'done'
+    const metaNote = (session?.status === 'done'
       ? snapshotNote(session)
-      : preview ? `<span class="workout-meta-note">Plan preview · today's session is ${DAY_LABELS[getDayIdxFromDate(dateKey)]}</span>` : '';
+      : preview ? `<span class="workout-meta-note">Plan preview · today's session is ${DAY_LABELS[getDayIdxFromDate(dateKey)]}</span>` : '') + planUpdatedNote(session);
     html+=`<div class="workout-meta">
       <span class="workout-meta-time">~${estMin} min</span>
       <span class="workout-meta-info">${parts.join(' · ')}${metaNote}${session && Session.isUnsynced(session.id) ? UNSYNCED_NOTE : ''}</span>
       <button class="btn btn-ghost btn-sm editable-only" onclick="PlanEditor.open(${activeDay})" title="Edit workout">Edit</button>
-    </div>${actions}`;
-    if(day.exercises.length){
+    </div>${actions}${scopeCardHtml()}`;
+    const editable = !!session && Session.isLive(session) && !preview && isViewingToday();
+    // For a session, walk the snapshot's own items so a hidden or reordered item keeps its storage index.
+    const exRows = session
+      ? visibleItems(viewBlocks[sb]).map(({item, i}) => ({ex: {name: item.name, sets: item.sets, reps: item.repsText, rest: item.restText, weight: item.weightText, desc: item.cues}, ei: i}))
+      : day.exercises.map((ex, ei) => ({ex, ei}));
+    if(exRows.length){
       html+=`<div class="section-label">Lifting · ${day.desc}</div>`;
-      day.exercises.forEach((ex,ei)=>{
+      exRows.forEach(({ex, ei}, n)=>{
         if(!session && !dayLog[ei]) dayLog[ei]={};
         const currentName = session ? (ex.name || '') : getExName(activeDay, ei);
         const defaultName = getDefaultExercise(activeDay, ei)?.name;
@@ -4386,9 +4756,11 @@ function renderWorkoutContent(){
             </button>
           </div>`;
         }
+        if(editable) html += itemToolsHtml(session, sb, ei, {canUp: n > 0, canDown: n < exRows.length - 1, sets: true});
         html+=`</div>`;
       });
     }
+    if(editable) html += addItemBtn(sb);
 
     const dayHiit = session ? day.hiit : getDayHiit(activeDay);
     if(dayHiit.length || !day.rest){
@@ -4481,6 +4853,7 @@ function renderWorkoutContent(){
       html+=`</div></div>`;
     }
 
+    if(editable) html += addBlockBtn();
     html+=`<button class="btn btn-primary btn-lg btn-full editable-only${preview?' session-only':''} workout-done" onclick="markWorkoutDone()">
       <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
       Mark session complete
@@ -4567,6 +4940,7 @@ async function markWorkoutDone(){
   const session = await Session.begin(viewKey());
   if(!session) return;
   // Dual-write: the stats helpers and story cards read the legacy completion flag.
+  planUpdatedFor = null;
   if(session.status !== 'done') Session.setStatus(session, 'done');
   else { Session.setLegacyDone(session, true); save(); }
   showSessionCelebration();
@@ -7042,12 +7416,15 @@ const PlanProposal = {
     } else if(status === 'rejected'){
       actions = `<div class="proposal-status rejected">✕ Rejected</div>`;
     } else {
+      // With a session already under way, approving asks the same question the Train tab does.
+      const started = Session.isStarted(state.sessions?.[todayKey()]);
       actions = `<div class="proposal-actions">
         <button class="btn btn-ghost" onclick="PlanProposal.reject(${msgIdx})">Reject</button>
         <button class="btn btn-secondary" onclick="const t=document.getElementById('artemis-input');t.value='Adjust: ';t.focus();t.setSelectionRange(t.value.length,t.value.length)">Adjust</button>
-        <button class="btn btn-primary" onclick="PlanProposal.approve(${msgIdx})">
+        ${started ? `<button class="btn btn-secondary" onclick="PlanProposal.approve(${msgIdx}, 'session')">Approve for this session</button>
+        ` : ''}<button class="btn btn-primary" onclick="PlanProposal.approve(${msgIdx}${started ? ", 'forward'" : ''})">
           <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-          Approve
+          ${started ? 'Approve going forward' : 'Approve'}
         </button>
       </div>`;
     }
@@ -7107,24 +7484,88 @@ const PlanProposal = {
     </div>`;
   },
 
-  approve(msgIdx){
+  // One operation against today's started session snapshot, under the same rules as the Train tab:
+  // nothing that is already logged can move, and nothing renumbers.
+  sessionApply(session, op){
+    const prog = getActiveProgram();
+    const b = op.blockIdx ?? 0, i = op.itemIdx ?? op.exercise_idx;
+    const entry = () => { const id = PlanOps.exerciseId(prog, op); return id ? prog.library[id] : null; };
+    if(op.type === 'add_block'){
+      SessionEdit.addBlock(session, {type: BLOCK_TYPES.includes(op.block?.type) ? op.block.type : 'strength', name: op.block?.name});
+      return {ok: true};
+    }
+    if(op.type === 'add_item'){
+      const e = entry();
+      if(!e) return {ok: false, reason: 'that exercise is not in the library'};
+      const blk = SessionEdit.blk(session, b);
+      if(!blk) return {ok: false, reason: `block ${b} no longer exists`};
+      const item = SessionEdit.snapItem(e, blk.type);
+      const c = op.changes || {};
+      if(c.sets != null) item.sets = parseInt(c.sets) || item.sets;
+      if(c.reps != null) item.repsText = c.reps;
+      if(c.rest != null) item.restText = c.rest;
+      if(c.weight != null) item.weightText = c.weight;
+      if(c.detail != null) item.detail = c.detail;
+      if(c.duration != null) item.durationSec = parseInt(c.duration) || 0;
+      SessionEdit.addItem(session, b, item);
+      return {ok: true};
+    }
+    const it = SessionEdit.item(session, b, i);
+    if(!it) return {ok: false, reason: 'that exercise is no longer in the session'};
+    if(op.type === 'remove_item') return SessionEdit.removeItem(session, b, i) ? {ok: true} : {ok: false, reason: `${it.name} is already logged`};
+    if(op.type === 'reorder_item'){
+      const vis = visibleItems(SessionEdit.blk(session, b));
+      const from = vis.findIndex(x => x.i === i);
+      return SessionEdit.moveItem(session, b, i, (op.toIdx ?? from) - from) ? {ok: true} : {ok: false, reason: `${it.name} can't move — it's already logged`};
+    }
+    if(op.type === 'swap_exercise'){
+      const e = entry();
+      if(!e) return {ok: false, reason: 'that exercise is not in the library'};
+      return SessionEdit.swapItem(session, b, i, e) ? {ok: true} : {ok: false, reason: `${it.name} is already logged`};
+    }
+    if(op.type === 'update_exercise'){
+      const c = op.changes || {};
+      if(c.name != null){
+        const e = prog.library[findLibraryId(prog.library, c.name) || ''] || null;
+        if(e && !SessionEdit.swapItem(session, b, i, e)) return {ok: false, reason: `${it.name} is already logged`};
+      }
+      SessionEdit.setFields(session, b, i, {sets: c.sets, repsText: c.reps, restText: c.rest, weightText: c.weight, detail: c.detail, durationSec: c.duration});
+      return {ok: true};
+    }
+    if(op.type === 'update_workout'){
+      if(op.changes?.name != null) session.snapshot.name = op.changes.name;
+      if(op.changes?.desc != null) session.snapshot.desc = op.changes.desc;
+      return {ok: true};
+    }
+    return {ok: false, reason: `unsupported change "${op.type}"`};
+  },
+  approve(msgIdx, scope = 'forward'){
     const m = state.artemisChat?.[msgIdx];
     if(!m || !m.toolUse || m.toolUseStatus !== 'pending') return;
-    // Apply every operation to the plan, then save once.
+    // Apply every operation, then save once.
     const ops = m.toolUse.operations || [];
     const prog = getActiveProgram();
+    const today = state.sessions?.[todayKey()];
+    const live = Session.isStarted(today) ? today : null;   // a started session is patched directly
     let appliedCount = 0;
     const failures = [];
     for(const op of ops){
       if(!prog){ failures.push('no active program'); continue; }
-      const r = PlanOps.apply(prog, op);
+      let r;
+      if(scope === 'session'){
+        r = live ? this.sessionApply(live, op) : {ok: false, reason: 'no session under way'};
+      } else {
+        r = PlanOps.apply(prog, op);
+        if(r.ok && live) this.sessionApply(live, op);
+      }
       if(r.ok) appliedCount++; else failures.push(r.reason);
     }
     m.toolUseStatus = 'approved';
+    if(live && appliedCount) SessionEdit.saveSnapshot(live);
     savePlan();
     renderArtemis();
     scrollChatToBottom();
-    toast(`${appliedCount} change${appliedCount===1?'':'s'} applied${failures.length ? ` · ${failures.length} skipped: ${failures[0]}` : ''}`);
+    toast(`${appliedCount} change${appliedCount===1?'':'s'} applied${scope === 'session' ? ' to today' : ''}${failures.length ? ` · ${failures.length} skipped: ${failures[0]}` : ''}`);
   },
 
   reject(msgIdx){
@@ -7589,8 +8030,9 @@ const PlanEditor = {
     const dayIdx = d.dayIdx;
     savePlan();
     this.close(true);
-    if(typeof renderActivePage === 'function') renderActivePage();
     const shown = isSessionDay(dayIdx) ? state.sessions?.[viewKey()] : null;
+    if(shown && Session.isStarted(shown)) planUpdatedFor = shown.id;   // the Train tab says it applies next time
+    if(typeof renderActivePage === 'function') renderActivePage();
     toast(shown?.status === 'done' ? 'Plan updated · this completed session keeps its snapshot'
       : shown && Session.hasLoggedSets(shown) ? "Plan updated · today's session keeps what you started" : 'Workout updated');
   }
