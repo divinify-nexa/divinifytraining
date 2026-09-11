@@ -783,6 +783,11 @@ body.plan-editor-open{overflow:hidden}
 .workout-meta-time{flex-shrink:0;font-family:var(--font-mono);font-size:var(--fs-caption);font-weight:500;color:var(--text-primary)}
 .workout-meta-info{flex:1;min-width:0;font-size:var(--fs-caption);line-height:var(--lh-caption);font-weight:400;color:var(--text-secondary)}
 .workout-meta-info:not(:empty)::before{content:'·';margin-right:var(--s-2);color:var(--text-tertiary)}
+.workout-meta-note{display:block;font-size:var(--fs-micro);line-height:var(--lh-micro);color:var(--text-tertiary)}
+/* Another day's plan viewed today: session controls read as disabled (same treatment as past days) */
+#workout-content[data-preview] .session-only{opacity:.55;pointer-events:none}
+#workout-content[data-preview] .session-only :where(input){background:transparent;border-color:var(--border-subtle);color:var(--text-secondary)}
+#workout-content[data-preview] .session-only:where(.btn-primary){background:var(--fill);color:var(--text-tertiary)}
 .workout-meta .btn{margin-right:calc(-1 * var(--s-3))}
 .workout-done{margin-top:var(--s-6)}
 
@@ -1530,7 +1535,7 @@ const STORAGE_KEY = 'carter_training_v1';
 
 let state = {
   startDate:null,foodLog:{},setLog:{},weights:[],workoutsCompleted:[],prs:{},theme:'dark',
-  customExercises:{},customHiit:{},meals:null,hiitLog:{},
+  customExercises:{},customHiit:{},meals:null,hiitLog:{},sessions:{},sessionSets:{},pendingSessionSync:[],
   apiKey:null,coachStyle:'friendly',artemisChat:[],dailyFocus:null,artemisSettingsOpen:false,
   usdaKey:null,usdaKeyFormOpen:false
 };
@@ -1666,7 +1671,7 @@ const Sync = {
     let threw = null;
     try {
     const c = this.client;
-    const [foods, sets, weights, woComp, hiit, prs, profile, plan, water] = await Promise.all([
+    const [foods, sets, weights, woComp, hiit, prs, profile, plan, water, sessions, sessionSets] = await Promise.all([
       this.fetchAll(() => c.from('training_food_log').select('*', {count:'exact'}).order('id')),
       this.fetchAll(() => c.from('training_set_log').select('*', {count:'exact'}).order('date').order('day_idx').order('ex_idx').order('set_idx')),
       c.from('training_weights').select('*').order('date'),
@@ -1676,8 +1681,11 @@ const Sync = {
       c.from('training_profile').select('data').eq('id', 1).maybeSingle(),
       c.from('training_plan').select('data').eq('id', 1).maybeSingle(),
       c.from('training_water_log').select('*'),
+      this.fetchAll(() => c.from('training_sessions').select('*', {count:'exact'}).order('date').order('sort_order').order('id')),
+      this.fetchAll(() => c.from('training_session_sets').select('*', {count:'exact'}).order('session_id').order('block_idx').order('item_idx').order('set_idx')),
     ]);
     const synced = !!state.syncInitialized;
+    const unsynced = Session.unsyncedCopy();   // taken before the cloud copy replaces local sessions
 
     if(!profile.error && profile.data?.data){
       const cloudProfile = profile.data.data;
@@ -1743,6 +1751,21 @@ const Sync = {
       prs.data.forEach(r => { p[r.exercise_name] = +r.weight; });
       if(synced || Object.keys(p).length) state.prs = p;
     }
+    if(!sessions.error){
+      const ss = {};
+      sessions.data.forEach(r => { if(!ss[r.date]) ss[r.date] = r; });   // one per date for now: first by sort_order
+      if(synced || Object.keys(ss).length) state.sessions = ss;
+    }
+    if(!sessionSets.error){
+      const st = {};
+      sessionSets.data.forEach(r => {
+        ((st[r.session_id] ||= {})[r.block_idx] ||= {})[r.item_idx] ||= {};
+        st[r.session_id][r.block_idx][r.item_idx][r.set_idx] = {reps:numOrNull(r.reps), weight:numOrNull(r.weight), duration_sec:numOrNull(r.duration_sec), done:!!r.done};
+      });
+      if(synced || Object.keys(st).length) state.sessionSets = st;
+    }
+    Session.restoreUnsynced(unsynced);   // the cloud doesn't have these yet — keep this device's copy
+    Session.projectAll();   // legacy-shaped copy of session sets for the stats helpers
     save();
     } catch(e){
       threw = e;
@@ -1759,6 +1782,7 @@ const Sync = {
       if(typeof renderRestoreBanner === 'function') renderRestoreBanner();
     }
     if(threw) throw threw;
+    Session.flush();
   },
 
   async backfillFromLocal(){
@@ -1773,23 +1797,16 @@ const Sync = {
           )));
       }
     });
-    // Set log
-    const setRows = [];
-    Object.entries(state.setLog || {}).forEach(([date, days]) => {
-      Object.entries(days || {}).forEach(([dayIdx, exs]) => {
-        Object.entries(exs || {}).forEach(([exIdx, sets]) => {
-          Object.entries(sets || {}).forEach(([setIdx, s]) => {
-            setRows.push({
-              date, day_idx:+dayIdx, ex_idx:+exIdx, set_idx:+setIdx,
-              reps: s.reps != null ? s.reps : null,
-              weight: s.weight != null ? s.weight : null,
-              done: !!s.done
-            });
-          });
-        });
-      });
-    });
-    if(setRows.length) tasks.push(this.client.from('training_set_log').upsert(setRows));
+    // Sessions, then their sets (FK) — upserts keyed by id / (session, block, item, set), so re-running never duplicates.
+    // The legacy set and HIIT logs are a read-only archive and are no longer written.
+    const sessionRows = Object.values(state.sessions || {}).map(s => this.sessionRow(s));
+    const sessionSetRows = [];
+    sessionRows.forEach(s => Object.entries(state.sessionSets?.[s.id] || {}).forEach(([b, items]) => Object.entries(items || {}).forEach(([i, sets]) =>
+      Object.entries(sets || {}).forEach(([n, v]) => sessionSetRows.push(this.sessionSetRow(s.id, +b, +i, +n, s.snapshot?.blocks?.[b]?.items?.[i]?.exerciseId ?? null, v))))));
+    if(sessionRows.length){
+      tasks.push(this.client.from('training_sessions').upsert(sessionRows, {onConflict:'id', ignoreDuplicates:true}).then(r => r.error || !sessionSetRows.length ? r :
+        this.client.from('training_session_sets').upsert(sessionSetRows)));
+    }
     // Weights — dedupe by date (keep last)
     const wMap = {};
     (state.weights || []).forEach(w => { wMap[w.date] = w.lbs; });
@@ -1801,16 +1818,6 @@ const Sync = {
       return m ? {date: m[1], day_idx: +m[2]} : null;
     }).filter(Boolean);
     if(wcRows.length) tasks.push(this.client.from('training_workouts_completed').upsert(wcRows));
-    // HIIT
-    const hRows = [];
-    Object.entries(state.hiitLog || {}).forEach(([date, days]) => {
-      Object.entries(days || {}).forEach(([dayIdx, names]) => {
-        Object.entries(names || {}).forEach(([name, done]) => {
-          hRows.push({date, day_idx:+dayIdx, name, done: !!done});
-        });
-      });
-    });
-    if(hRows.length) tasks.push(this.client.from('training_hiit_log').upsert(hRows));
     // PRs
     const pRows = Object.entries(state.prs || {})
       .filter(([_, w]) => w != null && !isNaN(+w))
@@ -1855,19 +1862,74 @@ const Sync = {
     })();
   },
 
-  pushSet(date, dayIdx, exIdx, setIdx, s){
+  // ----- Sessions -----
+  sessionRow(s){
+    return {id:s.id, date:s.date, program_id:s.program_id, template_id:s.template_id, title:s.title, kind:s.kind, status:s.status,
+      optional:!!s.optional, flex_group:s.flex_group ?? null, sort_order:s.sort_order ?? 0, snapshot:s.snapshot,
+      started_at:s.started_at ?? null, completed_at:s.completed_at ?? null, updated_at:s.updated_at || new Date().toISOString()};
+  },
+  sessionSetRow(sessionId, blockIdx, itemIdx, setIdx, exerciseId, s){
+    return {session_id:sessionId, block_idx:blockIdx, item_idx:itemIdx, set_idx:setIdx, exercise_id:exerciseId ?? null,
+      reps:numOrNull(s.reps), weight:numOrNull(s.weight), duration_sec:numOrNull(s.duration_sec), done:!!s.done, updated_at:new Date().toISOString()};
+  },
+  // The awaitable session writes below resolve true/false; the fire-and-forget wrappers report
+  // each outcome to Session.afterPush, which queues the session on failure (see Session.flush).
+  // Creation never overwrites a row another device already made for the same id;
+  // overwrite:true updates it (in-progress snapshot refresh).
+  async pushSession(session, {overwrite = false} = {}){
+    if(!this.ready) return false;
+    try {
+      const r = await this.client.from('training_sessions').upsert(this.sessionRow(session), {onConflict:'id', ignoreDuplicates:!overwrite});
+      if(r.error) throw r.error;
+      return true;
+    } catch(e){ console.warn('pushSession failed:', e); return false; }
+  },
+  async upsertSessionSets(rows){
+    if(!this.ready) return false;
+    if(!rows.length) return true;
+    try {
+      const r = await this.client.from('training_session_sets').upsert(rows);
+      if(r.error) throw r.error;
+      return true;
+    } catch(e){ console.warn('pushSessionSet failed:', e); return false; }
+  },
+  async updateSessionStatus(session){
+    if(!this.ready) return false;
+    try {
+      const r = await this.client.from('training_sessions').update({
+        status:session.status, completed_at:session.completed_at ?? null, date:session.date,
+        sort_order:session.sort_order ?? 0, updated_at:session.updated_at || new Date().toISOString()
+      }).eq('id', session.id);
+      if(r.error) throw r.error;
+      return true;
+    } catch(e){ console.warn('pushSessionStatus failed:', e); return false; }
+  },
+  async setWorkoutDoneFlag(date, dayIdx, done){
+    if(!this.ready) return false;
+    try {
+      const t = this.client.from('training_workouts_completed');
+      const r = done ? await t.upsert({date, day_idx:dayIdx}) : await t.delete().eq('date', date).eq('day_idx', dayIdx);
+      if(r.error) throw r.error;
+      return true;
+    } catch(e){ console.warn('pushWorkoutDone failed:', e); return false; }
+  },
+  pushSessionSetRows(rows, sessionId){
+    if(!rows.length) return;
+    this.upsertSessionSets(rows).then(ok => Session.afterPush(sessionId ?? rows[0].session_id, ok));
+  },
+  pushSessionSet(sessionId, blockIdx, itemIdx, setIdx, exerciseId, s){
+    this.pushSessionSetRows([this.sessionSetRow(sessionId, blockIdx, itemIdx, setIdx, exerciseId, s)], sessionId);
+  },
+  pushSessionStatus(session){
+    this.updateSessionStatus(session).then(ok => Session.afterPush(session.id, ok));
+  },
+  deleteSession(sessionId){
     if(!this.ready) return;
     (async () => {
       try {
-        const r = await this.client.from('training_set_log').upsert({
-          date, day_idx:dayIdx, ex_idx:exIdx, set_idx:setIdx,
-          reps: s.reps != null ? s.reps : null,
-          weight: s.weight != null ? s.weight : null,
-          done: !!s.done,
-          updated_at: new Date().toISOString()
-        });
+        const r = await this.client.from('training_sessions').delete().eq('id', sessionId);   // sets cascade
         if(r.error) throw r.error;
-      } catch(e){ console.warn('pushSet failed:', e); }
+      } catch(e){ console.warn('deleteSession failed:', e); }
     })();
   },
 
@@ -1881,33 +1943,25 @@ const Sync = {
     })();
   },
 
-  pushWorkoutDone(date, dayIdx){
-    if(!this.ready) return;
+  pushWorkoutDone(date, dayIdx, onResult){
+    if(!this.ready){ onResult?.(false); return; }
     (async () => {
       try {
         const r = await this.client.from('training_workouts_completed').upsert({date, day_idx:dayIdx});
         if(r.error) throw r.error;
-      } catch(e){ console.warn('pushWorkoutDone failed:', e); }
+        onResult?.(true);
+      } catch(e){ console.warn('pushWorkoutDone failed:', e); onResult?.(false); }
     })();
   },
 
-  pushWorkoutUndone(date, dayIdx){
-    if(!this.ready) return;
+  pushWorkoutUndone(date, dayIdx, onResult){
+    if(!this.ready){ onResult?.(false); return; }
     (async () => {
       try {
         const r = await this.client.from('training_workouts_completed').delete().eq('date', date).eq('day_idx', dayIdx);
         if(r.error) throw r.error;
-      } catch(e){ console.warn('pushWorkoutUndone failed:', e); }
-    })();
-  },
-
-  pushHiit(date, dayIdx, name, done){
-    if(!this.ready) return;
-    (async () => {
-      try {
-        const r = await this.client.from('training_hiit_log').upsert({date, day_idx:dayIdx, name, done: !!done});
-        if(r.error) throw r.error;
-      } catch(e){ console.warn('pushHiit failed:', e); }
+        onResult?.(true);
+      } catch(e){ console.warn('pushWorkoutUndone failed:', e); onResult?.(false); }
     })();
   },
 
@@ -2003,6 +2057,14 @@ function renderSyncStatus(){
     </button>`;
     return;
   }
+  const unsynced = (state.pendingSessionSync || []).length;
+  if(unsynced){
+    el.innerHTML = `<button class="sync-pill stale" type="button" onclick="Session.flush()" title="Saved on this device — tap to sync now">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+      ${unsynced} session${unsynced === 1 ? '' : 's'} not synced · tap to retry
+    </button>`;
+    return;
+  }
   if(!syncStatus.lastSyncedAt){
     el.innerHTML = `<button class="sync-pill stale" type="button" onclick="resyncFromCloud()">
       <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 15a4 4 0 014-4h.586a1 1 0 00.707-.293l1.121-1.121A2 2 0 0110.828 9h2.344a2 2 0 011.414.586l1.121 1.121A1 1 0 0016.414 11H17a4 4 0 014 4M9 19l3 3m0 0l3-3m-3 3V10"/></svg>
@@ -2060,6 +2122,7 @@ async function initSync(){
   } catch(e){
     console.warn('initSync failed (continuing with local data):', e);
   }
+  Session.flush();
 }
 
 // Manual re-sync — forces a fresh pull regardless of syncInitialized state.
@@ -2107,6 +2170,9 @@ function load(){
     if(!state.hiitLog || typeof state.hiitLog !== 'object') state.hiitLog={};
     if(!state.prs || typeof state.prs !== 'object') state.prs={};
     if(!state.waterLog || typeof state.waterLog !== 'object') state.waterLog={};
+    if(!state.sessions || typeof state.sessions !== 'object') state.sessions={};
+    if(!state.sessionSets || typeof state.sessionSets !== 'object') state.sessionSets={};
+    if(!Array.isArray(state.pendingSessionSync)) state.pendingSessionSync=[];
     if(!state.coachStyle) state.coachStyle='friendly';
     if(!Array.isArray(state.artemisChat)) state.artemisChat=[];
     if(!state.meals||!Array.isArray(state.meals)) state.meals=JSON.parse(JSON.stringify(DEFAULT_MEALS));
@@ -2226,9 +2292,11 @@ function renderDashboard(){
   document.getElementById('dash-workouts').innerHTML=`${state.workoutsCompleted.length}<span class="metric-unit">total</span>`;
 
   const dayIdx = getViewDayIdx();
-  const day = getWorkout(dayIdx);
+  const res = Session.resolve(viewKey());
+  const session = res.source === 'row' ? res.session : null;
+  const day = session ? Session.toLegacyWorkout(session) : getWorkout(dayIdx);
   const viewingToday = isViewingToday();
-  const sessionDone = !day.rest && state.workoutsCompleted.includes(viewKey()+'-'+dayIdx);
+  const sessionDone = !day.rest && (session ? session.status === 'done' : state.workoutsCompleted.includes(viewKey()+'-'+dayIdx));
   const sessionLabel = document.getElementById('today-session-label');
   if(sessionLabel) sessionLabel.textContent = viewingToday ? "Today's session" : 'Session for ' + formatViewDateLabel(viewKey());
   const todayHero = document.getElementById('today-session-content');
@@ -2236,7 +2304,7 @@ function renderDashboard(){
   let html;
   if(sessionDone){
     const dk = viewKey();
-    const dayLog = state.setLog?.[dk]?.[dayIdx] || {};
+    const dayLog = session ? (state.sessionSets?.[session.id]?.[Session.blockIdx(session, 'strength')] || {}) : (state.setLog?.[dk]?.[dayIdx] || {});
     let setsLogged = 0, setsTotal = 0;
     (day.exercises||[]).forEach((ex,ei)=>{
       setsTotal += ex.sets;
@@ -2872,8 +2940,7 @@ function workSecondsForReps(repStr){
   // ~3.5s per rep + setup time
   return Math.round(reps*3.5 + 8);
 }
-function estimateWorkoutMinutes(dayIdx){
-  const day = getWorkout(dayIdx);
+function estimateWorkoutMinutes(dayIdx, day = getWorkout(dayIdx)){
   if(day.rest) return 0;
   let seconds = 0;
   // Lifting: warmup + working sets + transitions
@@ -2888,7 +2955,7 @@ function estimateWorkoutMinutes(dayIdx){
     });
   }
   // HIIT
-  const hiit = getDayHiit(dayIdx);
+  const hiit = day.hiit || [];
   if(hiit && hiit.length){
     if(day.fullHiit){
       // Full conditioning workout: ~50s per movement × 5 rounds + rest between
@@ -3121,8 +3188,327 @@ function getHiitPool(){
 function savePlan(){
   if(!state.plan) return;
   state.plan.updatedAt = new Date().toISOString();
+  Session.followPlan();
   save();
   if(typeof Sync !== 'undefined') Sync.pushPlan(state.plan);
+}
+
+// ===== Sessions =====
+// A session is the record of one day's workout. training_sessions holds a frozen,
+// self-contained snapshot of what was prescribed (it renders with no plan or library
+// lookups); training_session_sets holds what was logged against it, keyed
+// (block_idx, item_idx, set_idx) — block 0 strength, block 1 conditioning.
+// Today's in-progress session follows edits to its own workout until it's marked done;
+// a completed session, or one whose day has passed, never changes again.
+// Legacy logs (training_set_log / training_hiit_log) are a read-only archive. state.setLog
+// also carries a local copy of session strength sets in the legacy shape (never pushed,
+// rebuilt on every pull) so the stats helpers and story cards read them unchanged.
+function numOrNull(v){ return v === '' || v == null || isNaN(+v) ? null : +v; }
+const Session = {
+  rev: {},       // session id → local write counter, so a flush never clears a session changed mid-flush
+
+  idFor(date, spec){
+    const base = `s_${date}_${slugifyExerciseName(spec?.templateId || spec?.kind || 'template')}`;
+    const taken = new Set([...Object.values(state.sessions || {}).map(s => s.id), ...Object.keys(state.sessionSets || {})]);
+    let id = base;
+    for(let n = 2; taken.has(id); n++) id = `${base}-${n}`;
+    return id;
+  },
+  byId(id){ return Object.values(state.sessions || {}).find(s => s.id === id) || null; },
+
+  // Frozen, denormalized copy of the workout the schedule entry points at, via the plan adapter's rules.
+  buildSnapshot(spec){
+    const prog = getActiveProgram();
+    const tpl = spec?.templateId ? prog?.templates?.[spec.templateId] : null;
+    const rest = spec?.kind === 'rest';
+    const lib = id => prog?.library?.[id] || {};
+    const items = type => (tpl?.blocks || []).filter(b => b.type === type).flatMap(b => b.items || []);
+    const snap = {programId: prog?.id ?? null, programName: prog?.name ?? '', templateId: spec?.templateId ?? null,
+      name: rest ? spec.name : tpl?.name, desc: rest ? spec.desc : tpl?.desc};
+    if(!rest && tpl?.fullHiit) snap.fullHiit = true;
+    snap.frozenAt = new Date().toISOString();
+    snap.blocks = [
+      {type: 'strength', items: items('strength').map(it => ({exerciseId: it.exerciseId, name: lib(it.exerciseId).name, cues: it.cues ?? lib(it.exerciseId).cues,
+        sets: it.sets, repsText: it.repsText, restText: it.restText, weightText: it.weightText}))},
+      {type: 'conditioning', items: items('conditioning').map(it => ({exerciseId: it.exerciseId, name: lib(it.exerciseId).name, cues: lib(it.exerciseId).cues, detail: it.detail}))}
+    ];
+    return snap;
+  },
+  // Legacy workout shape built only from the snapshot (same keys and order as toLegacyWorkout).
+  toLegacyWorkout(session){
+    const snap = session.snapshot || {};
+    const items = type => (snap.blocks || []).find(b => b.type === type)?.items || [];
+    const w = {
+      label: DAY_LABELS[getDayIdxFromDate(session.date)], name: snap.name, desc: snap.desc,
+      exercises: items('strength').map(it => ({name: it.name, sets: it.sets, reps: it.repsText, rest: it.restText, weight: it.weightText, desc: it.cues})),
+      hiit: items('conditioning').map(it => ({name: it.name, detail: it.detail}))
+    };
+    if(session.kind === 'rest') w.rest = true;
+    else if(snap.fullHiit) w.fullHiit = true;
+    return w;
+  },
+  blockIdx(session, type){
+    const i = (session.snapshot?.blocks || []).findIndex(b => b.type === type);
+    return i >= 0 ? i : (type === 'strength' ? 0 : 1);
+  },
+  sets(session, blockIdx, itemIdx){ return state.sessionSets?.[session.id]?.[blockIdx]?.[itemIdx] || {}; },
+  cell(session, b, i, s){
+    const t = (state.sessionSets ||= {})[session.id] ||= {};
+    return ((t[b] ||= {})[i] ||= {})[s] ||= {reps: null, weight: null, duration_sec: null, done: false};
+  },
+
+  hasLegacyLog(date, dayIdx){
+    const sets = state.setLog?.[date]?.[dayIdx];
+    if(sets && Object.values(sets).some(ex => ex && Object.keys(ex).length)) return true;
+    const hiit = state.hiitLog?.[date]?.[dayIdx];
+    if(hiit && Object.keys(hiit).length) return true;
+    return (state.workoutsCompleted || []).includes(`${date}-${dayIdx}`);
+  },
+  newRow(date, spec){
+    const snapshot = this.buildSnapshot(spec), now = new Date().toISOString();
+    return {id: this.idFor(date, spec), date, program_id: snapshot.programId, template_id: spec?.templateId || null,
+      title: snapshot.name || '', kind: spec?.kind === 'rest' ? 'rest' : 'template', status: 'in_progress',
+      optional: false, flex_group: null, sort_order: 0, snapshot, started_at: now, completed_at: null, updated_at: now};
+  },
+  // row: a stored session; legacy: pre-sessions logs exist (render from the current plan, as
+  // before); schedule: nothing yet — a virtual, unsaved session from the weekday's schedule.
+  resolve(date){
+    const dayIdx = getDayIdxFromDate(date);
+    const spec = getSessionSpecForDay(dayIdx) || null;
+    const row = state.sessions?.[date];
+    if(row) return {session: row, spec, source: 'row'};
+    if(this.hasLegacyLog(date, dayIdx)) return {session: null, spec, source: 'legacy'};
+    return {session: {...this.newRow(date, spec), status: 'planned', started_at: null, virtual: true}, spec, source: 'schedule'};
+  },
+
+  // Create the date's session locally and return it at once — logging never waits on the network.
+  // Imports that day's legacy rows by position so a day already under way isn't split in two
+  // (legacy rows stay in place). The server copy is made by flush(); until it lands the session
+  // sits in state.pendingSessionSync and shows as not synced.
+  async materialize(date){
+    if(state.sessions?.[date]) return state.sessions[date];
+    const dayIdx = getDayIdxFromDate(date);
+    const spec = getSessionSpecForDay(dayIdx);
+    if(!spec) return null;
+    const session = this.newRow(date, spec);
+    if((state.workoutsCompleted || []).includes(`${date}-${dayIdx}`)){ session.status = 'done'; session.completed_at = session.started_at; }
+    const sb = this.blockIdx(session, 'strength'), cb = this.blockIdx(session, 'conditioning');
+    const imported = {};
+    const put = (b, i, s, v) => { ((imported[b] ||= {})[i] ||= {})[s] = v; };
+    Object.entries(state.setLog?.[date]?.[dayIdx] || {}).forEach(([i, sets]) => Object.entries(sets || {}).forEach(([s, v]) => {
+      if(v) put(sb, +i, +s, {reps: numOrNull(v.reps), weight: numOrNull(v.weight), duration_sec: null, done: !!v.done});
+    }));
+    const cond = session.snapshot.blocks[cb]?.items || [];
+    Object.entries(state.hiitLog?.[date]?.[dayIdx] || {}).forEach(([name, done]) => {
+      const i = cond.findIndex(it => it.name === name);
+      if(i >= 0) put(cb, i, 0, {reps: null, weight: null, duration_sec: null, done: !!done});
+    });
+    (state.sessions ||= {})[date] = session;
+    (state.sessionSets ||= {})[session.id] = imported;
+    this.projectSession(session);
+    this.bump(session.id);
+    this.enqueue(session.id);
+    save();
+    this.flush();
+    return session;
+  },
+  // Local write of one set (plus its legacy-shaped copy), then a fire-and-forget push.
+  commit(session, b, i, s){
+    const cell = this.cell(session, b, i, s);
+    this.project(session, b, i, s);
+    this.bump(session.id);
+    save();
+    Sync.pushSessionSet(session.id, b, i, s, session.snapshot?.blocks?.[b]?.items?.[i]?.exerciseId ?? null, cell);
+  },
+
+  project(session, b, i, s){
+    if(b !== this.blockIdx(session, 'strength')) return;
+    const c = state.sessionSets?.[session.id]?.[b]?.[i]?.[s];
+    if(!c) return;
+    const e = {};
+    if(c.reps != null) e.reps = c.reps;
+    if(c.weight != null) e.weight = c.weight;
+    e.done = !!c.done;
+    ((((state.setLog ||= {})[session.date] ||= {})[getDayIdxFromDate(session.date)] ||= {})[i] ||= {})[s] = e;
+  },
+  projectSession(session){
+    const b = this.blockIdx(session, 'strength');
+    Object.entries(state.sessionSets?.[session.id]?.[b] || {}).forEach(([i, sets]) => Object.keys(sets || {}).forEach(s => this.project(session, b, +i, +s)));
+  },
+  projectAll(){ Object.values(state.sessions || {}).forEach(s => this.projectSession(s)); },
+  unproject(session){
+    const day = state.setLog?.[session.date]?.[getDayIdxFromDate(session.date)];
+    if(!day) return;
+    Object.entries(state.sessionSets?.[session.id]?.[this.blockIdx(session, 'strength')] || {}).forEach(([i, sets]) =>
+      Object.keys(sets || {}).forEach(s => { if(day[i]) delete day[i][s]; }));
+  },
+
+  // Keep the legacy completion flag (read by the stats helpers) in step with a session's status.
+  setLegacyDone(session, done){
+    const d = getDayIdxFromDate(session.date), key = `${session.date}-${d}`;
+    const has = (state.workoutsCompleted || []).includes(key);
+    const report = ok => this.afterPush(session.id, ok);
+    if(done && !has){ state.workoutsCompleted.push(key); Sync.pushWorkoutDone(session.date, d, report); }
+    if(!done && has){ state.workoutsCompleted = state.workoutsCompleted.filter(k => k !== key); Sync.pushWorkoutUndone(session.date, d, report); }
+  },
+  // Change a session's status locally (plus the legacy flag) and push it. statusDirty tells a later
+  // flush to re-send both, so a change made offline still reaches a row another device created.
+  setStatus(s, status){
+    const wasDone = s.status === 'done';
+    s.status = status;
+    s.completed_at = status === 'done' ? (wasDone && s.completed_at) || new Date().toISOString() : null;
+    s.updated_at = new Date().toISOString();
+    s.statusDirty = true;
+    this.bump(s.id);
+    this.setLegacyDone(s, status === 'done');
+    save();
+    Sync.pushSessionStatus(s);
+  },
+  // Not wired to UI yet (Phase 3). One session per date for now, so a move onto an occupied date is refused.
+  move(sessionId, newDate){
+    const s = this.byId(sessionId);
+    if(!s || !newDate || s.date === newDate || state.sessions[newDate]) return false;
+    const done = s.status === 'done';
+    if(done) this.setLegacyDone(s, false);
+    this.unproject(s);
+    delete state.sessions[s.date];
+    s.date = newDate;
+    s.updated_at = new Date().toISOString();
+    s.statusDirty = true;
+    this.bump(s.id);
+    state.sessions[newDate] = s;
+    this.projectSession(s);
+    if(done) this.setLegacyDone(s, true);
+    save(); Sync.pushSessionStatus(s);
+    return true;
+  },
+  skip(sessionId){
+    const s = this.byId(sessionId);
+    if(!s || s.status === 'skipped') return false;
+    this.setStatus(s, 'skipped');
+    return true;
+  },
+  unskip(sessionId){
+    const s = this.byId(sessionId);
+    if(!s || s.status !== 'skipped') return false;
+    this.setStatus(s, s.started_at ? 'in_progress' : 'planned');
+    return true;
+  },
+  // Today's in-progress session tracks edits to its own workout (renames, HIIT picks, the
+  // plan editor, approved Artemis changes) until it's marked done.
+  followPlan(){
+    const s = state.sessions?.[todayKey()];
+    if(!s || s.status !== 'in_progress' || s.kind !== 'template' || !getActiveProgram()?.templates?.[s.template_id]) return;
+    const next = this.buildSnapshot({kind: 'template', templateId: s.template_id});
+    // Key-order-insensitive (a pulled snapshot comes back from jsonb with its keys reordered).
+    const canon = v => Array.isArray(v) ? v.map(canon) : v && typeof v === 'object'
+      ? Object.keys(v).sort().reduce((o, k) => (o[k] = canon(v[k]), o), {}) : v;
+    if(JSON.stringify(canon({...next, frozenAt: 0})) === JSON.stringify(canon({...s.snapshot, frozenAt: 0}))) return;
+    s.snapshot = next; s.title = next.name || ''; s.updated_at = new Date().toISOString();
+    s.snapshotDirty = true;
+    this.bump(s.id);
+    Sync.pushSession(s, {overwrite: true}).then(ok => this.afterPush(s.id, ok));
+  },
+
+  // ----- Offline queue -----
+  // state.pendingSessionSync (persisted) lists sessions whose server copy may be missing or behind:
+  // new sessions until their row and sets land, and any session with a failed write. flush()
+  // re-sends everything for each one — the row (insert-if-missing), any status or snapshot change
+  // made since, the legacy completion flag, and ALL of its sets — then drops it from the queue.
+  // Runs after a successful pull, on 'online', at boot, and after any successful session write.
+  bump(id){ this.rev[id] = (this.rev[id] || 0) + 1; },
+  isUnsynced(id){ return (state.pendingSessionSync || []).includes(id); },
+  enqueue(id){
+    const q = state.pendingSessionSync ||= [];
+    if(!id || q.includes(id)) return;
+    q.push(id);
+    save();
+    this.renderSyncState();
+  },
+  afterPush(id, ok){
+    if(!ok) this.enqueue(id);
+    else if((state.pendingSessionSync || []).length) this.flush();
+  },
+  setRows(s){
+    const rows = [];
+    Object.entries(state.sessionSets?.[s.id] || {}).forEach(([b, items]) => Object.entries(items || {}).forEach(([i, sets]) => Object.entries(sets || {}).forEach(([n, v]) =>
+      rows.push(Sync.sessionSetRow(s.id, +b, +i, +n, s.snapshot?.blocks?.[b]?.items?.[i]?.exerciseId ?? null, v)))));
+    return rows;
+  },
+  async flush(){
+    if(this.flushing){ this.flushAgain = true; return; }
+    if(!Sync.ready || !(state.pendingSessionSync || []).length) return;
+    this.flushing = true;
+    let failed = false;
+    try {
+      for(const id of state.pendingSessionSync.slice()){
+        const s = this.byId(id);
+        if(!s){ state.pendingSessionSync = state.pendingSessionSync.filter(x => x !== id); save(); continue; }
+        const rev = this.rev[id] || 0, statusDirty = !!s.statusDirty, snapshotDirty = !!s.snapshotDirty;
+        const ok = await Sync.pushSession(s)
+          && (!snapshotDirty || await Sync.pushSession(s, {overwrite: true}))
+          && (!statusDirty || (await Sync.updateSessionStatus(s) && await Sync.setWorkoutDoneFlag(s.date, getDayIdxFromDate(s.date), s.status === 'done')))
+          && await Sync.upsertSessionSets(this.setRows(s));
+        if(!ok){ failed = true; break; }
+        if((this.rev[id] || 0) !== rev){ this.flushAgain = true; continue; }   // changed while in flight: go round again
+        delete s.statusDirty; delete s.snapshotDirty;
+        state.pendingSessionSync = state.pendingSessionSync.filter(x => x !== id);
+        save();
+      }
+    } finally { this.flushing = false; }
+    this.renderSyncState();
+    const again = this.flushAgain && !failed;
+    this.flushAgain = false;
+    if(failed) this.warnIfStale();
+    else if(again) return this.flush();
+  },
+  // No toast for a background failure — the not-synced indicator covers it — unless a session has waited over a day.
+  warnIfStale(){
+    if(this.staleWarned) return;
+    const old = (state.pendingSessionSync || []).map(id => this.byId(id)).filter(s => s && Date.now() - Date.parse(s.started_at || s.date + 'T00:00:00') > 864e5);
+    if(!old.length) return;
+    this.staleWarned = true;
+    toast(old.length === 1 ? `Your ${formatViewDateLabel(old[0].date)} session hasn't synced yet — it's saved on this device` : `${old.length} sessions haven't synced yet — they're saved on this device`);
+  },
+  // Sync.pull replaces local sessions with the cloud's; queued ones (and their sets, merged over
+  // any the cloud has, this device's values winning) are carried across.
+  unsyncedCopy(){
+    return (state.pendingSessionSync || []).map(id => this.byId(id)).filter(Boolean).map(s => ({s, sets: state.sessionSets?.[s.id] || {}}));
+  },
+  restoreUnsynced(copy){
+    copy.forEach(({s, sets}) => {
+      (state.sessions ||= {})[s.date] = s;
+      const merged = state.sessionSets?.[s.id] || {};
+      Object.entries(sets).forEach(([b, items]) => Object.entries(items || {}).forEach(([i, rows]) => Object.entries(rows || {}).forEach(([n, v]) => {
+        ((merged[b] ||= {})[i] ||= {})[n] = v;
+      })));
+      (state.sessionSets ||= {})[s.id] = merged;
+      if(s.statusDirty){
+        const key = `${s.date}-${getDayIdxFromDate(s.date)}`, has = state.workoutsCompleted.includes(key);
+        if(s.status === 'done' && !has) state.workoutsCompleted.push(key);
+        if(s.status !== 'done' && has) state.workoutsCompleted = state.workoutsCompleted.filter(k => k !== key);
+      }
+    });
+  },
+  // Update the not-synced indicators in place (a full re-render could drop a half-typed set value).
+  renderSyncState(){
+    if(typeof renderSyncStatus === 'function') renderSyncStatus();
+    const wc = document.getElementById('workout-content');
+    const sid = wc?.dataset.session;
+    const note = wc?.querySelector('[data-unsynced]');
+    const want = !!sid && this.isUnsynced(sid);
+    if(want && !note) wc.querySelector('.workout-meta-info')?.insertAdjacentHTML('beforeend', UNSYNCED_NOTE);
+    if(!want && note) note.remove();
+  }
+};
+const UNSYNCED_NOTE = '<span class="workout-meta-note" data-unsynced>Saved on this device · not synced yet</span>';
+window.addEventListener('online', () => Session.flush());
+// Session writes belong to the viewed date's own weekday; other day pills preview the plan.
+function isSessionDay(dayIdx){ return dayIdx === getDayIdxFromDate(viewKey()); }
+function assertSessionDay(dayIdx){
+  if(isSessionDay(dayIdx)) return true;
+  toast(`Log sets on ${DAY_LABELS[getDayIdxFromDate(viewKey())]}'s session — other days are a preview`);
+  return false;
 }
 
 function getExName(dayIdx, exIdx){
@@ -3320,15 +3706,17 @@ function isHiitDone(dayIdx, name){
   const dk = viewKey();
   return !!state.hiitLog?.[dk]?.[dayIdx]?.[name];
 }
-function toggleHiitDone(dayIdx, name){
-  if(!assertEditable('Marking HIIT')) return;
-  const dk = viewKey();
-  if(!state.hiitLog) state.hiitLog={};
-  if(!state.hiitLog[dk]) state.hiitLog[dk]={};
-  if(!state.hiitLog[dk][dayIdx]) state.hiitLog[dk][dayIdx]={};
-  state.hiitLog[dk][dayIdx][name] = !state.hiitLog[dk][dayIdx][name];
-  save();
-  Sync.pushHiit(dk, dayIdx, name, state.hiitLog[dk][dayIdx][name]);
+async function toggleHiitDone(dayIdx, name){
+  if(!assertEditable('Marking HIIT') || !assertSessionDay(dayIdx)) return;
+  const session = await Session.materialize(viewKey());
+  if(!session) return;
+  const cb = Session.blockIdx(session, 'conditioning');
+  const items = session.snapshot?.blocks?.[cb]?.items || [];
+  const i = items.findIndex(it => it.name === name);
+  if(i < 0) return;
+  const cell = Session.cell(session, cb, i, 0);
+  cell.done = !cell.done;
+  Session.commit(session, cb, i, 0);
   renderWorkoutContent();
 }
 
@@ -3409,11 +3797,24 @@ function renderWorkout(){
 function setDay(i){ activeDay=i; renderWorkout(); }
 
 function renderWorkoutContent(){
-  const day = getWorkout(activeDay);
   const dateKey = viewKey();
+  // The viewed date's own weekday shows its session: a stored one renders from its snapshot and
+  // session sets; otherwise the current plan with any legacy logs. Other day pills preview the plan.
+  const live = isSessionDay(activeDay);
+  const res = live ? Session.resolve(dateKey) : null;
+  const session = res?.source === 'row' ? res.session : null;
+  // Completed sessions, and any session whose day has passed, no longer follow plan edits — hide the item edit controls.
+  const frozen = !!session && (session.status === 'done' || session.date !== todayKey());
+  const preview = !live && isViewingToday();
+  const day = session ? Session.toLegacyWorkout(session) : getWorkout(activeDay);
+  const sb = session ? Session.blockIdx(session, 'strength') : 0, cb = session ? Session.blockIdx(session, 'conditioning') : 1;
+  // (Creating the empty legacy containers is long-standing behaviour the restore banner's emptiness check relies on.)
   if(!state.setLog[dateKey]) state.setLog[dateKey]={};
   if(!state.setLog[dateKey][activeDay]) state.setLog[dateKey][activeDay]={};
-  const dayLog = state.setLog[dateKey][activeDay];
+  const dayLog = session ? (state.sessionSets?.[session.id]?.[sb] || {}) : state.setLog[dateKey][activeDay];
+  document.getElementById('workout-content').toggleAttribute('data-preview', preview);
+  if(session) document.getElementById('workout-content').dataset.session = session.id;
+  else delete document.getElementById('workout-content').dataset.session;
 
   let html='';
   if(day.rest){
@@ -3423,29 +3824,34 @@ function renderWorkoutContent(){
       <div class="rest-sub">Recovery is when growth happens.</div>
     </div>`;
   } else {
-    const estMin = estimateWorkoutMinutes(activeDay);
+    const estMin = estimateWorkoutMinutes(activeDay, day);
     const exCount = day.exercises.length;
-    const hiitCount = getDayHiit(activeDay).length;
+    const hiitCount = day.hiit.length;
     const parts = [];
     if(exCount) parts.push(`${exCount} exercise${exCount===1?'':'s'}`);
     if(hiitCount) parts.push(`${hiitCount} HIIT`);
+    const metaNote = session?.status === 'done'
+      ? `<span class="workout-meta-note">Snapshot · frozen ${formatViewDateLabel(localDateKey(new Date(session.snapshot?.frozenAt || session.started_at || session.date + 'T00:00:00')))}</span>`
+      : preview ? `<span class="workout-meta-note">Plan preview · today's session is ${DAY_LABELS[getDayIdxFromDate(dateKey)]}</span>` : '';
     html+=`<div class="workout-meta">
       <span class="workout-meta-time">~${estMin} min</span>
-      <span class="workout-meta-info">${parts.join(' · ')}</span>
+      <span class="workout-meta-info">${parts.join(' · ')}${metaNote}${session && Session.isUnsynced(session.id) ? UNSYNCED_NOTE : ''}</span>
       <button class="btn btn-ghost btn-sm editable-only" onclick="PlanEditor.open(${activeDay})" title="Edit workout">Edit</button>
     </div>`;
     if(day.exercises.length){
       html+=`<div class="section-label">Lifting · ${day.desc}</div>`;
       day.exercises.forEach((ex,ei)=>{
-        if(!dayLog[ei]) dayLog[ei]={};
-        const currentName = getExName(activeDay, ei);
-        const customized = isExCustomized(activeDay, ei);
+        if(!session && !dayLog[ei]) dayLog[ei]={};
+        const currentName = session ? (ex.name || '') : getExName(activeDay, ei);
+        const defaultName = getDefaultExercise(activeDay, ei)?.name;
+        const customized = session ? !!(currentName && defaultName && currentName !== defaultName) : isExCustomized(activeDay, ei);
         const safeName = currentName.replace(/"/g,'&quot;');
-        const isEditing = editingExKey === `${activeDay}-${ei}`;
+        const isEditing = editingExKey === `${activeDay}-${ei}` && !frozen;
         const nameUI = isEditing
           ? `<input class="ex-name-edit" data-ex-edit="${activeDay}-${ei}" type="text" value="${safeName}" spellcheck="false"
               onblur="finishEditExName(${activeDay},${ei},this.value)"
               onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">`
+          : frozen ? `<div class="ex-name-display ${customized?'customized':''}">${currentName}</div>`
           : `<div class="ex-name-display ${customized?'customized':''}">${currentName}</div>
              <button class="icon-btn" title="Edit exercise" onclick="startEditExName(${activeDay},${ei})">
                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
@@ -3465,9 +3871,9 @@ function renderWorkoutContent(){
             <div></div>
           </div>`;
         for(let s=0;s<ex.sets;s++){
-          const sLog = dayLog[ei][s]||{};
+          const sLog = dayLog[ei]?.[s]||{};
           const done = sLog.done||false;
-          html+=`<div class="set-table editable-only">
+          html+=`<div class="set-table editable-only${preview?' session-only':''}">
             <div class="set-num">${s+1}</div>
             <input type="number" class="set-input" placeholder="${ex.reps.split('–')[0]}" value="${sLog.reps||''}" inputmode="numeric" onchange="logSet(${activeDay},${ei},${s},'reps',this.value)">
             <input type="number" class="set-input" placeholder="—" value="${sLog.weight||''}" inputmode="decimal" step="0.5" onchange="logSet(${activeDay},${ei},${s},'weight',this.value)">
@@ -3480,7 +3886,7 @@ function renderWorkoutContent(){
       });
     }
 
-    const dayHiit = getDayHiit(activeDay);
+    const dayHiit = session ? day.hiit : getDayHiit(activeDay);
     if(dayHiit.length || !day.rest){
       const title = day.fullHiit ? 'Conditioning · 5 rounds' : 'HIIT finisher · 10 min';
       html+=`<div class="section"><div class="section-label">${title}</div>
@@ -3490,22 +3896,22 @@ function renderWorkoutContent(){
         html+=`<div class="empty">No HIIT selected for today</div>`;
       } else {
         dayHiit.forEach((h,i)=>{
-          const done = isHiitDone(activeDay, h.name);
+          const done = session ? !!Session.sets(session, cb, i)[0]?.done : isHiitDone(activeDay, h.name);
           const safeName = h.name.replace(/'/g,"\\'");
           html+=`<div class="hiit-row ${done?'done':''}">
             <div class="hiit-num">${String(i+1).padStart(2,'0')}</div>
             <div class="hiit-info"><div class="hiit-name">${h.name}</div><div class="hiit-detail">${h.detail}</div></div>
-            <button class="set-check ${done?'done':''}" title="Mark complete" onclick="toggleHiitDone(${activeDay},'${safeName}')">
+            <button class="set-check ${done?'done':''}${preview?' session-only':''}" title="Mark complete" onclick="toggleHiitDone(${activeDay},'${safeName}')">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-            </button>
+            </button>${frozen ? '' : `
             <button class="icon-btn danger" title="Remove" onclick="removeHiitItem(${activeDay},${i})">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-            </button>
+            </button>`}
           </div>`;
         });
       }
-      const open = !!hiitPickerOpen[activeDay];
-      html+=`<button class="hiit-add-btn" onclick="toggleHiitPicker(${activeDay})">
+      const open = !!hiitPickerOpen[activeDay] && !frozen;
+      if(!frozen) html+=`<button class="hiit-add-btn" onclick="toggleHiitPicker(${activeDay})">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="${open?'M19 9l-7 7-7-7':'M12 6v6m0 0v6m0-6h6m-6 0H6'}"/></svg>
         ${open?'Close picker':'Add HIIT exercise'}
       </button>`;
@@ -3571,7 +3977,7 @@ function renderWorkoutContent(){
       html+=`</div></div>`;
     }
 
-    html+=`<button class="btn btn-primary btn-lg btn-full editable-only workout-done" onclick="markWorkoutDone()">
+    html+=`<button class="btn btn-primary btn-lg btn-full editable-only${preview?' session-only':''} workout-done" onclick="markWorkoutDone()">
       <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
       Mark session complete
     </button>`;
@@ -3580,18 +3986,17 @@ function renderWorkoutContent(){
   document.getElementById('workout-content').innerHTML=html;
 }
 
-function logSet(dayIdx, exIdx, setIdx, field, value){
-  if(!assertEditable('Logging sets')) return;
-  const dk = viewKey();
-  if(!state.setLog[dk]) state.setLog[dk]={};
-  if(!state.setLog[dk][dayIdx]) state.setLog[dk][dayIdx]={};
-  if(!state.setLog[dk][dayIdx][exIdx]) state.setLog[dk][dayIdx][exIdx]={};
-  if(!state.setLog[dk][dayIdx][exIdx][setIdx]) state.setLog[dk][dayIdx][exIdx][setIdx]={};
-  state.setLog[dk][dayIdx][exIdx][setIdx][field]=parseFloat(value)||value;
+// The first write on a day creates its session locally (synced in the background); sets push fire-and-forget.
+async function logSet(dayIdx, exIdx, setIdx, field, value){
+  if(!assertEditable('Logging sets') || !assertSessionDay(dayIdx)) return;
+  const session = await Session.materialize(viewKey());
+  if(!session) return;
+  const sb = Session.blockIdx(session, 'strength');
+  Session.cell(session, sb, exIdx, setIdx)[field] = numOrNull(value);
 
   let prChanged = null;
   if(field==='weight'){
-    const exName = getWorkout(dayIdx).exercises[exIdx]?.name;
+    const exName = session.snapshot?.blocks?.[sb]?.items?.[exIdx]?.name;
     if(exName){
       if(!state.prs) state.prs={};
       const w = parseFloat(value);
@@ -3601,36 +4006,36 @@ function logSet(dayIdx, exIdx, setIdx, field, value){
       }
     }
   }
-  save();
-  Sync.pushSet(dk, dayIdx, exIdx, setIdx, state.setLog[dk][dayIdx][exIdx][setIdx]);
+  Session.commit(session, sb, exIdx, setIdx);
   if(prChanged) Sync.pushPR(prChanged.name, prChanged.weight);
 }
 
-function toggleSet(dayIdx, exIdx, setIdx){
-  if(!assertEditable('Marking sets')) return;
-  const dk = viewKey();
-  if(!state.setLog[dk]) state.setLog[dk]={};
-  if(!state.setLog[dk][dayIdx]) state.setLog[dk][dayIdx]={};
-  if(!state.setLog[dk][dayIdx][exIdx]) state.setLog[dk][dayIdx][exIdx]={};
-  if(!state.setLog[dk][dayIdx][exIdx][setIdx]) state.setLog[dk][dayIdx][exIdx][setIdx]={};
-  state.setLog[dk][dayIdx][exIdx][setIdx].done=!state.setLog[dk][dayIdx][exIdx][setIdx].done;
-  save();
-  Sync.pushSet(dk, dayIdx, exIdx, setIdx, state.setLog[dk][dayIdx][exIdx][setIdx]);
+async function toggleSet(dayIdx, exIdx, setIdx){
+  if(!assertEditable('Marking sets') || !assertSessionDay(dayIdx)) return;
+  const session = await Session.materialize(viewKey());
+  if(!session) return;
+  const sb = Session.blockIdx(session, 'strength');
+  const cell = Session.cell(session, sb, exIdx, setIdx);
+  cell.done = !cell.done;
+  Session.commit(session, sb, exIdx, setIdx);
   renderWorkoutContent();
 }
 
-function markWorkoutDone(){
-  if(!assertEditable('Marking session complete')) return;
-  const dk = viewKey();
-  const key = dk+'-'+activeDay;
-  if(!state.workoutsCompleted.includes(key)) state.workoutsCompleted.push(key);
-  save(); Sync.pushWorkoutDone(dk, activeDay);
+async function markWorkoutDone(){
+  if(!assertEditable('Marking session complete') || !assertSessionDay(activeDay)) return;
+  const session = await Session.materialize(viewKey());
+  if(!session) return;
+  // Dual-write: the stats helpers and story cards read the legacy completion flag.
+  if(session.status !== 'done') Session.setStatus(session, 'done');
+  else { Session.setLegacyDone(session, true); save(); }
   showSessionCelebration();
 }
 
 function showSessionCelebration(){
-  const day = getWorkout(activeDay);
-  const dayLog = state.setLog?.[viewKey()]?.[activeDay] || {};
+  const session = state.sessions?.[viewKey()];
+  const day = session ? Session.toLegacyWorkout(session) : getWorkout(activeDay);
+  const sb = session ? Session.blockIdx(session, 'strength') : 0;
+  const dayLog = session ? (state.sessionSets?.[session.id]?.[sb] || {}) : (state.setLog?.[viewKey()]?.[activeDay] || {});
   let setsLogged = 0, setsTotal = 0;
   (day.exercises || []).forEach((ex, ei) => {
     setsTotal += ex.sets;
@@ -3658,9 +4063,14 @@ function showSessionCelebration(){
 function unmarkWorkoutDone(dayIdx){
   if(!assertEditable('Reopening session')) return;
   const dk = viewKey();
+  const session = state.sessions?.[dk];
+  if(session && session.status === 'done') Session.setStatus(session, 'in_progress');   // also clears the legacy flag
   const key = dk+'-'+dayIdx;
-  state.workoutsCompleted = (state.workoutsCompleted||[]).filter(k=>k!==key);
-  save(); Sync.pushWorkoutUndone(dk, dayIdx); renderDashboard(); toast('Session reopened');
+  if((state.workoutsCompleted||[]).includes(key)){
+    state.workoutsCompleted = state.workoutsCompleted.filter(k=>k!==key);
+    Sync.pushWorkoutUndone(dk, dayIdx);
+  }
+  save(); renderDashboard(); toast('Session reopened');
 }
 
 function renderNutrition(){
@@ -6158,7 +6568,8 @@ const PlanEditor = {
     this.close();
     // Re-render any active page that might depend on plan
     if(typeof renderActivePage === 'function') renderActivePage();
-    toast('Workout updated');
+    const shown = isSessionDay(idx) ? state.sessions?.[viewKey()] : null;
+    toast(shown && shown.status === 'done' ? 'Plan updated · this completed session keeps its snapshot' : 'Workout updated');
   }
 };
 
