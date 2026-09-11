@@ -1541,7 +1541,7 @@ function localDateKey(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).pa
 function todayKey(){ return localDateKey(new Date()); }
 function getWeekNum(){
   if(!state.startDate) return 1;
-  const diff = (new Date() - new Date(state.startDate)) / (1000*60*60*24*7);
+  const diff = (new Date() - new Date(state.startDate + 'T00:00:00')) / (1000*60*60*24*7);
   return Math.min(16, Math.max(1, Math.ceil(diff+0.01)));
 }
 function getTodayDayIdx(){return new Date().getDay() === 0 ? 6 : new Date().getDay()-1}
@@ -1640,6 +1640,23 @@ const Sync = {
     this.ready = true;
   },
 
+  // Supabase caps unpaged selects at 1,000 rows, and pull() replaces local state with
+  // what it reads — so growing tables are read in full, page by page. buildQuery must
+  // select with {count:'exact'} and a stable order; pages advance by rows returned, so
+  // this stays correct even if the server's row cap is lower than 1,000.
+  async fetchAll(buildQuery){
+    const data = [];
+    let total = Infinity;
+    while(data.length < total){
+      const res = await buildQuery().range(data.length, data.length + 999);
+      if(res.error) return { data: null, error: res.error };
+      data.push(...res.data);
+      total = res.count ?? data.length;
+      if(!res.data.length) break;
+    }
+    return { data, error: null };
+  },
+
   async pull(){
     if(!this.ready) return;
     syncStatus.state = 'syncing';
@@ -1648,11 +1665,11 @@ const Sync = {
     try {
     const c = this.client;
     const [foods, sets, weights, woComp, hiit, prs, profile, plan, water] = await Promise.all([
-      c.from('training_food_log').select('*').order('id'),
-      c.from('training_set_log').select('*'),
+      this.fetchAll(() => c.from('training_food_log').select('*', {count:'exact'}).order('id')),
+      this.fetchAll(() => c.from('training_set_log').select('*', {count:'exact'}).order('date').order('day_idx').order('ex_idx').order('set_idx')),
       c.from('training_weights').select('*').order('date'),
       c.from('training_workouts_completed').select('*'),
-      c.from('training_hiit_log').select('*'),
+      this.fetchAll(() => c.from('training_hiit_log').select('*', {count:'exact'}).order('date').order('day_idx').order('name')),
       c.from('training_prs').select('*'),
       c.from('training_profile').select('data').eq('id', 1).maybeSingle(),
       c.from('training_plan').select('data').eq('id', 1).maybeSingle(),
@@ -1744,12 +1761,13 @@ const Sync = {
   async backfillFromLocal(){
     if(!this.ready) return [];
     const tasks = [];
-    // Food log — insert all rows by date
+    // Food log — replace each date (delete, then insert) so re-running backfill never duplicates rows
     Object.entries(state.foodLog || {}).forEach(([date, rows]) => {
       if(rows && rows.length){
-        tasks.push(this.client.from('training_food_log').insert(
-          rows.map(r => ({date, name:r.name, cal:r.cal||0, prot:r.prot||0, carb:r.carb||0, fat:r.fat||0}))
-        ));
+        tasks.push(this.client.from('training_food_log').delete().eq('date', date).then(del => del.error ? del :
+          this.client.from('training_food_log').insert(
+            rows.map(r => ({date, name:r.name, cal:r.cal||0, prot:r.prot||0, carb:r.carb||0, fat:r.fat||0}))
+          )));
       }
     });
     // Set log
