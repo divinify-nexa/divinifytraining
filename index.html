@@ -827,12 +827,17 @@ body.rest-timer-on .page{padding-bottom:calc(var(--nav-h) + var(--nav-offset) + 
 .item-tools .btn{height:var(--tap);margin-right:var(--s-1)}
 .hiit-card .item-tools{margin-bottom:var(--s-2)}
 .session-add{margin-top:var(--s-3);height:var(--tap)}
-.scope-ask{display:flex;flex-direction:column;gap:var(--s-3);margin-bottom:var(--s-4)}
-.scope-ask-title{font-size:var(--fs-body);line-height:var(--lh-body);font-weight:600;color:var(--text-primary)}
-.scope-ask-desc{font-size:var(--fs-caption);line-height:var(--lh-caption);color:var(--text-secondary)}
-.scope-ask-actions{display:flex;flex-wrap:wrap;gap:var(--s-2)}
-.scope-ask-actions .btn{flex:1;min-width:150px}
-.scope-ask .btn{height:var(--tap)}
+/* The scope question: centred over the page, above the nav and the rest timer */
+.scope-modal{position:fixed;inset:0;z-index:9999;display:none;align-items:center;justify-content:center;padding:var(--s-5)}
+.scope-modal.open{display:flex}
+body.scope-modal-open{overflow:hidden}
+.scope-modal-backdrop{position:fixed;inset:0;background:var(--overlay);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.scope-modal-card{position:relative;width:100%;max-width:380px;display:flex;flex-direction:column;gap:var(--s-2);padding:var(--s-5);background:var(--bg-elevated);border-radius:var(--r-lg);box-shadow:var(--shadow-elevated);animation:fadeUp var(--dur-base) var(--ease)}
+.scope-modal-title{padding-right:var(--tap);font-size:var(--fs-title);line-height:var(--lh-title);font-weight:600;letter-spacing:var(--ls-title);color:var(--text-primary)}
+.scope-modal-desc{font-size:var(--fs-caption);line-height:var(--lh-caption);color:var(--text-secondary)}
+.scope-modal-close{position:absolute;top:var(--s-2);right:var(--s-2)}
+.scope-modal-actions{display:flex;flex-direction:column;gap:var(--s-2);margin-top:var(--s-3)}
+.scope-modal-actions .btn{width:100%;height:var(--tap)}
 .session-actions{display:flex;flex-wrap:wrap;gap:var(--s-2);margin:calc(-1 * var(--s-2)) 0 var(--s-4)}
 .session-actions .btn{height:var(--tap)}
 .rest-state + .session-actions{margin-top:var(--s-4)}
@@ -1122,6 +1127,22 @@ body[data-theme="dark"] .theme-switch::after{transform:translateX(20px)}
     </button>
   </div>
   <div class="pe-body" id="move-body"></div>
+</div>
+
+<!-- Scope question: asked right where you are, as soon as the exercise is chosen -->
+<div class="scope-modal" id="scope-modal" role="dialog" aria-modal="true" aria-labelledby="scope-modal-title">
+  <div class="scope-modal-backdrop" onclick="resolveScope(null)"></div>
+  <div class="scope-modal-card">
+    <button class="pe-close scope-modal-close" onclick="resolveScope(null)" aria-label="Cancel this change">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+    </button>
+    <div class="scope-modal-title" id="scope-modal-title">Just this session, or going forward?</div>
+    <div class="scope-modal-desc" id="scope-modal-desc"></div>
+    <div class="scope-modal-actions">
+      <button class="btn btn-secondary" onclick="resolveScope('session')">This session only</button>
+      <button class="btn btn-primary" onclick="resolveScope('forward')">Going forward</button>
+    </div>
+  </div>
 </div>
 
 <!-- Plan editor (full-screen) -->
@@ -1664,7 +1685,7 @@ function lastPlannableDate(){ return shiftDateKey(todayKey(), PLAN_AHEAD_DAYS); 
 function isViewingFuture(){ return viewDate > todayKey(); }
 function setViewDate(dateStr){
   if(dateStr > lastPlannableDate()) return;
-  if(dateStr !== viewDate){ pendingScope = null; planUpdatedFor = null; }
+  if(dateStr !== viewDate){ closeScopeModal(); planUpdatedFor = null; }
   viewDate = dateStr;
   // When navigating dates, snap workout view to that date's day-of-week
   activeDay = getViewDayIdx();
@@ -3979,26 +4000,25 @@ const SessionEdit = {
   }
 };
 
-// The scope question, as a card in the Train view rather than an overlay.
+// The scope question, as a modal over the page: it opens where you are looking, the moment the
+// exercise is chosen. Dismissing it (backdrop or X) cancels the edit — nothing is applied.
 let pendingScope = null;
-function askScope(what, apply){ pendingScope = {what, apply}; renderWorkoutContent(); }
+function askScope(what, apply){
+  pendingScope = {what, apply};
+  document.getElementById('scope-modal-desc').textContent = what;
+  document.getElementById('scope-modal').classList.add('open');
+  document.body.classList.add('scope-modal-open');
+}
+function closeScopeModal(){
+  pendingScope = null;
+  document.getElementById('scope-modal')?.classList.remove('open');
+  document.body.classList.remove('scope-modal-open');
+}
 function resolveScope(scope){
   const p = pendingScope;
-  pendingScope = null;
+  closeScopeModal();
   if(p && scope) p.apply(scope);
   renderWorkoutContent();
-}
-function scopeCardHtml(){
-  if(!pendingScope) return '';
-  return `<div class="card scope-ask">
-    <div class="scope-ask-title">Just this session, or going forward?</div>
-    <div class="scope-ask-desc">${escapeHtml(pendingScope.what)}</div>
-    <div class="scope-ask-actions">
-      <button class="btn btn-secondary" onclick="resolveScope('session')">This session only</button>
-      <button class="btn btn-primary" onclick="resolveScope('forward')">Going forward</button>
-    </div>
-    <button class="btn btn-ghost btn-sm" onclick="resolveScope(null)">Cancel</button>
-  </div>`;
 }
 // Structural edits: a started session asks; a planned one (or a future day) just changes the plan.
 function liveSession(dayIdx){
@@ -4012,11 +4032,20 @@ function liveSessionOrWarn(dayIdx){
   if(!s) toast(isViewingToday() && state.sessions?.[viewKey()] ? 'This session is finished — it stays as you did it' : 'Sessions can only be changed on their own day');
   return s;
 }
+// Changing which exercises are in the workout is a question worth asking.
 function editSession(dayIdx, what, run){
   const session = liveSession(dayIdx);
   if(!session){ toast('Sessions can only be changed on their own day'); return; }
   if(!Session.isStarted(session)){ run(session, 'forward'); return; }
   askScope(what, scope => run(session, scope));
+}
+// Order, set counts, removals and prescription tweaks are today's business: applied straight to
+// this session's snapshot, no question asked. The template editor is where the program changes.
+function editSessionNow(dayIdx, run){
+  const session = liveSession(dayIdx);
+  if(!session){ toast('Sessions can only be changed on their own day'); return; }
+  run(session, 'session');
+  renderWorkoutContent();
 }
 function sessionSwapItem(dayIdx, b, i){
   const session = liveSessionOrWarn(dayIdx);
@@ -4037,19 +4066,16 @@ function sessionRemoveItem(dayIdx, b, i){
   if(!session) return;
   if(Session.isItemLocked(session, b, i)){ toast("Already logged — this one's locked"); return; }
   const name = SessionEdit.item(session, b, i)?.name || 'this exercise';
-  editSession(dayIdx, `Remove ${name}`, (s, scope) => {
-    if(scope === 'forward') SessionEdit.forward(s, 'remove', {b, i});
+  editSessionNow(dayIdx, s => {
     if(SessionEdit.removeItem(s, b, i)) SessionEdit.saveSnapshot(s);
-    toast(scope === 'forward' ? `Removed ${name} from now on` : `Removed ${name} for today`);
+    toast(`Removed ${name} for today`);
   });
 }
 function sessionMoveItem(dayIdx, b, i, delta){
   const session = liveSessionOrWarn(dayIdx);
   if(!session) return;
   if(Session.isItemLocked(session, b, i)){ toast("Already logged — this one's locked"); return; }
-  const name = SessionEdit.item(session, b, i)?.name || 'this exercise';
-  editSession(dayIdx, `Move ${name} ${delta < 0 ? 'up' : 'down'}`, (s, scope) => {
-    if(scope === 'forward') SessionEdit.forward(s, 'move', {b, i, delta});
+  editSessionNow(dayIdx, s => {
     if(SessionEdit.moveItem(s, b, i, delta)) SessionEdit.saveSnapshot(s);
   });
 }
@@ -4059,8 +4085,7 @@ function sessionAddSet(dayIdx, b, i){
   const it = SessionEdit.item(session, b, i);
   if(!it) return;
   const sets = (+it.sets || 0) + 1;
-  editSession(dayIdx, `${it.name}: ${it.sets} → ${sets} sets`, (s, scope) => {
-    if(scope === 'forward') SessionEdit.forward(s, 'fields', {b, i, fields: {sets}});
+  editSessionNow(dayIdx, s => {
     if(SessionEdit.setFields(s, b, i, {sets})) SessionEdit.saveSnapshot(s);
   });
 }
@@ -4571,7 +4596,7 @@ function renderBlockWorkout({day, blocks, session, dateKey, preview, actions, me
       <span class="workout-meta-time">~${estimateWorkoutMinutes(activeDay, day)} min</span>
       <span class="workout-meta-info">${itemCount} exercise${itemCount === 1 ? '' : 's'} · ${blocks.length} block${blocks.length === 1 ? '' : 's'}${metaNote}${session && Session.isUnsynced(session.id) ? UNSYNCED_NOTE : ''}</span>
       <button class="btn btn-ghost btn-sm editable-only" onclick="PlanEditor.open(${activeDay})" title="Edit workout">Edit</button>
-    </div>${actions}${scopeCardHtml()}`;
+    </div>${actions}`;
   const editable = !!session && Session.isLive(session) && !preview && isViewingToday();
   visibleBlocks(blocks).forEach(({blk, b}) => {
     const items = visibleItems(blk);
@@ -4706,7 +4731,7 @@ function renderWorkoutContent(){
       <span class="workout-meta-time">~${estMin} min</span>
       <span class="workout-meta-info">${parts.join(' · ')}${metaNote}${session && Session.isUnsynced(session.id) ? UNSYNCED_NOTE : ''}</span>
       <button class="btn btn-ghost btn-sm editable-only" onclick="PlanEditor.open(${activeDay})" title="Edit workout">Edit</button>
-    </div>${actions}${scopeCardHtml()}`;
+    </div>${actions}`;
     const editable = !!session && Session.isLive(session) && !preview && isViewingToday();
     // For a session, walk the snapshot's own items so a hidden or reordered item keeps its storage index.
     const exRows = session
