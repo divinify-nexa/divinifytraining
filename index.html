@@ -1649,12 +1649,45 @@ let state = {
 // evening entries under tomorrow west of UTC and shifted day math back a day east of it.)
 function localDateKey(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 function todayKey(){ return localDateKey(new Date()); }
-function getWeekNum(){
-  if(!state.startDate) return 1;
+// The program a date belongs to: the active one from its own start date on, otherwise the
+// latest program that had already started. A day logged under an earlier program keeps
+// rendering against that program's schedule after a new one is seeded.
+function programForDate(date){
+  const p = state.plan;
+  if(!p || p.version !== 2 || !p.programs) return null;
+  const active = getActiveProgram();
+  if(!date || !active || date >= (active.startDate || '')) return active;
+  const byStart = (a, b) => String(a.startDate || '').localeCompare(String(b.startDate || ''));
+  const others = Object.values(p.programs).filter(x => x && x !== active).sort(byStart);
+  const started = others.filter(x => (x.startDate || '') <= date);
+  // Nothing had started yet: fall back to the earliest program, never to the newest one —
+  // a day logged long ago belongs to the oldest program, not to today's.
+  return started[started.length - 1] || others[0] || active;
+}
+function programWeeks(prog){ return Math.max(1, parseInt(prog?.weeks) || 16); }
+function getWeekNum(date = todayKey()){
+  const prog = programForDate(date);
+  const start = prog?.startDate || state.startDate;
+  if(!start) return 1;
   // Whole local calendar days since the start date (round absorbs 23/25-hour DST days),
   // so each program week turns over exactly at local midnight.
-  const days = Math.round((new Date(todayKey() + 'T00:00:00') - new Date(state.startDate + 'T00:00:00')) / 864e5);
-  return Math.min(16, Math.max(1, Math.floor(days / 7) + 1));
+  const days = Math.round((new Date(date + 'T00:00:00') - new Date(start + 'T00:00:00')) / 864e5);
+  return Math.min(programWeeks(prog), Math.max(1, Math.floor(days / 7) + 1));
+}
+// The phase covering a week, from the program's own phases[{from,to,...}].
+function programPhases(prog){ return Array.isArray(prog?.phases) && prog.phases.length ? prog.phases : legacyPhases(); }
+function getPhaseIdx(week = getWeekNum(), prog = getActiveProgram()){
+  const phases = programPhases(prog);
+  const i = phases.findIndex(p => week >= p.from && week <= p.to);
+  return i >= 0 ? i : phases.length - 1;
+}
+function getPhase(week = getWeekNum(), prog = getActiveProgram()){
+  return programPhases(prog)[getPhaseIdx(week, prog)] || null;
+}
+function phaseWeeksLabel(ph){ return ph ? (ph.weeks || `${ph.from}–${ph.to}`) : ''; }
+// A planned deload week: working sets are scaled at snapshot-build time.
+function deloadFor(week, prog = getActiveProgram()){
+  return (prog?.deloadWeeks || []).find(d => +d.week === +week) || null;
 }
 function getTodayDayIdx(){return new Date().getDay() === 0 ? 6 : new Date().getDay()-1}
 
@@ -2395,12 +2428,13 @@ function renderDashboard(){
     greetEl.textContent = `Hey, ${name}`;
   }
   const wk = getWeekNum();
-  document.getElementById('dash-week').innerHTML=`${wk}<small>/16</small>`;
-  let phaseIdx = wk<=4?0:wk<=8?1:wk<=12?2:3;
-  document.getElementById('dash-phase').textContent = PHASES[phaseIdx].label;
+  const totalWeeks = programWeeks(getActiveProgram());
+  document.getElementById('dash-week').innerHTML=`${wk}<small>/${totalWeeks}</small>`;
+  document.getElementById('dash-phase').textContent = getPhase(wk)?.label ?? '';
 
   let dots='';
-  for(let i=1;i<=16;i++){
+  document.getElementById('week-dots').style.gridTemplateColumns = `repeat(${totalWeeks},1fr)`;
+  for(let i=1;i<=totalWeeks;i++){
     const cls = i<wk?'done':i===wk?'current':'';
     dots+=`<div class="week-dot ${cls}"></div>`;
   }
@@ -2426,7 +2460,7 @@ function renderDashboard(){
   const session = res.source === 'row' ? res.session : null;
   const day = session ? Session.toLegacyWorkout(session)
     : !session && res.spec?.coveredBy ? {label: DAY_LABELS[dayIdx], name: 'Rest', desc: res.spec.desc, exercises: [], hiit: [], rest: true}
-    : getWorkout(dayIdx);
+    : getWorkout(dayIdx, viewKey());
   const kind = res.session?.kind, status = res.session?.status, future = isViewingFuture();
   const viewingToday = isViewingToday();
   const sessionDone = !day.rest && (session ? session.status === 'done' : state.workoutsCompleted.includes(viewKey()+'-'+dayIdx));
@@ -2678,16 +2712,31 @@ function toggleArtemisSettings(){
 // Build the full system prompt with current stats
 function buildArtemisSystemPrompt(){
   const wk = getWeekNum();
-  const phaseIdx = wk<=4?0:wk<=8?1:wk<=12?2:3;
-  const ph = PHASES[phaseIdx];
+  const prog = getActiveProgram();
+  const ph = getPhase(wk) || {};
+  const totalWeeks = programWeeks(prog);
+  const programName = prog?.name || '16-Week Strength + Hypertrophy';
+  // The split and the phase table are read from the active program, not hard-coded.
+  const splitLine = DAY_LABELS.map((lbl, i) => {
+    const w = toLegacyWorkout(i, todayKey());
+    return `${lbl[0] + lbl.slice(1).toLowerCase()} ${w?.rest ? 'Rest' : w?.name || 'Rest'}`;
+  }).join(' / ');
+  const phaseLines = programPhases(prog).map(p => {
+    const bits = [p.mainSets != null ? `${p.mainSets} sets x ${p.mainRepsText} on the main lifts` : [p.sets, p.reps && `${p.reps} reps`, p.rest && `${p.rest} rest`].filter(Boolean).join(', ')];
+    return `- W${p.from}-${p.to} ${p.label}: ${bits.join('')}. ${p.note || ''}`.trim();
+  }).join('\n');
+  const deloadLine = (prog?.deloadWeeks || []).length
+    ? `\nDeload weeks: ${prog.deloadWeeks.map(d => `week ${d.week} (working sets x${d.setsMultiplier})`).join(', ')}.`
+    : '';
+  const progressionLine = prog?.progressionNote ? `\nProgression: ${prog.progressionNote}` : '';
   const dayIdx = getTodayDayIdx();
-  const today = getWorkout(dayIdx);
+  const today = getWorkout(dayIdx, todayKey());
   const todayWeekday = new Date().toLocaleDateString('en-US',{weekday:'long'});
   const todayDate = new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
 
   // Today's session block by block, with the ids the plan-change tool addresses.
   const todayRes = Session.resolve(todayKey());
-  const todayBlocksList = (todayRes.source === 'row' ? todayRes.session.snapshot?.blocks : Session.buildSnapshot(todayRes.spec).blocks) || [];
+  const todayBlocksList = (todayRes.source === 'row' ? todayRes.session.snapshot?.blocks : Session.buildSnapshot(todayRes.spec, todayKey()).blocks) || [];
   const todayTemplateId = todayRes.session?.template_id || todayRes.spec?.templateId || null;
   const todayBlocks = todayBlocksList.map((blk, b) => {
     const rows = (blk.items || []).filter(it => !it.removed).map((it, i) =>
@@ -2794,7 +2843,7 @@ GROUNDING RULES:
 - Never invent stats. If something isn't in the data, ask ${userName} or say you don't have it.
 - Keep responses skimmable on a phone — short paragraphs or bullets, not walls of text.
 - When recommending changes (weight, reps, food), be specific and actionable.
-- Tie advice to where ${userName} is in the 16-week program.
+- Tie advice to where ${userName} is in the ${totalWeeks}-week program.
 - Use the athlete profile below to tailor your tone and recommendations to their stated goals, struggles, and motivations.
 - Use plain text formatting only (no markdown like ** or ###). Bullets with "•" or "-" are fine.
 
@@ -2804,18 +2853,15 @@ PLAN-EDITING RULES:
 - Only call the tool when the user has asked for changes. For pure questions ("how am I doing", "what should I focus on"), reply with text only.
 - If the user has just had a proposal approved or rejected, acknowledge that and don't re-propose the same change.
 
-PROGRAM STRUCTURE (16-week split: Mon Push / Tue Pull / Wed Legs / Thu Upper-heavy / Fri HIIT / Sat Rest (optional bonus) / Sun Rest):
-- W1-4 Foundation: 3 sets x 8-12 reps, 90s rest. Learn working weights, form first.
-- W5-8 Load: 4 sets x 8-12 reps, 90s rest. Add 5 lbs upper / 10 lbs lower at top of range.
-- W9-12 Strength+: 4-5 sets, mix heavy 4-6 + volume 10-12, 2-3 min rest.
-- W13-16 Peak: 5 sets x 4-8 reps, 2-3 min. Deload week 16 (60% weight).
+PROGRAM STRUCTURE (${programName} — ${totalWeeks} weeks; ${splitLine}):
+${phaseLines}${deloadLine}${progressionLine}
 
 NUTRITION TARGETS:
 3300 cal / 190g protein / 425g carbs / 90g fat per day.
 
 ============ CURRENT STATE ============
 Today: ${todayDate}
-Week: ${wk} of 16 — ${ph.label} phase
+Week: ${wk} of ${totalWeeks} — ${ph.label} phase${deloadFor(wk, prog) ? ' (DELOAD week — reduced volume)' : ''}
 Phase guidance: ${ph.note}
 ${profileBlock}
 
@@ -3087,12 +3133,15 @@ function autoGrowTextarea(el){
 function parseRestSeconds(restStr){
   if(!restStr) return 90;
   const s = String(restStr).toLowerCase();
-  const range = s.match(/(\d+)\s*[–\-]\s*(\d+)\s*min/);
-  if(range) return ((parseInt(range[1])+parseInt(range[2]))/2)*60;
-  const min = s.match(/(\d+)\s*min/);
-  if(min) return parseInt(min[1])*60;
-  const sec = s.match(/(\d+)\s*s/);
-  if(sec) return parseInt(sec[1]);
+  // Decimals ("2.5–3.5 min") and second ranges ("30–45s") both average out.
+  const rangeMin = s.match(/(\d+(?:\.\d+)?)\s*[–\-]\s*(\d+(?:\.\d+)?)\s*min/);
+  if(rangeMin) return Math.round(((parseFloat(rangeMin[1])+parseFloat(rangeMin[2]))/2)*60);
+  const min = s.match(/(\d+(?:\.\d+)?)\s*min/);
+  if(min) return Math.round(parseFloat(min[1])*60);
+  const rangeSec = s.match(/(\d+(?:\.\d+)?)\s*[–\-]\s*(\d+(?:\.\d+)?)\s*s/);
+  if(rangeSec) return Math.round((parseFloat(rangeSec[1])+parseFloat(rangeSec[2]))/2);
+  const sec = s.match(/(\d+(?:\.\d+)?)\s*s/);
+  if(sec) return Math.round(parseFloat(sec[1]));
   return 90;
 }
 // Average work seconds per set based on rep range
@@ -3211,11 +3260,14 @@ function initializePlan(){
       if(!prog || typeof prog !== 'object') return;
       if(!Array.isArray(prog.phases)) prog.phases = legacyPhases();
       if(!prog.library) prog.library = {};
+      if(!prog.blocks) prog.blocks = {};
+      if(!prog.startDate) prog.startDate = state.startDate;
       ensureConditioningPool(prog);
     });
+    seedHybrid190();
     return;
   }
-  if(p && Array.isArray(p.workouts)){ state.plan = migrateV1toV2(p); return; }
+  if(p && Array.isArray(p.workouts)){ state.plan = migrateV1toV2(p); seedHybrid190(); return; }
   // No plan yet: the built-in program, with any legacy per-exercise overrides applied.
   const cloned = JSON.parse(JSON.stringify(DAYS));
   Object.entries(state.customExercises || {}).forEach(([dayIdx, exMap]) => {
@@ -3228,18 +3280,212 @@ function initializePlan(){
     if(Array.isArray(list) && cloned[+dayIdx]) cloned[+dayIdx].hiit = list;
   });
   state.plan = buildPlanV2(cloned, HIIT_POOL, {updatedAt: new Date().toISOString()});
+  seedHybrid190();
+}
+
+// ===== Hybrid 190 =====
+// The current program, seeded once alongside the legacy one (which is archived, never deleted,
+// so every past day still resolves against the schedule it was logged under).
+const HYBRID_ID = 'hybrid190';
+// name, category, muscle, equipment, cues
+const HYBRID_LIBRARY = [
+  // Lower body
+  ['Back Squat','strength','Quads · Glutes','Barbell','Brace, break at the hips, knees out. Depth you own with a flat back.'],
+  ['Romanian Deadlift','strength','Hamstrings · Glutes','Barbell','Soft knees, push the hips back. Stop where the hamstrings stop, not where the floor is.'],
+  ['Bulgarian Split Squat','strength','Quads · Glutes','Dumbbells','Rear foot elevated. Front shin vertical-ish, torso tall.'],
+  ['Trap Bar Deadlift','strength','Posterior chain','Trap bar','Hips between a squat and a hinge. Push the floor away.'],
+  ['Walking Lunges','strength','Quads · Glutes','Dumbbells','Long stride, rear knee just off the floor, torso upright.'],
+  ['Leg Press','strength','Quads','Machine','Feet mid-platform. Don’t lock out hard at the top.'],
+  // Chest · shoulders · triceps
+  ['Barbell Bench Press','strength','Chest','Barbell','Elbows ~45°, bar to lower chest, control down and drive up.'],
+  ['Dumbbell Bench Press','strength','Chest','Dumbbells','Full stretch at the bottom, press slightly inward.'],
+  ['Incline Dumbbell Bench Press','hypertrophy','Upper chest','Dumbbells','45° bench. Squeeze at the top without clanging the bells.'],
+  ['Overhead Press','strength','Shoulders','Barbell','Standing, ribs down, squeeze glutes. Bar path past the nose.'],
+  ['Lateral Raises','hypertrophy','Side delts','Dumbbells','Lead with the elbow, stop at shoulder height.'],
+  ['Tricep Pushdown','hypertrophy','Triceps','Cable','Elbows pinned, full lockout, slow return.'],
+  // Back · biceps
+  ['Weighted Pull-Ups','strength','Lats · Upper back','Belt or dumbbell','Dead hang, pull the elbows to the ribs. Add weight once bodyweight is easy.'],
+  ['Lat Pulldowns','hypertrophy','Lats','Cable','Chest tall, drive the elbows down, no leaning back.'],
+  ['Chest-Supported Rows','strength','Mid back','Machine or bench','Chest stays on the pad. Pull to the ribs, squeeze, control back.'],
+  ['Cable Rows','hypertrophy','Mid back','Cable','Neutral grip, drive the elbows past the hips, 1s squeeze.'],
+  ['Barbell Curl','hypertrophy','Biceps','Barbell','No swing. Full range, hard squeeze at the top.'],
+  // Traps · carries
+  ['Heavy Dumbbell Shrugs','strength','Traps','Dumbbells','Straight up, 1s hold at the top. No rolling.'],
+  ['Farmer Carries','strength','Traps · Grip · Core','Dumbbells','Tall posture, ribs down, walk without leaning. Heavy but controlled.'],
+  // Core
+  ['Ab Wheel Rollouts','core','Abs','Ab wheel','Ribs down, no sag in the lower back. Roll only as far as you can hold the brace.'],
+  ['Pallof Press','core','Obliques','Cable','Resist the rotation. Press out slow, hold, return slow.'],
+  ['Cable Crunches','core','Abs','Cable','Round the spine down toward the knees. Hips stay put.'],
+  ['Reverse Crunches','core','Lower abs','Bodyweight','Curl the pelvis up, no momentum swing.'],
+  ['Copenhagen Planks','core','Adductors','Bench','Top leg on the bench. Start short-lever if the groin complains.'],
+  ['Hanging Knee Raises','core','Lower abs','Pull-up bar','Skip if this aggravates the hip.'],
+  ['Hanging Leg Raises','core','Lower abs','Pull-up bar','Skip if this aggravates the hip.'],
+  // Power · agility
+  ['Box Jumps','power','Legs','Box','Land soft and quiet. Step down, reset every rep — this is a power day, not cardio.'],
+  ['5-10-5 Shuttle','agility','Full body','Cones','Low hips at the turns. Plant hard, change direction, accelerate out.'],
+  ['Lateral Shuffle → Sprint','agility','Full body','Cones','Stay low through the shuffle, then flip the hips and go.'],
+  ['15–20 yd Acceleration','agility','Full body','None','Gradual build, aggressive arms, stay in the lean for the first steps.'],
+  ['A-Skips','warmup','Full body','None','Tall posture, knee up, foot down under the hip.'],
+  ['Side Shuffles','warmup','Hips','None','Feet never cross. Stay low.'],
+  ['High Knees','warmup','Full body','None','Quick ground contacts, upright torso.'],
+  ['Progressive Accelerations','warmup','Full body','None','Build from a jog to about 80% over 20–30 yards.'],
+  // Warm-up · hip mobility
+  ['Knee-to-Wall Ankle Rocks','warmup','Ankles','None','Heel down, drive the knee over the toes toward the wall.'],
+  ['90/90 Hip Switches','warmup','Hips','None','Switch sides without using the hands once it loosens up.'],
+  ['Adductor Rockbacks','warmup','Adductors','None','One leg out to the side, rock back and forth slowly.'],
+  ['Hip CARs','warmup','Hips','None','Slowest circle you can control. Full range, no cheating with the spine.'],
+  ['Glute Bridges','warmup','Glutes','None','Squeeze at the top, ribs down.'],
+  ['90/90 Hip Hold','mobility','Hips','None','Sit tall in the shape and breathe. Lean forward for more.'],
+  ['Couch Stretch','mobility','Hip flexors','Wall','Squeeze the glute of the stretching side to keep the lower back out of it.'],
+  ['Figure-4 Glute Stretch','mobility','Glutes','None','Ankle over the knee, pull the far thigh in.'],
+  ['Frog Stretch','mobility','Adductors','None','Knees wide, shins in line. Rock back slowly.'],
+  ['World’s Greatest Stretch','mobility','Full body','None','Lunge, elbow to instep, then open up and rotate.'],
+  // Knee · ankle · lower leg
+  ['Knee-to-Wall Dorsiflexion','mobility','Ankles','Wall','Measure the gap. Chase a little more every week.'],
+  ['Soleus Calf Raise','jointHealth','Calves','Bench or machine','Knee bent ~90°. Slow down, pause at the bottom.'],
+  ['Tibialis Raise','jointHealth','Shins','Wall','Heels down, toes up. Burns fast — that’s the point.'],
+  // Conditioning · sport
+  ['Zone 2 Incline Walk','conditioning','Aerobic','Treadmill','Nose-breathing pace. You should be able to hold a conversation.'],
+  ['Zone 2 Run','conditioning','Aerobic','None','Conversational pace the whole way. Slower than feels right.'],
+  ['Soccer','sport','Full body','None',''],
+];
+// Blocks shared by reference; templates point at these rather than copying them.
+const HYBRID_BLOCKS = {
+  wu_lower: {type:'warmup', name:'Warm-up', items:[
+    ['Knee-to-Wall Ankle Rocks','10 per side'], ['90/90 Hip Switches','10 per side'], ['Adductor Rockbacks','10 per side'],
+    ['Hip CARs','5 per side'], ['Glute Bridges','15 reps']]},
+  wu_soccer: {type:'warmup', name:'Warm-up', items:[
+    ['Knee-to-Wall Ankle Rocks','10 per side'], ['90/90 Hip Switches','10 per side'], ['A-Skips','20 yards'],
+    ['Side Shuffles','20 yards each way'], ['High Knees','20 yards'], ['Progressive Accelerations','20–30 yards × 2–3']]},
+  mob_hips: {type:'mobility', name:'Hip mobility', items:[
+    ['90/90 Hip Hold','60s per side'], ['Couch Stretch','60s per side'], ['Figure-4 Glute Stretch','45s per side'],
+    ['Frog Stretch','60s'], ['World’s Greatest Stretch','5 per side']]},
+  mob_ankles: {type:'mobility', name:'Ankles', items:[
+    ['Knee-to-Wall Dorsiflexion','10 per side'], ['Soleus Calf Raise','15 reps'], ['Tibialis Raise','20 reps']]},
+  agility_a: {type:'agility', name:'Agility', items:[
+    ['5-10-5 Shuttle','3 rounds'], ['Lateral Shuffle → Sprint','3 per side'], ['15–20 yd Acceleration','× 4']]},
+};
+// [name, sets, repsText, restText] for set rows; a main compound is marked phaseBased.
+const P = (name, rest) => ({name, rest, phaseBased: true});
+const HYBRID_TEMPLATES = {
+  mon_lower_core: {name:'Lower Strength + Core', desc:'Squat · hinge · single leg · core', blocks:[
+    {ref:'wu_lower'},
+    {type:'power', items:[['Box Jumps',3,'3','60–90s']]},
+    {type:'strength', items:[P('Back Squat','2.5–3.5 min'), ['Romanian Deadlift',3,'6–10','2 min'], ['Bulgarian Split Squat',3,'6–10 per leg','90s']]},
+    {type:'jointHealth', name:'Joint health', items:[['Soleus Calf Raise',3,'12–15','60s'], ['Tibialis Raise',2,'15–20','60s']]},
+    {type:'core', items:[['Ab Wheel Rollouts',3,'6–12','60s'], ['Pallof Press',3,'10 per side','60s']]},
+  ]},
+  tue_upper_traps_z2: {name:'Upper Strength + Traps + Zone 2', desc:'Press · pull · traps · easy aerobic', blocks:[
+    {type:'strength', items:[P('Barbell Bench Press','2.5–3 min'), P('Weighted Pull-Ups','2–3 min'),
+      ['Overhead Press',3,'5–8','2 min'], ['Chest-Supported Rows',3,'8–12','90s']]},
+    {type:'strength', name:'Traps + Carries', items:[['Heavy Dumbbell Shrugs',3,'8–12','75–90s'], ['Farmer Carries',3,'30–45s','60–90s']]},
+    {type:'conditioning', items:[['Zone 2 Incline Walk','20–35 min']]},
+  ]},
+  wed_soccer: {name:'Soccer', desc:'Optional — play, don’t train', blocks:[
+    {ref:'wu_soccer'},
+    {type:'sport', items:[['Soccer','Play']]},
+  ]},
+  thu_upper_hyper_core: {name:'Upper Hypertrophy + Core', desc:'Volume for chest, back, delts and arms', blocks:[
+    {type:'hypertrophy', items:[['Incline Dumbbell Bench Press',3,'8–12','90–120s'], ['Lat Pulldowns',3,'8–12','90s'],
+      ['Cable Rows',3,'8–12','90s'], ['Lateral Raises',3,'12–15','60s'], ['Barbell Curl',3,'10–15','60s'], ['Tricep Pushdown',3,'10–15','60s']]},
+    {type:'core', items:[['Cable Crunches',3,'10–15','60s'], ['Reverse Crunches',3,'10–15','60s']]},
+  ]},
+  fri_athletic_traps: {name:'Athletic Full Body + Traps', desc:'Jump · pull from the floor · push · carry', blocks:[
+    {type:'power', items:[['Box Jumps',3,'3','60–90s']]},
+    {type:'strength', items:[P('Trap Bar Deadlift','3 min'), ['Dumbbell Bench Press',3,'8–10','90s'],
+      ['Walking Lunges',3,'8–10 per leg','90s'], ['Chest-Supported Rows',3,'8–10','90s']]},
+    {type:'strength', name:'Traps + Carries', items:[['Heavy Dumbbell Shrugs',3,'8–12','75s'], ['Farmer Carries',3,'30–45s','60–90s']]},
+    {type:'core', items:[['Copenhagen Planks',2,'20–30s per side','60s']]},
+  ]},
+  wknd_cond_mob: {name:'Conditioning + Agility', desc:'Easy aerobic, change of direction, long mobility', blocks:[
+    {ref:'wu_lower'},
+    {ref:'agility_a'},
+    {type:'conditioning', items:[['Zone 2 Run', null, {1:'35–45 min', 2:'45–55 min', 3:'50–60 min'}]]},
+    {ref:'mob_hips'},
+    {ref:'mob_ankles'},
+  ]},
+};
+const HYBRID_SCHEDULE = [
+  {kind:'template', templateId:'mon_lower_core'},
+  {kind:'template', templateId:'tue_upper_traps_z2'},
+  {kind:'sport', templateId:'wed_soccer', optional:true, name:'Soccer'},
+  {kind:'template', templateId:'thu_upper_hyper_core'},
+  {kind:'template', templateId:'fri_athletic_traps'},
+  {kind:'flex', flexGroup:'wknd', templateId:'wknd_cond_mob'},
+  {kind:'flex', flexGroup:'wknd', templateId:'wknd_cond_mob'},
+];
+const HYBRID_PHASES = [
+  {from:1, to:4,  label:'Rebuild', mainSets:3, mainRepsText:'6–8', note:'Movement quality, work capacity, regain strength'},
+  {from:5, to:8,  label:'Build',   mainSets:4, mainRepsText:'5–7', note:'Muscle + strength'},
+  {from:9, to:12, label:'Perform', mainSets:4, mainRepsText:'4–6', note:'Strength + athletic performance'},
+];
+const HYBRID_PROGRESSION = 'When all sets hit the top of the range with clean form, add weight — +5 lb upper, +5–10 lb lower.';
+
+// Seeded once and guarded by plan.seeded; re-running is a no-op. Nothing is deleted: the
+// previous program is archived and keeps its templates, library and history.
+function seedHybrid190(){
+  const plan = state.plan;
+  if(!plan || plan.version !== 2 || !plan.programs) return false;
+  plan.seeded = Array.isArray(plan.seeded) ? plan.seeded : [];
+  if(plan.seeded.includes(HYBRID_ID) || plan.programs[HYBRID_ID]) return false;
+  const prog = {
+    id: HYBRID_ID, name: 'Hybrid 190 — 12 Week Athlete Rebuild', weeks: 12,
+    startDate: todayKey(), status: 'active',
+    phases: JSON.parse(JSON.stringify(HYBRID_PHASES)),
+    progressionNote: HYBRID_PROGRESSION,
+    deloadWeeks: [{week: 4, setsMultiplier: 0.7}, {week: 8, setsMultiplier: 0.7}],
+    library: {}, blocks: {}, templates: {}, schedule: [], conditioningPool: []
+  };
+  HYBRID_LIBRARY.forEach(([name, category, muscle, equipment, cues]) =>
+    ensureLibraryEntry(prog.library, name, category, {muscle, equipment, cues: cues || ''}));
+  const idOf = name => findLibraryId(prog.library, name) || ensureLibraryEntry(prog.library, name, 'strength', {});
+  // ['Name', detail]  → tick row;  ['Name', sets, reps, rest] → set row;
+  // ['Name', null, {byPhase}] → duration row;  P('Name', rest) → phase-driven main lift.
+  const toItem = spec => {
+    if(spec && !Array.isArray(spec)) return {exerciseId: idOf(spec.name), phaseBased: true, restText: spec.rest,
+      sets: HYBRID_PHASES[0].mainSets, repsText: HYBRID_PHASES[0].mainRepsText, weightText: ''};
+    const [name, a, b, c] = spec;
+    if(a == null && b && typeof b === 'object') return {exerciseId: idOf(name), durationByPhase: b, detail: b[1]};
+    if(typeof a === 'number') return {exerciseId: idOf(name), sets: a, repsText: b, restText: c, weightText: ''};
+    return {exerciseId: idOf(name), detail: a};
+  };
+  Object.entries(HYBRID_BLOCKS).forEach(([id, blk]) => {
+    prog.blocks[id] = {type: blk.type, ...(blk.name ? {name: blk.name} : {}), items: blk.items.map(toItem)};
+  });
+  Object.entries(HYBRID_TEMPLATES).forEach(([id, tpl]) => {
+    prog.templates[id] = {id, name: tpl.name, desc: tpl.desc, fullHiit: false,
+      blocks: tpl.blocks.map(b => b.ref ? {ref: b.ref}
+        : {type: b.type, ...(b.name ? {name: b.name} : {}), items: b.items.map(toItem)})};
+  });
+  prog.schedule = JSON.parse(JSON.stringify(HYBRID_SCHEDULE));
+  ensureConditioningPool(prog);
+  Object.values(plan.programs).forEach(p => { if(p && p.status === 'active') p.status = 'archived'; });
+  plan.programs[HYBRID_ID] = prog;
+  plan.activeId = HYBRID_ID;
+  plan.seeded.push(HYBRID_ID);
+  return true;
 }
 
 // ----- Blocks -----
 // A template or session is a list of blocks {type, name?, items[]}. An item with sets logs a set
 // table; one without logs a single done tick (detail and/or durationSec). The original two-bucket
 // shape (unnamed strength + conditioning blocks) keeps its original rendering and v1 mapping.
-const BLOCK_TYPES = ['warmup','strength','hypertrophy','power','core','agility','mobility','conditioning','sport','cooldown'];
-const BLOCK_LABELS = {warmup:'Warm-up', strength:'Strength', hypertrophy:'Hypertrophy', power:'Power', core:'Core', agility:'Agility', mobility:'Mobility', conditioning:'Conditioning', sport:'Sport', cooldown:'Cool-down'};
+const BLOCK_TYPES = ['warmup','strength','hypertrophy','power','core','agility','mobility','jointHealth','conditioning','sport','cooldown'];
+const BLOCK_LABELS = {warmup:'Warm-up', strength:'Strength', hypertrophy:'Hypertrophy', power:'Power', core:'Core', agility:'Agility', mobility:'Mobility', jointHealth:'Joint health', conditioning:'Conditioning', sport:'Sport', cooldown:'Cool-down'};
 const LIBRARY_CATEGORIES = ['strength','hypertrophy','power','core','agility','mobility','jointHealth','warmup','conditioning','sport'];
 const CATEGORY_LABELS = {strength:'Strength', hypertrophy:'Hypertrophy', power:'Power', core:'Core', agility:'Agility', mobility:'Mobility', jointHealth:'Joint health', warmup:'Warm-up', conditioning:'Conditioning', sport:'Sport'};
-const SET_BLOCK_TYPES = new Set(['strength','hypertrophy','power','core']);
+const SET_BLOCK_TYPES = new Set(['strength','hypertrophy','power','core','jointHealth']);
 function isSetItem(item){ return Number(item?.sets) > 0; }
+// A template block is either written inline or a {ref} into program.blocks — one warm-up or
+// agility set shared by several templates, so editing it once changes every template using it.
+function sharedBlock(prog, ref){ return prog?.blocks?.[ref] || null; }
+function resolveBlocks(prog, blocks){
+  return (blocks || []).map(b => {
+    if(!b?.ref) return b;
+    const shared = sharedBlock(prog, b.ref);
+    return shared ? {...shared, ref: b.ref} : {type: 'warmup', items: [], ref: b.ref};
+  });
+}
 function isLegacyShape(blocks){
   return Array.isArray(blocks) && blocks.length === 2 && blocks[0]?.type === 'strength' && blocks[1]?.type === 'conditioning' && !blocks[0].name && !blocks[1].name;
 }
@@ -3261,6 +3507,26 @@ function visibleItems(blk){
 }
 function visibleBlocks(blocks){ return (blocks || []).map((blk, b) => ({blk, b})).filter(x => !x.blk.hidden); }
 function blockLabel(blk){ return blk?.name || BLOCK_LABELS[blk?.type] || 'Block'; }
+// ----- Phase-driven prescription -----
+// A `phaseBased` item takes the phase's main sets/reps (rest stays on the item); a
+// `durationByPhase` item takes that phase's duration; a deload week scales working sets.
+// Tick rows have no `sets`, so warm-ups, mobility and duration rows are never deloaded.
+function weekPrescription(week, prog = getActiveProgram()){
+  return {phase: getPhase(week, prog), phaseNum: getPhaseIdx(week, prog) + 1, deload: deloadFor(week, prog), week};
+}
+function resolveItemForWeek(item, rx){
+  if(!rx || !item) return item;
+  let o = item;
+  const set = (k, v) => { if(o === item) o = {...item}; o[k] = v; };
+  if(item.phaseBased && rx.phase){
+    if(rx.phase.mainSets != null) set('sets', rx.phase.mainSets);
+    if(rx.phase.mainRepsText != null) set('repsText', rx.phase.mainRepsText);
+  }
+  const byPhase = item.durationByPhase?.[rx.phaseNum];
+  if(byPhase != null) set('detail', byPhase);
+  if(rx.deload && isSetItem(o)) set('sets', Math.max(2, Math.round(o.sets * (+rx.deload.setsMultiplier || 1))));
+  return o;
+}
 function tickDetail(item){ return item.detail ?? (item.durationSec ? `${item.durationSec}s` : undefined); }
 
 // ----- Adapter: v2 program ⇄ v1 per-day workout -----
@@ -3268,24 +3534,27 @@ function getActiveProgram(){
   const p = state.plan;
   return p && p.version === 2 && p.programs ? p.programs[p.activeId] || null : null;
 }
-function getSessionSpecForDay(dayIdx){ return getActiveProgram()?.schedule?.[dayIdx]; }
+function getSessionSpecForDay(dayIdx, date){ return (date ? programForDate(date) : getActiveProgram())?.schedule?.[dayIdx]; }
 // A fresh v1 workout object each call, keys in the same order as DAYS, so callers may
 // mutate it freely and hand it to setLegacyWorkout().
-function toLegacyWorkout(dayIdx){
-  const prog = getActiveProgram();
+function toLegacyWorkout(dayIdx, date){
+  const prog = date ? programForDate(date) : getActiveProgram();
   if(!prog) return DAYS[dayIdx] && JSON.parse(JSON.stringify(DAYS[dayIdx]));
   const spec = prog.schedule?.[dayIdx];
   if(!spec) return undefined;
   const tpl = spec.templateId ? prog.templates[spec.templateId] : null;
   const rest = spec.kind === 'rest', sport = spec.kind === 'sport';
-  const flat = flattenBlocks(tpl?.blocks);
+  const flat = flattenBlocks(resolveBlocks(prog, tpl?.blocks));
   const lib = id => prog.library[id] || {};
+  const rx = weekPrescription(getWeekNum(date || todayKey()), prog);
   const w = {
     label: DAY_LABELS[dayIdx],
     name: rest ? spec.name : sport ? spec.name ?? tpl?.name : tpl?.name,
     desc: rest ? spec.desc : sport ? spec.desc ?? tpl?.desc ?? '' : tpl?.desc,
-    exercises: flat.sets.map(({item: it}) => ({name: lib(it.exerciseId).name, sets: it.sets, reps: it.repsText, rest: it.restText, weight: it.weightText, desc: it.cues ?? lib(it.exerciseId).cues})),
-    hiit: flat.ticks.map(({item: it}) => ({name: lib(it.exerciseId).name, detail: tickDetail(it)}))
+    exercises: flat.sets.map(({item}) => { const it = resolveItemForWeek(item, rx);
+      return {name: lib(it.exerciseId).name, sets: it.sets, reps: it.repsText, rest: it.restText, weight: it.weightText, desc: it.cues ?? lib(it.exerciseId).cues}; }),
+    hiit: flat.ticks.map(({item}) => { const it = resolveItemForWeek(item, rx);
+      return {name: lib(it.exerciseId).name, detail: tickDetail(it)}; })
   };
   if(rest) w.rest = true;
   else if(tpl?.fullHiit) w.fullHiit = true;
@@ -3374,11 +3643,12 @@ function setLegacyWorkout(dayIdx, legacy){
 }
 
 function getPlanWorkouts(){ return [0,1,2,3,4,5,6].map(i => toLegacyWorkout(i)); }
-function getWorkout(dayIdx){ return toLegacyWorkout(dayIdx); }
-function getExercise(dayIdx, exIdx){ return getWorkout(dayIdx)?.exercises?.[exIdx]; }
+function getWorkout(dayIdx, date){ return toLegacyWorkout(dayIdx, date); }
+function getExercise(dayIdx, exIdx, date){ return getWorkout(dayIdx, date)?.exercises?.[exIdx]; }
 // Built-in defaults only exist for the legacy program (drives the per-exercise Reset).
-function getDefaultExercise(dayIdx, exIdx){
-  return getActiveProgram()?.id === LEGACY_PROGRAM_ID ? DAYS[dayIdx]?.exercises?.[exIdx] : undefined;
+function getDefaultExercise(dayIdx, exIdx, date){
+  const prog = date ? programForDate(date) : getActiveProgram();
+  return prog?.id === LEGACY_PROGRAM_ID ? DAYS[dayIdx]?.exercises?.[exIdx] : undefined;
 }
 function getHiitPool(){
   const prog = getActiveProgram();
@@ -3422,8 +3692,8 @@ const Session = {
   byId(id){ return Object.values(state.sessions || {}).find(s => s.id === id) || null; },
 
   // Frozen, denormalized copy of the workout the schedule entry points at, via the plan adapter's rules.
-  buildSnapshot(spec){
-    const prog = getActiveProgram();
+  buildSnapshot(spec, date){
+    const prog = date ? programForDate(date) : getActiveProgram();
     const tpl = spec?.templateId ? prog?.templates?.[spec.templateId] : null;
     const rest = spec?.kind === 'rest', sport = spec?.kind === 'sport';
     const lib = id => prog?.library?.[id] || {};
@@ -3433,12 +3703,20 @@ const Session = {
     snap.frozenAt = new Date().toISOString();
     // Each block as the template has it, items denormalized (name and cue copied in) so the snapshot
     // renders with no lookups. No template (rest, a bare optional session): two empty buckets, as before.
-    const snapItem = it => {
+    // Week, phase and deload are resolved here and frozen: a session keeps the numbers it was
+    // given even after the program moves on to the next phase.
+    const week = getWeekNum(date || todayKey());
+    const rx = weekPrescription(week, prog);
+    snap.week = week;
+    snap.phaseLabel = rx.phase?.label ?? null;
+    if(rx.deload) snap.deload = {week, setsMultiplier: rx.deload.setsMultiplier};
+    const snapItem = raw => {
+      const it = resolveItemForWeek(raw, rx);
       const o = {exerciseId: it.exerciseId, name: lib(it.exerciseId).name, cues: it.cues ?? lib(it.exerciseId).cues};
       ['sets', 'repsText', 'restText', 'weightText', 'durationSec', 'detail'].forEach(k => { if(it[k] !== undefined) o[k] = it[k]; });
       return o;
     };
-    snap.blocks = tpl ? (tpl.blocks || []).map(blk => ({type: blk.type, ...(blk.name ? {name: blk.name} : {}), items: (blk.items || []).map(snapItem)}))
+    snap.blocks = tpl ? resolveBlocks(prog, tpl.blocks).map(blk => ({type: blk.type, ...(blk.name ? {name: blk.name} : {}), items: (blk.items || []).map(snapItem)}))
       : [{type: 'strength', items: []}, {type: 'conditioning', items: []}];
     return snap;
   },
@@ -3494,7 +3772,7 @@ const Session = {
     return (state.workoutsCompleted || []).includes(`${date}-${dayIdx}`);
   },
   newRow(date, spec){
-    const snapshot = this.buildSnapshot(spec), now = new Date().toISOString();
+    const snapshot = this.buildSnapshot(spec, date), now = new Date().toISOString();
     return {id: this.idFor(date, spec), date, program_id: snapshot.programId, template_id: spec?.templateId || null,
       title: snapshot.name || '', kind: ['rest', 'sport', 'flex'].includes(spec?.kind) ? spec.kind : 'template', status: 'in_progress',
       optional: !!spec?.optional, flex_group: spec?.flexGroup ?? null, sort_order: 0, snapshot, started_at: now, completed_at: null, updated_at: now};
@@ -3510,11 +3788,11 @@ const Session = {
   },
   // A date's schedule entry with flex claims applied: a flex day whose group another day has claimed is rest.
   specFor(date){
-    const spec = getSessionSpecForDay(getDayIdxFromDate(date)) || null;
+    const spec = getSessionSpecForDay(getDayIdxFromDate(date), date) || null;
     if(spec?.kind !== 'flex') return spec;
     const by = this.flexClaim(date, spec.flexGroup);
     if(!by || by === date) return spec;
-    const name = getActiveProgram()?.templates?.[spec.templateId]?.name || 'session';
+    const name = programForDate(date)?.templates?.[spec.templateId]?.name || 'session';
     return {kind: 'rest', name: 'Rest', desc: `This week's ${name} is on ${formatViewDateLabel(by)}`, coveredBy: by};
   },
   // Session ids start with the date they were created for, so a move leaves a trace of where it came from.
@@ -3675,7 +3953,7 @@ const Session = {
     Object.values(state.sessions || {}).forEach(s => {
       const open = (s.status === 'in_progress' && s.date === today) || (s.status === 'planned' && s.date >= today);
       if(!open || s.kind === 'rest' || !prog?.templates?.[s.template_id] || this.hasLoggedSets(s)) return;
-      const next = this.buildSnapshot({kind: s.kind, templateId: s.template_id, ...(s.kind === 'sport' ? {name: s.snapshot?.name, desc: s.snapshot?.desc} : {})});
+      const next = this.buildSnapshot({kind: s.kind, templateId: s.template_id, ...(s.kind === 'sport' ? {name: s.snapshot?.name, desc: s.snapshot?.desc} : {})}, s.date);
       // Key-order-insensitive (a pulled snapshot comes back from jsonb with its keys reordered).
       const canon = v => Array.isArray(v) ? v.map(canon) : v && typeof v === 'object'
         ? Object.keys(v).sort().reduce((o, k) => (o[k] = canon(v[k]), o), {}) : v;
@@ -3930,6 +4208,8 @@ const SessionEdit = {
     return true;
   },
   setFields(session, b, i, fields){
+    const target = this.item(session, b, i);
+    if(target){ if(fields.sets != null || fields.repsText != null) delete target.phaseBased; if(fields.detail != null) delete target.durationByPhase; }
     const it = this.item(session, b, i);
     if(!it) return false;
     if(fields.sets != null){
@@ -4224,7 +4504,7 @@ const MoveSheet = {
   close(){ if(Sheet.owner === this) Sheet.close(); this.from = null; },
   onSheetClose(){ this.from = null; },
   render(){
-    const from = this.from, name = Session.resolve(from).session?.title || getWorkout(getDayIdxFromDate(from))?.name || 'session';
+    const from = this.from, name = Session.resolve(from).session?.title || getWorkout(getDayIdxFromDate(from), from)?.name || 'session';
     document.getElementById('move-title').textContent = `Move ${name}`;
     const body = html => Sheet.body(html);
     let html = `<div class="note">Pick a day in the next ${PLAN_AHEAD_DAYS} days. Days that already have a session can't take another.</div><div class="move-list">`;
@@ -4262,12 +4542,12 @@ function assertSessionDay(dayIdx){
   return false;
 }
 
-function getExName(dayIdx, exIdx){
-  return getExercise(dayIdx, exIdx)?.name || '';
+function getExName(dayIdx, exIdx, date){
+  return getExercise(dayIdx, exIdx, date)?.name || '';
 }
-function isExCustomized(dayIdx, exIdx){
-  const cur = getExName(dayIdx, exIdx);
-  const orig = getDefaultExercise(dayIdx, exIdx)?.name;
+function isExCustomized(dayIdx, exIdx, date){
+  const cur = getExName(dayIdx, exIdx, date);
+  const orig = getDefaultExercise(dayIdx, exIdx, date)?.name;
   return !!(cur && orig && cur !== orig);
 }
 // Renaming happens in the template editor, where it can ask whether to rename the exercise
@@ -4338,13 +4618,13 @@ function renderIngredientList(containerId, items){
 }
 
 // ----- HIIT picker -----
-function getDayHiit(dayIdx){
-  return getWorkout(dayIdx)?.hiit || [];
+function getDayHiit(dayIdx, date){
+  return getWorkout(dayIdx, date)?.hiit || [];
 }
 // The HIIT list the Train tab is showing: a stored session's own list on its day, else the plan's.
 function shownHiit(dayIdx){
   const s = isSessionDay(dayIdx) ? state.sessions?.[viewKey()] : null;
-  return s ? Session.toLegacyWorkout(s).hiit : getDayHiit(dayIdx);
+  return s ? Session.toLegacyWorkout(s).hiit : getDayHiit(dayIdx, viewKey());
 }
 function setDayHiit(dayIdx, list){
   const w = getWorkout(dayIdx);
@@ -4582,6 +4862,12 @@ function itemToolsHtml(session, b, i, {canUp, canDown, sets}){
 function addItemBtn(b){ return `<button class="btn btn-secondary btn-sm session-add editable-only" onclick="sessionAddItem(${activeDay},${b})">+ Add exercise</button>`; }
 function addBlockBtn(){ return `<button class="btn btn-ghost session-add editable-only" onclick="sessionAddBlock(${activeDay})">+ Add block</button>`; }
 
+// A deload week says so on the Train tab. A session reads its own frozen snapshot, so one built
+// in a deload week keeps the note even after the program moves on.
+function deloadNote(session, dateKey){
+  const on = session?.snapshot ? !!session.snapshot.deload : !!deloadFor(getWeekNum(dateKey), programForDate(dateKey));
+  return on ? '<span class="workout-meta-note">Deload week · reduced volume</span>' : '';
+}
 function renderBlockWorkout({day, blocks, session, dateKey, preview, actions, metaNote}){
   const flat = flattenBlocks(blocks);
   const legacyCells = (b, i, item) => {
@@ -4672,11 +4958,11 @@ function renderWorkoutContent(){
   const covered = !session && res?.spec?.coveredBy;   // a flex day whose group another day this week has claimed
   const day = session ? Session.toLegacyWorkout(session)
     : covered ? {label: DAY_LABELS[activeDay], name: 'Rest', desc: res.spec.desc, exercises: [], hiit: [], rest: true}
-    : getWorkout(activeDay);
+    : getWorkout(activeDay, dateKey);
   const doneNow = shown ? shown.status === 'done' : (state.workoutsCompleted || []).includes(`${dateKey}-${activeDay}`);
   // Blocks on screen: the session's snapshot, else the plan's workout for this pill. The original
   // two-bucket shape keeps its original markup below; anything else renders block by block.
-  const viewBlocks = (session || shown)?.snapshot?.blocks || Session.buildSnapshot(live ? res?.spec : getSessionSpecForDay(activeDay)).blocks;
+  const viewBlocks = (session || shown)?.snapshot?.blocks || Session.buildSnapshot(live ? res?.spec : getSessionSpecForDay(activeDay, dateKey), dateKey).blocks;
   // Schedule actions for the date's own session, today or ahead (logging itself stays today-only).
   const actions = live && isPlannable(dateKey) && !day.rest && !doneNow && shown?.status !== 'skipped' ? `<div class="session-actions">
       <button class="btn btn-secondary btn-sm" onclick="MoveSheet.open()">Move to…</button>
@@ -4708,6 +4994,12 @@ function renderWorkoutContent(){
         <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="${doneNow ? 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' : 'M5 13l4 4L19 7'}"/></svg>
         ${doneNow ? 'Did it · undo' : 'Did it'}</button></div>` : ''}
     </div>${actions}`;
+    // An optional session with a workout behind it (a warm-up, a drill list) shows it below the
+    // card. A bare one — just a name — keeps the single "Did it" card it has always had.
+    const sportFlat = flattenBlocks(viewBlocks);
+    if(sportFlat.sets.length + sportFlat.ticks.length)
+      html += renderBlockWorkout({day, blocks: viewBlocks, session, dateKey, preview, actions: '',
+        metaNote: deloadNote(session, dateKey) + planUpdatedNote(session)});
   } else if(day.rest){
     html=`<div class="rest-state">
       <div class="rest-title">Rest</div>
@@ -4716,7 +5008,7 @@ function renderWorkoutContent(){
     </div>`;
   } else if(!isLegacyShape(viewBlocks)){
     html = renderBlockWorkout({day, blocks: viewBlocks, session, dateKey, preview, actions,
-      metaNote: (session?.status === 'done' ? snapshotNote(session) : preview ? `<span class="workout-meta-note">Plan preview · today's session is ${DAY_LABELS[getDayIdxFromDate(dateKey)]}</span>` : '') + planUpdatedNote(session)});
+      metaNote: (session?.status === 'done' ? snapshotNote(session) : preview ? `<span class="workout-meta-note">Plan preview · today's session is ${DAY_LABELS[getDayIdxFromDate(dateKey)]}</span>` : '') + deloadNote(session, dateKey) + planUpdatedNote(session)});
   } else {
     const estMin = estimateWorkoutMinutes(activeDay, day);
     const exCount = day.exercises.length;
@@ -4726,7 +5018,7 @@ function renderWorkoutContent(){
     if(hiitCount) parts.push(`${hiitCount} HIIT`);
     const metaNote = (session?.status === 'done'
       ? snapshotNote(session)
-      : preview ? `<span class="workout-meta-note">Plan preview · today's session is ${DAY_LABELS[getDayIdxFromDate(dateKey)]}</span>` : '') + planUpdatedNote(session);
+      : preview ? `<span class="workout-meta-note">Plan preview · today's session is ${DAY_LABELS[getDayIdxFromDate(dateKey)]}</span>` : '') + deloadNote(session, dateKey) + planUpdatedNote(session);
     html+=`<div class="workout-meta">
       <span class="workout-meta-time">~${estMin} min</span>
       <span class="workout-meta-info">${parts.join(' · ')}${metaNote}${session && Session.isUnsynced(session.id) ? UNSYNCED_NOTE : ''}</span>
@@ -4741,9 +5033,9 @@ function renderWorkoutContent(){
       html+=`<div class="section-label">Lifting · ${day.desc}</div>`;
       exRows.forEach(({ex, ei}, n)=>{
         if(!session && !dayLog[ei]) dayLog[ei]={};
-        const currentName = session ? (ex.name || '') : getExName(activeDay, ei);
-        const defaultName = getDefaultExercise(activeDay, ei)?.name;
-        const customized = session ? !!(currentName && defaultName && currentName !== defaultName) : isExCustomized(activeDay, ei);
+        const currentName = session ? (ex.name || '') : getExName(activeDay, ei, dateKey);
+        const defaultName = getDefaultExercise(activeDay, ei, dateKey)?.name;
+        const customized = session ? !!(currentName && defaultName && currentName !== defaultName) : isExCustomized(activeDay, ei, dateKey);
         const safeName = currentName.replace(/"/g,'&quot;');
         const isEditing = editingExKey === `${activeDay}-${ei}` && !frozen;
         const nameUI = isEditing
@@ -4787,7 +5079,7 @@ function renderWorkoutContent(){
     }
     if(editable) html += addItemBtn(sb);
 
-    const dayHiit = session ? day.hiit : getDayHiit(activeDay);
+    const dayHiit = session ? day.hiit : getDayHiit(activeDay, dateKey);
     if(dayHiit.length || !day.rest){
       const title = day.fullHiit ? 'Conditioning · 5 rounds' : 'HIIT finisher · 10 min';
       html+=`<div class="section"><div class="section-label">${title}</div>
@@ -4973,7 +5265,7 @@ async function markWorkoutDone(){
 
 function showSessionCelebration(){
   const session = state.sessions?.[viewKey()];
-  const day = session ? Session.toLegacyWorkout(session) : getWorkout(activeDay);
+  const day = session ? Session.toLegacyWorkout(session) : getWorkout(activeDay, viewKey());
   const dayLog = state.setLog?.[viewKey()]?.[activeDay] || {};
   let setsLogged = 0, setsTotal = 0;
   if(session) ({logged: setsLogged, total: setsTotal} = Session.progress(session));
@@ -5573,17 +5865,16 @@ function renderArtemisSettings(){
 
 function renderArtStats(){
   const wk = getWeekNum();
-  const phaseIdx = wk<=4?0:wk<=8?1:wk<=12?2:3;
-  const ph = PHASES[phaseIdx];
+  const ph = getPhase(wk) || {};
   const dayIdx = getTodayDayIdx();
-  const today = getWorkout(dayIdx);
+  const today = getWorkout(dayIdx, todayKey());
   const dk = todayKey();
   const todayLog = state.foodLog?.[dk]||[];
   const todayProt = todayLog.reduce((a,b)=>a+(b.prot||0),0);
   const sessions = (state.workoutsCompleted||[]).length;
 
   return `<div class="card rows art-stats">
-    <div class="row"><span class="row-title">Week</span><span class="row-value"><span class="row-data">${wk}/16</span> · ${ph.label}</span></div>
+    <div class="row"><span class="row-title">Week</span><span class="row-value"><span class="row-data">${wk}/${programWeeks(getActiveProgram())}</span> · ${ph.label ?? ''}</span></div>
     <div class="row"><span class="row-title">Today</span><span class="row-value">${today.name} · ${today.rest?'rest':estimateWorkoutMinutes(dayIdx)+' min'}</span></div>
     <div class="row"><span class="row-title">Protein</span><span class="row-value"><span class="row-data">${todayProt}g</span> / 190g</span></div>
     <div class="row"><span class="row-title">Sessions</span><span class="row-value"><span class="row-data">${sessions}</span> total</span></div>
@@ -5694,40 +5985,62 @@ function renderChat(){
   </div>`;
 }
 
+// The exercises the active program actually uses, best PR first — so the board tracks the
+// program you are running rather than a fixed list of lift names.
+function programKeyLifts(limit = 6){
+  const prog = getActiveProgram();
+  const used = new Set();
+  Object.values(prog?.templates || {}).forEach(t => resolveBlocks(prog, t?.blocks).forEach(b =>
+    (b?.items || []).forEach(it => { if(isSetItem(it)) used.add(it.exerciseId); })));
+  const prs = state.prs || {};
+  const rows = [...used]
+    .map(id => ({name: prog?.library?.[id]?.name || '', pr: +prs[prog?.library?.[id]?.name] || 0}))
+    .filter(r => r.name);
+  // Best lifts first; with no PRs at all the program's own order still gives a usable board.
+  rows.sort((a, b) => b.pr - a.pr || a.name.localeCompare(b.name));
+  return rows.slice(0, limit);
+}
 function renderProgress(){
+  const prog = getActiveProgram();
   const wk = getWeekNum();
-  let phaseIdx = wk<=4?0:wk<=8?1:wk<=12?2:3;
-  const ph = PHASES[phaseIdx];
+  const ph = getPhase(wk) || {};
+  const deload = deloadFor(wk, prog);
+  const row = (title, value) => value == null || value === '' ? '' :
+    `<div class="row"><span class="row-title">${title}</span><span class="row-value row-data">${value}</span></div>`;
   document.getElementById('prog-phase-card').innerHTML=`
     <div class="phase-head">
-      <div class="phase-name">${ph.label}</div>
-      <div class="phase-weeks">Week ${wk} · weeks ${ph.weeks}</div>
+      <div class="phase-name">${ph.label ?? ''}</div>
+      <div class="phase-weeks">Week ${wk} of ${programWeeks(prog)} · weeks ${phaseWeeksLabel(ph)}</div>
     </div>
-    <div class="row"><span class="row-title">Sets</span><span class="row-value row-data">${ph.sets}</span></div>
-    <div class="row"><span class="row-title">Reps</span><span class="row-value row-data">${ph.reps}</span></div>
-    <div class="row"><span class="row-title">Rest</span><span class="row-value row-data">${ph.rest}</span></div>
-    <p class="phase-note">${ph.note}</p>`;
+    ${row('Sets', ph.mainSets != null ? `${ph.mainSets} sets` : ph.sets)}
+    ${row('Reps', ph.mainRepsText ?? ph.reps)}
+    ${row('Rest', ph.rest)}
+    ${deload ? row('This week', 'Deload · reduced volume') : ''}
+    <p class="phase-note">${ph.note ?? ''}</p>
+    ${prog?.progressionNote ? `<p class="phase-note">${prog.progressionNote}</p>` : ''}`;
 
   const prs = state.prs||{};
-  const keyLifts=['Barbell bench press','Barbell squat','Barbell row','Overhead press (barbell)','Romanian deadlift'];
-  let prHtml = keyLifts.map(lift=>`
+  let prHtml = programKeyLifts().map(({name})=>`
     <div class="row">
-      <span class="row-title">${lift}</span>
-      <span class="row-value row-data">${prs[lift]?prs[lift]+' lbs':'—'}</span>
+      <span class="row-title">${name}</span>
+      <span class="row-value row-data">${prs[name]?prs[name]+' lbs':'—'}</span>
     </div>`).join('');
   document.getElementById('pr-card').innerHTML=prHtml;
 
-  let wo=DAYS.map(d=>`
+  let wo=getPlanWorkouts().map((d,i)=>{
+    if(!d) return '';
+    const ex = (d.exercises||[]).length;
+    return `
     <div class="day-card">
       <div class="day-card-left">
-        <span class="day-marker">${d.label}</span>
+        <span class="day-marker">${d.label ?? DAY_LABELS[i]}</span>
         <div class="day-card-info">
-          <div class="day-card-name">${d.name}</div>
-          <div class="day-card-desc">${d.desc}</div>
+          <div class="day-card-name">${d.name ?? 'Rest'}</div>
+          <div class="day-card-desc">${d.desc ?? ''}</div>
         </div>
       </div>
-      ${!d.rest&&!d.fullHiit?`<span class="day-card-meta">${d.exercises.length} ex</span>`:''}
-    </div>`).join('');
+      ${!d.rest&&!d.fullHiit&&ex?`<span class="day-card-meta">${ex} ex</span>`:''}
+    </div>`;}).join('');
   document.getElementById('weekly-overview').innerHTML=wo;
   renderSettingsKeys();
   renderRestTimerSetting();
@@ -5768,7 +6081,7 @@ function statsTrainedOn(date){
   const dayIdx = getDayIdxFromDate(date);
   const r = Session.resolve(date);
   if(r.source === 'legacy'){
-    if(getWorkout(dayIdx).rest) return 'rest';
+    if(getWorkout(dayIdx, date).rest) return 'rest';
     return (state.workoutsCompleted||[]).includes(date+'-'+dayIdx) ? 'done' : 'missed';
   }
   const s = r.session;
@@ -5854,7 +6167,7 @@ function statsToday(){
   const dk = todayKey();
   const dayIdx = getTodayDayIdx();
   const r = Session.resolve(dk);   // today's session as it stands (moved-in, flex, optional), else the plan
-  const day = r.source === 'row' ? Session.toLegacyWorkout(r.session) : r.spec?.coveredBy ? {...getWorkout(dayIdx), name: 'Rest', exercises: [], hiit: [], rest: true} : getWorkout(dayIdx);
+  const day = r.source === 'row' ? Session.toLegacyWorkout(r.session) : r.spec?.coveredBy ? {...getWorkout(dayIdx, dk), name: 'Rest', exercises: [], hiit: [], rest: true} : getWorkout(dayIdx, dk);
   let setsLogged = 0, setsTotal = 0, totalReps = 0;
   let topLift = {name:null, weight:0};
   (day.exercises || []).forEach((ex, ei) => {
@@ -7641,7 +7954,8 @@ const PlanEditor = {
     const clone = v => JSON.parse(JSON.stringify(v));
     const tplId = spec.templateId && prog.templates?.[spec.templateId] ? spec.templateId : null;
     this.draft = {
-      dayIdx, tplId, spec: clone(spec), lib: clone(prog.library || {}), tpl: tplId ? clone(prog.templates[tplId]) : null,
+      dayIdx, tplId, spec: clone(spec), lib: clone(prog.library || {}), sharedBlocks: clone(prog.blocks || {}),
+      tpl: tplId ? {...clone(prog.templates[tplId]), blocks: resolveBlocks(prog, clone(prog.templates[tplId]).blocks)} : null,
       get name(){ return (this.spec.kind === 'sport' ? this.spec.name ?? this.tpl?.name : this.tpl ? this.tpl.name : this.spec.name) ?? ''; },
       set name(v){ if(this.spec.kind === 'sport' || !this.tpl) this.spec.name = v; if(this.tpl) this.tpl.name = v; },
       get desc(){ return (this.spec.kind === 'sport' ? this.spec.desc ?? this.tpl?.desc : this.tpl ? this.tpl.desc : this.spec.desc) ?? ''; },
@@ -7686,6 +8000,9 @@ const PlanEditor = {
       return;
     }
     const key = {sets:'sets', reps:'repsText', rest:'restText', weight:'weightText', duration:'durationSec', detail:'detail'}[field] || field;
+    // Typing a number over a phase-driven prescription wins: the item stops following the phase.
+    if(key === 'sets' || key === 'repsText') delete it.phaseBased;
+    if(key === 'detail') delete it.durationByPhase;
     if(key === 'sets' || key === 'durationSec'){
       const n = parseInt(value);
       if(!n || n <= 0) delete it[key]; else it[key] = n;
@@ -8046,6 +8363,15 @@ const PlanEditor = {
     prog.library = d.lib;
     if(d.tplId && d.tpl){
       d.tpl.blocks = (d.tpl.blocks || []).filter(b => b && Array.isArray(b.items));
+      // A block that came from program.blocks goes back there, so every template sharing it
+      // sees the edit; the template keeps the reference rather than a copy.
+      prog.blocks = d.sharedBlocks || prog.blocks || {};
+      d.tpl.blocks = d.tpl.blocks.map(b => {
+        if(!b.ref) return b;
+        const {ref, ...body} = b;
+        prog.blocks[ref] = body;
+        return {ref};
+      });
       prog.templates[d.tplId] = d.tpl;
       if(!prog.schedule[d.dayIdx].templateId) prog.schedule[d.dayIdx].templateId = d.tplId;
     }
