@@ -848,16 +848,37 @@ body.scope-modal-open{overflow:hidden}
 .session-actions .btn{height:var(--tap)}
 .rest-state + .session-actions{margin-top:var(--s-4)}
 .rest-actions{display:flex;justify-content:center;gap:var(--s-2);margin-top:var(--s-5)}
-/* Programs manager — cards inside the shared sheet, on the existing tokens */
-.prog-card{display:flex;flex-direction:column;gap:var(--s-2);margin-bottom:var(--s-3)}
-.prog-name{font-size:var(--fs-body);line-height:var(--lh-body);color:var(--text-primary);font-weight:600;min-width:0;overflow-wrap:anywhere}
+/* Programs manager — a plain list, then one detail page per program */
+.prog-list{gap:0}
+.prog-row{display:flex;align-items:center;gap:var(--s-3);width:100%;min-height:64px;padding:var(--s-3) var(--s-4);
+  background:var(--surface);border:0;border-radius:var(--r-lg);margin-bottom:var(--s-2);color:var(--text-primary);text-align:left;cursor:pointer;transition:var(--t-ui)}
+.prog-row:active{opacity:.6}
+.prog-row-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.prog-row-top{display:flex;align-items:center;gap:var(--s-2);min-width:0}
+.prog-row-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:var(--fs-body);line-height:var(--lh-body);font-weight:600}
+.prog-row-sub{font-size:var(--fs-caption);line-height:var(--lh-caption);color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prog-detail-head{display:flex;align-items:center;gap:var(--s-2);min-width:0}
+.prog-detail-name{flex:1;min-width:0;font-size:var(--fs-title);line-height:var(--lh-title);font-weight:600;letter-spacing:var(--ls-title);overflow-wrap:anywhere}
 .prog-meta{font-size:var(--fs-caption);line-height:var(--lh-caption);color:var(--text-secondary);overflow-wrap:anywhere}
-.prog-strip{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:2px;margin-top:var(--s-1)}
-.prog-strip-day{min-width:0;display:flex;flex-direction:column;align-items:center;gap:2px;padding:var(--s-2) 1px;background:var(--surface);border-radius:var(--r-sm);text-align:center}
-.prog-strip-day .day-marker{width:auto}
-.prog-strip-name{min-width:0;width:100%;font-size:var(--fs-micro);line-height:1.25;color:var(--text-secondary);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
-.prog-actions{gap:var(--s-2)}
-.prog-actions .btn{flex:0 1 auto;min-width:0;height:var(--tap)}
+.prog-dim{color:var(--text-tertiary)}
+.prog-section-head{display:flex;align-items:center;justify-content:space-between;gap:var(--s-2);min-height:var(--tap)}
+.prog-section-head .btn{height:var(--tap)}
+.prog-days{display:flex;flex-direction:column}
+.prog-day{display:flex;align-items:center;gap:var(--s-3);width:100%;min-height:var(--tap);padding:var(--s-2) 0;
+  background:transparent;border:0;border-bottom:1px solid var(--border-subtle);color:var(--text-primary);text-align:left;cursor:pointer;transition:var(--t-ui)}
+.prog-day:last-child{border-bottom:0}
+.prog-day:active{opacity:.6}
+.prog-day-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.prog-day-name{font-size:var(--fs-body);line-height:var(--lh-body);overflow-wrap:anywhere}
+.prog-day-note{font-size:var(--fs-micro);line-height:var(--lh-micro);color:var(--text-tertiary)}
+.prog-tpl{display:flex;align-items:center;gap:var(--s-2);margin-bottom:var(--s-2)}
+.prog-tpl-open{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;min-height:var(--tap);padding:var(--s-2) var(--s-3);
+  background:var(--surface);border:0;border-radius:var(--r-md);color:var(--text-primary);text-align:left;cursor:pointer;transition:var(--t-ui)}
+.prog-tpl-open:active{opacity:.6}
+.prog-tpl-name{font-size:var(--fs-body);line-height:var(--lh-body);overflow-wrap:anywhere}
+.prog-tpl .btn{flex-shrink:0;height:var(--tap)}
+.prog-phase{display:flex;flex-direction:column;gap:var(--s-2);margin-bottom:var(--s-3)}
+.prog-actions-stack{gap:var(--s-2)}
 .prog-new{width:100%;height:var(--tap)}
 .prog-back{align-self:flex-start;height:var(--tap)}
 .prog-confirm{background:var(--surface)}
@@ -4522,55 +4543,57 @@ const Programs = {
   draftPhases: null,   // [{from,to,label,mainSets,mainRepsText,note}] while editing
   draftDeloads: null,
   phaseError: null,
+  editingSchedule: false,
 
-  open(){ this.view = 'list'; this.progId = null; this.form = null; this.confirm = null; this.renaming = null; Sheet.open(this, 'Programs'); this.render(); },
-  onSheetClose(){ this.view = 'list'; this.progId = null; this.form = null; this.confirm = null; this.renaming = null; this.draftPhases = null; },
+  open(){ this.view = 'list'; this.progId = null; this.form = null; this.confirm = null; this.renaming = null; this.editingSchedule = false; Sheet.open(this, 'Programs'); this.render(); },
+  onSheetClose(){ this.view = 'list'; this.progId = null; this.form = null; this.confirm = null; this.renaming = null; this.draftPhases = null; this.editingSchedule = false; },
   prog(){ return this.progId ? state.plan?.programs?.[this.progId] : null; },
-  back(){ this.view = 'list'; this.progId = null; this.confirm = null; this.renaming = null; this.draftPhases = null; this.phaseError = null; this.render(); },
+  back(){ this.view = 'list'; this.progId = null; this.confirm = null; this.renaming = null; this.draftPhases = null; this.phaseError = null; this.editingSchedule = false; this.render(); },
 
   render(){
     if(Sheet.owner !== this) return;
     document.getElementById('move-title').textContent =
-      this.view === 'new' ? 'New program' : this.view === 'phases' ? 'Phases' : this.view === 'program' ? (this.prog()?.name || 'Program') : 'Programs';
+      this.view === 'new' ? 'New program' : this.view === 'phases' ? 'Phases' : this.view === 'program' ? 'Program' : 'Programs';
     Sheet.body(this.view === 'new' ? this.newHtml() : this.view === 'phases' ? this.phasesHtml() : this.view === 'program' ? this.programHtml() : this.listHtml());
   },
 
   // ----- list -----
-  scheduleStrip(prog){
-    return `<div class="prog-strip">${DAY_LABELS.map((lbl, i) => {
-      const sp = prog.schedule?.[i];
-      const name = !sp || sp.kind === 'rest' ? (sp?.name || 'Rest')
-        : sp.kind === 'sport' ? (sp.name || prog.templates?.[sp.templateId]?.name || 'Sport')
-        : (prog.templates?.[sp.templateId]?.name || 'Rest');
-      return `<div class="prog-strip-day"><span class="day-marker">${lbl}</span><span class="prog-strip-name">${escapeHtml(name)}</span></div>`;
-    }).join('')}</div>`;
+  // Days you are committed to: a flex pair counts once, optional sessions don't count.
+  trainingDays(prog){
+    const groups = new Set();
+    let n = 0;
+    (prog.schedule || []).forEach(sp => {
+      if(!sp || sp.kind === 'rest' || sp.optional) return;
+      if(sp.kind === 'flex'){ if(groups.has(sp.flexGroup)) return; groups.add(sp.flexGroup); }
+      n++;
+    });
+    return n;
   },
+  dayName(prog, i){
+    const sp = prog.schedule?.[i];
+    if(!sp || sp.kind === 'rest') return {name: sp?.name || 'Rest', note: '', rest: true};
+    const tplName = prog.templates?.[sp.templateId]?.name;
+    if(sp.kind === 'sport') return {name: sp.name || tplName || 'Sport', note: sp.optional ? 'Sport · optional' : 'Sport', rest: false};
+    if(sp.kind === 'flex') return {name: tplName || 'Rest', note: 'Flex — this week, either day', rest: !tplName};
+    return {name: tplName || 'Rest', note: '', rest: !tplName};
+  },
+  badge(isActive){ return `<span class="pe-ex-num">${isActive ? 'Active' : 'Archived'}</span>`; },
   listHtml(){
     const activeId = state.plan?.activeId;
-    const cards = programList().map(prog => {
+    const rows = programList().map(prog => {
       const isActive = prog.id === activeId;
-      const phases = (prog.phases || []).map(p => escapeHtml(p.label || '')).filter(Boolean).join(' · ') || 'No phases';
-      return `<div class="pe-block prog-card">
-        <div class="pe-block-head">
-          ${this.renaming === prog.id
-            ? `<input class="pe-input" type="text" value="${escapeHtml(prog.name || '')}" id="prog-rename-${prog.id}"
-                 onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}" onblur="Programs.commitRename('${prog.id}', this.value)">`
-            : `<span class="pe-section-label prog-name">${escapeHtml(prog.name || 'Untitled')}</span>
-               <span class="pe-ex-num">${isActive ? 'Active' : 'Archived'}</span>`}
-        </div>
-        <div class="prog-meta">${prog.weeks} week${prog.weeks === 1 ? '' : 's'} · ${phases}${isActive && prog.startDate ? ` · started ${formatViewDateLabel(prog.startDate)}` : ''}</div>
-        ${this.scheduleStrip(prog)}
-        <div class="pe-actions prog-actions">
-          <button class="btn btn-secondary btn-sm" onclick="Programs.openProgram('${prog.id}')">Edit</button>
-          ${isActive ? '' : `<button class="btn btn-secondary btn-sm" onclick="Programs.askActivate('${prog.id}')">Activate</button>`}
-          <button class="btn btn-ghost btn-sm" onclick="Programs.startRename('${prog.id}')">Rename</button>
-          <button class="btn btn-ghost btn-sm" onclick="Programs.duplicate('${prog.id}')">Duplicate</button>
-          ${isActive ? '' : `<button class="btn btn-ghost btn-sm danger" onclick="Programs.askDelete('${prog.id}')">Delete</button>`}
-        </div>
-        ${this.confirmHtml(prog.id)}
-      </div>`;
+      const days = this.trainingDays(prog);
+      const summary = [`${prog.weeks} week${prog.weeks === 1 ? '' : 's'}`, `${days} training day${days === 1 ? '' : 's'}`,
+        ...(isActive ? [`Week ${getWeekNum()}`] : [])].join(' · ');
+      return `<button class="prog-row" onclick="Programs.openProgram('${prog.id}')">
+        <span class="prog-row-main">
+          <span class="prog-row-top"><span class="prog-row-name">${escapeHtml(prog.name || 'Untitled')}</span>${this.badge(isActive)}</span>
+          <span class="prog-row-sub">${summary}</span>
+        </span>
+        <svg class="row-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+      </button>`;
     }).join('');
-    return `<div class="pe-section">${cards}</div>
+    return `<div class="pe-section prog-list">${rows}</div>
       <div class="pe-section"><button class="btn btn-primary prog-new" onclick="Programs.startNew()">+ New program</button></div>`;
   },
   confirmHtml(progId){
@@ -4660,49 +4683,86 @@ const Programs = {
     this.confirm = null;
     savePlan();
     renderActivePage();
-    this.render();
+    this.back();
     toast(`Deleted "${name}"`);
   },
 
-  // ----- one program: its templates and schedule -----
-  openProgram(progId){ this.progId = progId; this.view = 'program'; this.confirm = null; this.render(); },
+  // ----- one program -----
+  openProgram(progId){ this.progId = progId; this.view = 'program'; this.confirm = null; this.renaming = null; this.editingSchedule = false; this.render(); },
+  toggleScheduleEdit(){ this.editingSchedule = !this.editingSchedule; this.render(); },
+  openDay(i){
+    const prog = this.prog();
+    const sp = prog?.schedule?.[i];
+    if(sp?.templateId && prog.templates?.[sp.templateId]){ PlanEditor.openTemplate(prog.id, sp.templateId); return; }
+    this.editingSchedule = true;                      // a rest day has nothing to edit yet
+    this.render();
+    toast('Pick a workout for this day');
+  },
   programHtml(){
     const prog = this.prog();
     if(!prog) return '<div class="empty">Program not found</div>';
+    const isActive = prog.id === state.plan?.activeId;
     const tpls = Object.values(prog.templates || {});
-    const dayOf = tplId => (prog.schedule || []).map((sp, i) => sp?.templateId === tplId ? DAY_LABELS[i] : null).filter(Boolean).join(' · ');
+    const phases = (prog.phases || []).map(p => `${escapeHtml(p.label || 'Phase')} <span class="prog-dim">w${p.from}–${p.to}</span>`).join(' · ') || 'No phases';
+    const deloads = (prog.deloadWeeks || []).map(d => `week ${d.week}`).join(', ');
+    const canDelete = !isActive;   // an archived program with history still explains itself when you try
+    const head = this.renaming === prog.id
+      ? `<input class="pe-input" type="text" value="${escapeHtml(prog.name || '')}" id="prog-rename-${prog.id}"
+           onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}" onblur="Programs.commitRename('${prog.id}', this.value)">`
+      : `<span class="prog-detail-name">${escapeHtml(prog.name || 'Untitled')}</span>${this.badge(isActive)}`;
     return `<div class="pe-section">
         <button class="btn btn-ghost btn-sm prog-back" onclick="Programs.back()">← All programs</button>
-        <span class="pe-section-label">Week</span>
-        ${this.scheduleStrip(prog)}
-        <div class="pe-section-label">Each day picks a template below; tap a day to change what it runs.</div>
-        ${DAY_LABELS.map((lbl, i) => {
-          const sp = prog.schedule?.[i] || {kind: 'rest'};
-          return `<div class="pe-field"><span class="pe-field-label">${lbl}</span>
-            <select class="pe-input" onchange="Programs.setDaySpec(${i}, this.value)">
-              <option value="rest"${sp.kind === 'rest' ? ' selected' : ''}>Rest</option>
-              ${tpls.map(t => `<option value="tpl:${t.id}"${sp.templateId === t.id && sp.kind !== 'rest' ? ' selected' : ''}>${escapeHtml(t.name || t.id)}${sp.kind === 'sport' && sp.templateId === t.id ? ' (optional)' : ''}</option>`).join('')}
-            </select></div>`;
-        }).join('')}
+        <div class="prog-detail-head">${head}</div>
+        <div class="prog-meta">${prog.weeks} week${prog.weeks === 1 ? '' : 's'} · ${this.trainingDays(prog)} training day${this.trainingDays(prog) === 1 ? '' : 's'}${isActive && prog.startDate ? ` · started ${formatViewDateLabel(prog.startDate)}` : ''}</div>
+        <div class="prog-meta">${phases}${deloads ? ` · deload ${deloads}` : ''}</div>
+        ${this.confirmHtml(prog.id)}
       </div>
       <div class="pe-section">
-        <span class="pe-section-label">Templates</span>
-        ${tpls.length ? tpls.map(t => `<div class="pe-block prog-card">
-          <div class="pe-block-head"><span class="pe-section-label">${escapeHtml(t.name || t.id)}</span>
-            <span class="pe-ex-num">${dayOf(t.id) || 'unused'}</span></div>
-          <div class="prog-meta">${(t.blocks || []).length} block${(t.blocks || []).length === 1 ? '' : 's'}</div>
-          <div class="pe-actions prog-actions">
-            <button class="btn btn-secondary btn-sm" onclick="PlanEditor.openTemplate('${prog.id}','${t.id}')">Edit</button>
-            <button class="btn btn-ghost btn-sm danger" onclick="Programs.removeTemplate('${t.id}')">Remove</button>
-          </div>
-        </div>`).join('') : '<div class="empty">No templates yet — add one to start building this week.</div>'}
-        <button class="btn btn-secondary prog-new" onclick="Programs.addTemplate()">+ Add template</button>
+        <div class="prog-section-head">
+          <span class="pe-section-label">Weekly schedule</span>
+          <button class="btn btn-ghost btn-sm" onclick="Programs.toggleScheduleEdit()">${this.editingSchedule ? 'Done' : 'Change'}</button>
+        </div>
+        ${this.editingSchedule ? this.scheduleEditHtml(prog, tpls) : this.scheduleListHtml(prog)}
       </div>
-      <div class="pe-section">
-        <span class="pe-section-label">Phases &amp; deloads</span>
-        <div class="prog-meta">${(prog.phases || []).map(p => `${escapeHtml(p.label || '')} (w${p.from}–${p.to})`).join(' · ') || 'No phases'}</div>
-        <button class="btn btn-secondary prog-new" onclick="Programs.openPhases()">Edit phases</button>
+      <div class="pe-section prog-actions-stack">
+        ${isActive ? '' : `<button class="btn btn-primary prog-new" onclick="Programs.askActivate('${prog.id}')">Activate this program</button>`}
+        <button class="btn btn-secondary prog-new" onclick="Programs.startRename('${prog.id}')">Rename</button>
+        <button class="btn btn-secondary prog-new" onclick="Programs.duplicate('${prog.id}')">Duplicate</button>
+        <button class="btn btn-secondary prog-new" onclick="Programs.openPhases()">Edit phases &amp; deloads</button>
+        ${canDelete ? `<button class="btn btn-danger prog-new" onclick="Programs.askDelete('${prog.id}')">Delete program</button>` : ''}
       </div>`;
+  },
+  scheduleListHtml(prog){
+    return `<div class="prog-days">${DAY_LABELS.map((lbl, i) => {
+      const {name, note, rest} = this.dayName(prog, i);
+      return `<button class="prog-day" onclick="Programs.openDay(${i})">
+        <span class="day-marker">${lbl}</span>
+        <span class="prog-day-main">
+          <span class="prog-day-name${rest ? ' prog-dim' : ''}">${escapeHtml(name)}</span>
+          ${note ? `<span class="prog-day-note">${escapeHtml(note)}</span>` : ''}
+        </span>
+        <svg class="row-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+      </button>`;
+    }).join('')}</div>`;
+  },
+  scheduleEditHtml(prog, tpls){
+    return `${DAY_LABELS.map((lbl, i) => {
+        const sp = prog.schedule?.[i] || {kind: 'rest'};
+        return `<div class="pe-field"><span class="pe-field-label">${lbl}</span>
+          <select class="pe-input" onchange="Programs.setDaySpec(${i}, this.value)">
+            <option value="rest"${sp.kind === 'rest' ? ' selected' : ''}>Rest</option>
+            ${tpls.map(t => `<option value="tpl:${t.id}"${sp.templateId === t.id && sp.kind !== 'rest' ? ' selected' : ''}>${escapeHtml(t.name || t.id)}${sp.kind === 'sport' && sp.templateId === t.id ? ' (optional)' : ''}</option>`).join('')}
+          </select></div>`;
+      }).join('')}
+      <span class="pe-section-label">Workouts</span>
+      ${tpls.length ? tpls.map(t => `<div class="prog-tpl">
+        <button class="prog-tpl-open" onclick="PlanEditor.openTemplate('${prog.id}','${t.id}')">
+          <span class="prog-tpl-name">${escapeHtml(t.name || t.id)}</span>
+          <span class="prog-day-note">${(t.blocks || []).length} block${(t.blocks || []).length === 1 ? '' : 's'}</span>
+        </button>
+        <button class="btn btn-ghost btn-sm danger" onclick="Programs.removeTemplate('${t.id}')">Remove</button>
+      </div>`).join('') : '<div class="empty">No workouts yet — add one to start building this week.</div>'}
+      <button class="btn btn-secondary prog-new" onclick="Programs.addTemplate()">+ Add workout</button>`;
   },
   setDaySpec(i, value){
     const prog = this.prog();
@@ -4743,7 +4803,7 @@ const Programs = {
   },
   phasesHtml(){
     const prog = this.prog();
-    const rows = (this.draftPhases || []).map((p, i) => `<div class="pe-block prog-card">
+    const rows = (this.draftPhases || []).map((p, i) => `<div class="pe-block prog-phase">
       <div class="pe-row cols-2">
         <div class="pe-field"><span class="pe-field-label">From week</span>
           <input class="pe-input" type="number" min="1" max="${prog?.weeks || 52}" value="${p.from ?? ''}" onchange="Programs.setPhase(${i},'from',this.value)"></div>
