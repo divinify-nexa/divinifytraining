@@ -6791,72 +6791,42 @@ const Cards = {
     {id:'pr',      label:'PR',      filename:'pr'},
   ],
 
-  // ----- selectable secondary stats -----
-  // Each card is a fixed hero plus up to four stats the user picks. A stat whose get()
-  // returns null has no data behind it: the chip is disabled and it never renders.
+  // ----- selectable stats -----
+  // Every card is a title and up to four stats. A stat whose get() returns null has no data
+  // behind it: its chip is disabled and it is never drawn.
   MAX_STATS: 4,
   DEFAULT_STATS: {
-    session: ['toplift', 'reps', 'duration'],
-    week:    ['sets', 'protein', 'streak'],
-    pr:      ['prev', 'date', 'reps'],
+    session: ['sets', 'reps', 'toplift'],
+    week:    ['workouts', 'sets', 'protein'],
+    pr:      ['weight', 'prev', 'gain'],
   },
-  weekLabel(){
-    const wk = getWeekNum(), total = programWeeks(getActiveProgram());
-    return {value: `${wk}/${total}`, sub: getPhase(wk)?.label || ''};
-  },
-  proteinToday(){
-    const log = state.foodLog?.[todayKey()] || [];
-    const p = log.reduce((a, b) => a + (b.prot || 0), 0);
-    return p > 0 ? {value: String(p), unit: 'g'} : null;
-  },
+  lbs(n){ return `${Math.round(n)} lbs`; },
+  duration(min){ return min >= 60 ? `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, '0')}m` : `${min}m`; },
+  shortDate(d){ return new Date(d + 'T00:00:00').toLocaleDateString('en-US', {month: 'short', day: 'numeric'}); },
   STATS: {
     session: [
+      {id:'sets',     label:'Sets',       get(){ const t = statsToday(); return t.setsTotal ? {value: `${t.setsLogged} / ${t.setsTotal}`} : null; }},
       {id:'reps',     label:'Total reps', get(){ const t = statsToday(); return t.totalReps ? {value: String(t.totalReps)} : null; }},
-      {id:'toplift',  label:'Top lift',   get(){ const t = statsToday(); return t.topLift.weight ? {value: String(t.topLift.weight), unit:'lbs', sub: t.topLift.name, accent: true} : null; }},
+      {id:'toplift',  label:'Top lift',   get(){ const t = statsToday(); return t.topLift.weight ? {value: Cards.lbs(t.topLift.weight)} : null; }},
       {id:'duration', label:'Duration',   get(){ const t = statsToday(); if(t.isRest) return null;
-                                                 const m = estimateWorkoutMinutes(getTodayDayIdx()); return m ? {value: String(m), unit:'min'} : null; }},
-      {id:'blocks',   label:'Blocks',     get(){ const b = Cards.blockProgress(); return b ? {value: `${b.done}/${b.total}`} : null; }},
-      {id:'week',     label:'Week',       get(){ return Cards.weekLabel(); }},
-      {id:'protein',  label:'Protein',    get(){ return Cards.proteinToday(); }},
-      {id:'streak',   label:'Streak',     get(){ const d = statsCurrentStreak(); return d ? {value: String(d), unit:'days'} : null; }},
+                                                 const m = estimateWorkoutMinutes(getTodayDayIdx()); return m ? {value: Cards.duration(m)} : null; }},
+      {id:'week',     label:'Week',       get(){ return {value: `${getWeekNum()} / ${programWeeks(getActiveProgram())}`}; }},
     ],
     week: [
+      {id:'workouts', label:'Workouts',   get(){ const w = statsWeek(); return w.workouts ? {value: String(w.workouts)} : null; }},
       {id:'sets',     label:'Total sets', get(){ const w = statsWeek(); return w.totalSets ? {value: String(w.totalSets)} : null; }},
-      {id:'protein',  label:'Avg protein',get(){ const w = statsWeek(); return w.proteinAvg ? {value: String(w.proteinAvg), unit:'g'} : null; }},
-      {id:'calories', label:'Avg calories',get(){ const w = statsWeek(); return w.calAvg ? {value: String(w.calAvg), unit:'kcal'} : null; }},
-      {id:'weight',   label:'Weight',     get(){ const d = Cards.weightChange(); return d ? {value: (d > 0 ? '+' : '') + d.toFixed(1), unit:'lbs'} : null; }},
-      {id:'streak',   label:'Streak',     get(){ const d = statsCurrentStreak(); return d ? {value: String(d), unit:'days'} : null; }},
-      {id:'dots',     label:'This week',  get(){ const w = statsWeek(); const today = todayKey();
-                                                 return {kind:'dots', dates: w.dates.map(d => ({date: d, status: d > today ? 'future' : statsTrainedOn(d)}))}; }},
-      {id:'week',     label:'Week',       get(){ return Cards.weekLabel(); }},
+      {id:'protein',  label:'Avg protein',get(){ const w = statsWeek(); return w.proteinAvg ? {value: `${w.proteinAvg} g`} : null; }},
+      {id:'streak',   label:'Streak',     get(){ const d = statsCurrentStreak(); return d ? {value: `${d} ${d === 1 ? 'day' : 'days'}`} : null; }},
+      {id:'weight',   label:'Weight',     get(){ const d = Cards.weightChange();
+                                                 return d ? {value: `${d > 0 ? '+' : '−'}${Math.abs(d).toFixed(1)} lbs`} : null; }},
     ],
     pr: [
-      {id:'prev',     label:'Previous',   get(){ const p = Cards.prDetail(); return p && p.prev != null ? {value: String(p.prev), unit:'lbs', sub: `+${p.weight - p.prev} lbs`} : null; }},
-      {id:'date',     label:'Set on',     get(){ const p = Cards.prDetail();
-                                                 return p && p.date ? {value: new Date(p.date + 'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})} : null; }},
-      {id:'reps',     label:'Reps at it', get(){ const p = Cards.prDetail(); return p && p.reps ? {value: String(p.reps)} : null; }},
-      {id:'week',     label:'Week',       get(){ return Cards.weekLabel(); }},
-      {id:'total',    label:'PRs logged', get(){ const n = Object.values(state.prs || {}).filter(w => +w > 0).length;
-                                                 return n ? {value: String(n)} : null; }},
+      {id:'weight',   label:'Weight',     get(){ const p = statsBestPR(); return p ? {value: Cards.lbs(p.weight)} : null; }},
+      {id:'prev',     label:'Previous best', get(){ const p = Cards.prDetail(); return p && p.prev != null ? {value: Cards.lbs(p.prev)} : null; }},
+      {id:'gain',     label:'Gain',       get(){ const p = Cards.prDetail(); return p && p.prev != null ? {value: `+${Math.round(p.weight - p.prev)} lbs`} : null; }},
+      {id:'date',     label:'Date',       get(){ const p = Cards.prDetail(); return p && p.date ? {value: Cards.shortDate(p.date)} : null; }},
+      {id:'reps',     label:'Reps',       get(){ const p = Cards.prDetail(); return p && p.reps ? {value: String(p.reps)} : null; }},
     ],
-  },
-  // Blocks finished in today's session, from the snapshot when there is one.
-  blockProgress(){
-    const s = state.sessions?.[todayKey()];
-    const blocks = s?.snapshot?.blocks;
-    if(!blocks?.length) return null;
-    let done = 0, total = 0;
-    visibleBlocks(blocks).forEach(({blk, b}) => {
-      const items = visibleItems(blk);
-      if(!items.length) return;
-      total++;
-      const all = items.every(({item, i}) => {
-        const cells = Session.sets(s, b, i);
-        return isSetItem(item) ? Array.from({length: +item.sets}, (_, k) => cells[k]?.done).every(Boolean) : !!cells[0]?.done;
-      });
-      if(all) done++;
-    });
-    return total ? {done, total} : null;
   },
   // Change across the weights logged in the current week.
   weightChange(){
@@ -6931,15 +6901,9 @@ const Cards = {
     try {
       await document.fonts.ready;
       await Promise.all([
-        document.fonts.load('400 100px "Instrument Serif"'),
-        document.fonts.load('italic 100px "Instrument Serif"'),
-        document.fonts.load('400 32px "Inter"'),
         document.fonts.load('500 32px "Inter"'),
         document.fonts.load('600 32px "Inter"'),
         document.fonts.load('700 32px "Inter"'),
-        document.fonts.load('800 32px "Inter"'),
-        document.fonts.load('500 32px "JetBrains Mono"'),
-        document.fonts.load('600 32px "JetBrains Mono"'),
       ]);
       this.fontsReady = true;
     } catch(e){ console.warn('Font preload failed:', e); }
@@ -7022,13 +6986,8 @@ const Cards = {
     const cv = document.getElementById('share-canvas');
     const ctx = cv.getContext('2d');
     ctx.clearRect(0, 0, this.W, this.H);
-    if(this.photo){
-      this.drawPhotoBackground(ctx);  // owns brand wordmark + frosted panel in photo mode
-    } else {
-      this.drawBackground(ctx);
-      this.drawBrandRow(ctx);
-      this.drawFooter(ctx);
-    }
+    if(this.photo) this.drawPhotoBackground(ctx);
+    else this.drawBackground(ctx);
     switch(this.current){
       case 'week': this.drawWeek(ctx); break;
       case 'pr':   this.drawPR(ctx);   break;
@@ -7037,524 +6996,145 @@ const Cards = {
     loading.style.display = 'none';
   },
 
-  // ===== Base layout helpers =====
+  // ===== Layout =====
+  // One layout for every card: a centred group — title, then the chosen stats — sitting in the
+  // upper-middle third, and a small wordmark at the foot. White on near-black, nothing else.
   PAD: 96,
-  // Instagram Story safe area: IG covers the top ~250px (progress bars + username)
-  // and bottom ~250px (message bar) of the 9:16 frame with its own UI. All readable
-  // content must live between SAFE_TOP and SAFE_BOTTOM. Backgrounds (photo, gradient)
-  // can still extend full-bleed — IG's UI sits over those bleed zones cleanly.
+  // Instagram Story safe area: IG covers the top ~250px and bottom ~250px of the 9:16 frame
+  // with its own UI. Everything readable lives between SAFE_TOP and SAFE_BOTTOM; the
+  // background may still run full-bleed behind IG's chrome.
   SAFE_TOP: 250,
   SAFE_BOTTOM: 1670,
-  ACCENT: '#FFB800',
-  ACCENT_SOFT: 'rgba(255,184,0,0.14)',
-  TEXT: '#fafafa',
-  TEXT_2: '#a1a1aa',
-  TEXT_3: '#71717a',
-  TEXT_4: '#52525b',
-  BG: '#070707',
-  SURFACE: '#101012',
-  BORDER: 'rgba(255,255,255,0.08)',
+  BG: '#0A0A0B',
+  TEXT: '#ffffff',
+  TEXT_2: 'rgba(255,255,255,0.85)',
+  TEXT_3: 'rgba(255,255,255,0.70)',
+  GROUP_CENTER: 760,            // optical centre of the content group
+  TITLE_SIZE: 68,
+  LABEL_SIZE: 28,
+  VALUE_SIZE: 58,
+  ROW_GAP: 64,
+  TITLE_GAP: 72,
+  COL_OFFSET: 195,              // two-column centres sit symmetrically either side of the middle
 
   drawBackground(ctx){
-    // Solid black with a subtle radial accent glow in upper right
     ctx.fillStyle = this.BG;
-    ctx.fillRect(0, 0, this.W, this.H);
-    const grd = ctx.createRadialGradient(this.W*0.85, this.H*0.12, 0, this.W*0.85, this.H*0.12, this.W*0.9);
-    grd.addColorStop(0, 'rgba(255,184,0,0.18)');
-    grd.addColorStop(0.4, 'rgba(255,184,0,0.04)');
-    grd.addColorStop(1, 'rgba(255,184,0,0)');
-    ctx.fillStyle = grd;
-    ctx.fillRect(0, 0, this.W, this.H);
-    // Subtle bottom vignette
-    const vg = ctx.createLinearGradient(0, this.H*0.6, 0, this.H);
-    vg.addColorStop(0, 'rgba(0,0,0,0)');
-    vg.addColorStop(1, 'rgba(0,0,0,0.6)');
-    ctx.fillStyle = vg;
     ctx.fillRect(0, 0, this.W, this.H);
   },
 
+  // Photo: full-bleed, with a wide feathered scrim behind the content group only. No panel,
+  // no blur, no edge — the darkening has to be invisible as a shape.
   drawPhotoBackground(ctx){
-    // 1. Cover-fit the photo into the 9:16 frame
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, this.W, this.H);
     const img = this.photo;
-    const targetRatio = this.W / this.H;
-    const imgRatio = img.width / img.height;
+    const targetRatio = this.W / this.H, imgRatio = img.width / img.height;
     let dw, dh, dx, dy;
-    if(imgRatio > targetRatio){
-      dh = this.H;
-      dw = dh * imgRatio;
-      dx = (this.W - dw) / 2;
-      dy = 0;
-    } else {
-      dw = this.W;
-      dh = dw / imgRatio;
-      dx = 0;
-      dy = (this.H - dh) / 2;
-    }
+    if(imgRatio > targetRatio){ dh = this.H; dw = dh * imgRatio; dx = (this.W - dw) / 2; dy = 0; }
+    else { dw = this.W; dh = dw / imgRatio; dx = 0; dy = (this.H - dh) / 2; }
     ctx.drawImage(img, dx, dy, dw, dh);
 
-    // 2. Subtle top gradient so the wordmark stays legible on bright photos
-    const topEnd = this.SAFE_TOP + 100;
-    const topG = ctx.createLinearGradient(0, 0, 0, topEnd);
-    topG.addColorStop(0, 'rgba(0,0,0,0.6)');
-    topG.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = topG;
-    ctx.fillRect(0, 0, this.W, topEnd);
+    const g = ctx.createRadialGradient(this.W / 2, this.GROUP_CENTER, 0, this.W / 2, this.GROUP_CENTER, 900);
+    g.addColorStop(0,    'rgba(0,0,0,0.72)');
+    g.addColorStop(0.30, 'rgba(0,0,0,0.66)');
+    g.addColorStop(0.62, 'rgba(0,0,0,0.30)');
+    g.addColorStop(1,    'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, this.W, this.H);
 
-    // 3. Frosted-glass panel at the bottom — guaranteed-readable surface for stats.
-    // We blur a clipped copy of the photo, then dark-fill on top. Works on all modern
-    // canvas implementations including iOS Safari (filter:blur supported since 2022).
-    const panelTop = this.SAFE_BOTTOM - 600;
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, panelTop, this.W, this.H - panelTop);
-    ctx.clip();
-    ctx.filter = 'blur(48px) brightness(0.5) saturate(1.35)';
-    ctx.drawImage(img, dx, dy, dw, dh);
-    ctx.restore();
-
-    // 4. Dark overlay on top of the blurred area — locks contrast regardless of source
-    ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    ctx.fillRect(0, panelTop, this.W, this.H - panelTop);
-
-    // 5. Soft edge into the panel — small fade so the transition isn't a hard line
-    const fadeStart = panelTop - 50;
-    const fadeG = ctx.createLinearGradient(0, fadeStart, 0, panelTop + 30);
-    fadeG.addColorStop(0, 'rgba(0,0,0,0)');
-    fadeG.addColorStop(1, 'rgba(0,0,0,0.35)');
-    ctx.fillStyle = fadeG;
-    ctx.fillRect(0, fadeStart, this.W, 80);
-
-    // 6. Single hairline border at the panel top — anchors it visually
-    ctx.strokeStyle = 'rgba(255,255,255,0.13)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(0, panelTop);
-    ctx.lineTo(this.W, panelTop);
-    ctx.stroke();
-
-    // 7. Top wordmark — small, restrained, with a tight shadow for legibility
-    ctx.font = '700 22px "JetBrains Mono", monospace';
-    ctx.fillStyle = 'rgba(255,255,255,0.92)';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    ctx.shadowColor = 'rgba(0,0,0,0.55)';
-    ctx.shadowBlur = 14;
-    ctx.shadowOffsetY = 1;
-    this.fillTextSpaced(ctx, 'DIVINIFY', this.PAD, this.SAFE_TOP, 4);
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetY = 0;
+    // and a much softer one under the wordmark, which sits outside the group's scrim
+    const wg = ctx.createRadialGradient(this.W / 2, this.SAFE_BOTTOM - 20, 0, this.W / 2, this.SAFE_BOTTOM - 20, 440);
+    wg.addColorStop(0,   'rgba(0,0,0,0.70)');
+    wg.addColorStop(0.4, 'rgba(0,0,0,0.42)');
+    wg.addColorStop(1,   'rgba(0,0,0,0)');
+    ctx.fillStyle = wg;
+    ctx.fillRect(0, this.SAFE_BOTTOM - 480, this.W, 480);
   },
 
-  drawBrandRow(ctx){
-    const date = new Date().toLocaleDateString('en-US',{month:'short', day:'numeric', year:'numeric'}).toUpperCase();
-    ctx.font = '600 26px "JetBrains Mono", monospace';
-    ctx.fillStyle = this.TEXT_3;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    ctx.fillText('DIVINIFY', this.PAD, this.SAFE_TOP);
-    ctx.textAlign = 'right';
-    ctx.fillText(date, this.W - this.PAD, this.SAFE_TOP);
-    // hairline divider
-    ctx.strokeStyle = this.BORDER;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(this.PAD, this.SAFE_TOP + 60);
-    ctx.lineTo(this.W - this.PAD, this.SAFE_TOP + 60);
-    ctx.stroke();
+  shadow(ctx, on){
+    if(on && this.photo){ ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = 12; ctx.shadowOffsetY = 2; }
+    else { ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0; }
   },
 
-  drawFooter(ctx){
-    const wk = getWeekNum();
-    const total = programWeeks(getActiveProgram());
-    const phase = getPhase(wk)?.label || '';
-    ctx.strokeStyle = this.BORDER;
-    ctx.beginPath();
-    ctx.moveTo(this.PAD, this.SAFE_BOTTOM - 80);
-    ctx.lineTo(this.W - this.PAD, this.SAFE_BOTTOM - 80);
-    ctx.stroke();
-    ctx.font = '600 22px "JetBrains Mono", monospace';
-    ctx.fillStyle = this.TEXT_3;
-    ctx.textBaseline = 'top';
-    ctx.textAlign = 'left';
-    ctx.fillText(`WEEK ${String(wk).padStart(2,'0')} / ${total}`, this.PAD, this.SAFE_BOTTOM - 48);
-    ctx.textAlign = 'right';
-    ctx.fillText(phase.toUpperCase(), this.W - this.PAD, this.SAFE_BOTTOM - 48);
-  },
-
-  drawEyebrow(ctx, text, y){
-    ctx.font = '700 26px "Inter", sans-serif';
-    ctx.fillStyle = this.ACCENT;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    ctx.letterSpacing = '0.18em'; // not all browsers, but harmless fallback
-    // Manual letter-spacing
-    this.fillTextSpaced(ctx, text.toUpperCase(), this.PAD, y, 8);
-  },
-
-  fillTextSpaced(ctx, text, x, y, spacing){
-    let cur = x;
-    for(const ch of text){
-      ctx.fillText(ch, cur, y);
-      cur += ctx.measureText(ch).width + spacing;
-    }
-  },
-
-  drawHugeNumber(ctx, num, y, opts = {}){
-    // Returns the measured bounding box height
-    const size = opts.size || 380;
-    ctx.font = `italic ${size}px "Instrument Serif", serif`;
-    ctx.fillStyle = opts.color || this.ACCENT;
-    ctx.textAlign = opts.align || 'left';
-    ctx.textBaseline = 'top';
-    ctx.fillText(String(num), opts.x ?? this.PAD, y);
-  },
-
-  drawSubline(ctx, text, y, opts = {}){
-    ctx.font = `${opts.weight || 500} ${opts.size || 36}px "Inter", sans-serif`;
-    ctx.fillStyle = opts.color || this.TEXT;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    ctx.fillText(text, this.PAD, y);
-  },
-
-  // Calendar dot grid for a list of dates with statuses
-  drawDotGrid(ctx, dates, x, y, opts = {}){
-    const cols = opts.cols || 7;
-    const dotR = opts.dotR || 16;
-    const gap = opts.gap || 22;
-    const labelHeight = opts.showLabels ? 36 : 0;
-
-    if(opts.showLabels){
-      const labels = ['M','T','W','T','F','S','S'];
-      ctx.font = '600 18px "JetBrains Mono", monospace';
-      ctx.fillStyle = this.TEXT_4;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      labels.forEach((L, i) => {
-        const cx = x + dotR + i * (dotR*2 + gap);
-        ctx.fillText(L, cx, y);
-      });
-    }
-
-    dates.forEach((entry, i) => {
-      const col = i % cols;
-      const row = Math.floor(i / cols);
-      const cx = x + dotR + col * (dotR*2 + gap);
-      const cy = y + labelHeight + dotR + row * (dotR*2 + gap);
-      ctx.beginPath();
-      ctx.arc(cx, cy, dotR, 0, Math.PI*2);
-      if(entry.status === 'done'){
-        ctx.fillStyle = this.ACCENT;
-        ctx.fill();
-      } else if(entry.status === 'rest'){
-        ctx.fillStyle = 'rgba(255,255,255,0.18)';
-        ctx.fill();
-      } else if(entry.status === 'missed'){
-        ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-      } else { // future
-        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-      }
-    });
-  },
-
-  drawStatGrid(ctx, stats, y){
-    // 2-column row of label/value pairs
-    const colW = (this.W - this.PAD*2) / 2;
-    stats.forEach((s, i) => {
-      const col = i % 2;
-      const row = Math.floor(i / 2);
-      const x = this.PAD + col * colW;
-      const cy = y + row * 180;
-      ctx.font = '700 22px "Inter", sans-serif';
-      ctx.fillStyle = this.TEXT_3;
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'top';
-      this.fillTextSpaced(ctx, s.label.toUpperCase(), x, cy, 4);
-      ctx.font = `400 92px "Instrument Serif", serif`;
-      ctx.fillStyle = s.accent ? this.ACCENT : this.TEXT;
-      ctx.fillText(s.value, x, cy + 44);
-      if(s.unit){
-        const valW = ctx.measureText(s.value).width;
-        ctx.font = '500 28px "JetBrains Mono", monospace';
-        ctx.fillStyle = this.TEXT_3;
-        ctx.fillText(s.unit, x + valW + 14, cy + 92);
-      }
-    });
-  },
-
-  // Up to four chosen stats, as one even row (1–3) or a 2×2 grid (4), anchored so the
-  // block always ends just above the footer whatever the count. Hairlines, no boxes.
   ellipsize(ctx, text, maxW){
     let t = String(text ?? '');
     if(ctx.measureText(t).width <= maxW) return t;
     while(t.length > 1 && ctx.measureText(t + '…').width > maxW) t = t.slice(0, -1);
     return t + '…';
   },
-  statBlockHeight(cells, opts = {}){
-    if(!cells.length) return 0;
-    return Math.ceil(cells.length / (cells.length > 3 ? 2 : cells.length)) * (opts.rowH ?? 150);
-  },
-  drawStatCells(ctx, cells, opts = {}){
-    if(!cells.length) return;
-    const P = this.PAD, W = this.W;
-    const cols = cells.length > 3 ? 2 : cells.length;
-    const rows = Math.ceil(cells.length / cols);
-    const rowH = opts.rowH ?? 150;
-    const labelSize = opts.labelSize ?? 20, valueSize = opts.valueSize ?? 54;
-    const top = opts.bottom - rows * rowH;
-    const colW = (W - P * 2) / cols;
-    const dim = opts.dimColor || this.TEXT_3, faint = opts.faintColor || this.TEXT_4;
-    for(let r = 0; r < rows; r++){
-      const y = top + r * rowH;
-      ctx.strokeStyle = opts.hairline || this.BORDER;
-      ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(P, y); ctx.lineTo(W - P, y); ctx.stroke();
-      for(let c = 0; c < cols; c++){
-        const cell = cells[r * cols + c];
-        if(!cell) continue;
-        const x = P + c * colW;
-        ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-        ctx.font = `700 ${labelSize}px "Inter", sans-serif`;
-        ctx.fillStyle = dim;
-        this.fillTextSpaced(ctx, String(cell.label).toUpperCase(), x, y + 28, 3);
-        if(cell.kind === 'dots'){
-          this.drawDotGrid(ctx, cell.dates, x, y + 74, {dotR: 9, gap: 12});
-          continue;
-        }
-        const valueY = y + 62;
-        ctx.font = `500 ${valueSize}px "Inter", sans-serif`;
-        ctx.fillStyle = cell.accent ? this.ACCENT : (opts.valueColor || this.TEXT);
-        const v = this.ellipsize(ctx, cell.value, colW - 40);
-        ctx.fillText(v, x, valueY);
-        if(cell.unit){
-          const vw = ctx.measureText(v).width;
-          ctx.font = `500 ${Math.round(valueSize * 0.45)}px "JetBrains Mono", monospace`;
-          ctx.fillStyle = dim;
-          ctx.fillText(cell.unit, x + vw + 10, valueY + valueSize - Math.round(valueSize * 0.52));
-        }
-        if(cell.sub){
-          ctx.font = `400 ${Math.round(labelSize * 1.1)}px "Inter", sans-serif`;
-          ctx.fillStyle = faint;
-          ctx.fillText(this.ellipsize(ctx, cell.sub, colW - 30), x, valueY + valueSize + 10);
-        }
-      }
+  // A title wraps to two lines, and steps down in size rather than overflowing or clipping.
+  fitTitle(ctx, text, maxW){
+    for(let size = this.TITLE_SIZE; size >= 40; size -= 4){
+      ctx.font = `700 ${size}px "Inter", sans-serif`;
+      const lines = this.wrapText(ctx, text, maxW);
+      if(lines.length <= 2 && lines.every(l => ctx.measureText(l).width <= maxW)) return {size, lines};
     }
+    ctx.font = `700 40px "Inter", sans-serif`;
+    return {size: 40, lines: this.wrapText(ctx, text, maxW).slice(0, 2)};
   },
 
-  drawProgressBar(ctx, x, y, w, h, pct, opts = {}){
-    const r = h / 2;
-    // Track
-    ctx.fillStyle = 'rgba(255,255,255,0.06)';
-    this.roundRect(ctx, x, y, w, h, r);
-    ctx.fill();
-    // Fill
-    if(pct > 0){
-      ctx.fillStyle = opts.color || this.ACCENT;
-      const fillW = Math.max(h, w * Math.min(1, pct));
-      this.roundRect(ctx, x, y, fillW, h, r);
-      ctx.fill();
-    }
+  // 1 → one cell · 2 → a row of two · 3 → a stacked column · 4 → 2×2. Columns are equal width
+  // and symmetric about the centre line; rows are evenly spaced.
+  gridShape(n){ return n === 4 ? 2 : n === 2 ? 2 : 1; },
+  layout(ctx, title, cells){
+    const maxW = this.W - this.PAD * 2;
+    const t = this.fitTitle(ctx, title, maxW);
+    const cols = this.gridShape(cells.length);
+    const rows = cells.length ? Math.ceil(cells.length / cols) : 0;
+    const cellH = this.LABEL_SIZE + 12 + this.VALUE_SIZE;
+    const titleH = t.lines.length * Math.round(t.size * 1.16);
+    const gridH = rows ? rows * cellH + (rows - 1) * this.ROW_GAP : 0;
+    const total = titleH + (rows ? this.TITLE_GAP + gridH : 0);
+    const top = Math.round(this.GROUP_CENTER - total / 2);
+    return {...t, cols, rows, cellH, titleH, gridH, total, top, gridTop: top + titleH + this.TITLE_GAP};
   },
 
-  drawProgressRing(ctx, cx, cy, r, pct, opts = {}){
-    const lw = opts.lineWidth || 28;
-    ctx.lineWidth = lw;
-    ctx.lineCap = 'round';
-    // Track
-    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI*2);
-    ctx.stroke();
-    // Fill
-    if(pct > 0){
-      ctx.strokeStyle = opts.color || this.ACCENT;
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, -Math.PI/2, -Math.PI/2 + Math.PI*2*Math.min(1, pct));
-      ctx.stroke();
-    }
-  },
-
-  roundRect(ctx, x, y, w, h, r){
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y);
-    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-    ctx.lineTo(x + w, y + h - r);
-    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-    ctx.lineTo(x + r, y + h);
-    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-    ctx.lineTo(x, y + r);
-    ctx.quadraticCurveTo(x, y, x + r, y);
-    ctx.closePath();
-  },
-
-  // ===== Compact (photo-mode) hero helper =====
-  // Renders the content inside the frosted-glass bottom panel that drawPhotoBackground
-  // already painted. Premium / minimal typographic hierarchy:
-  //   date · week  →  accent eyebrow  →  HUGE bold sans hero  →  caption  →  divider  →  2-col stats
-  // We deliberately drop the italic serif here — over photos, the swashy letterforms
-  // compete with the image. Inter 800 reads clean and modern at any size.
-  drawCompactHero(ctx, eyebrow, hero, sub, stats){
-    const W = this.W, P = this.PAD;
-    const SB = this.SAFE_BOTTOM;
-    const cells = stats || [];
-    // The stat block is laid out first, from the bottom of the panel up; the hero then takes
-    // whatever height is left, so four stats never collide with a big number.
-    const rowH = 112;
-    const statsBottom = SB - 26;
-    const statsTop = cells.length ? statsBottom - this.statBlockHeight(cells, {rowH}) : statsBottom;
-
-    // Anchored Y positions inside the panel (panel top = SB - 600)
-    const dateY        = SB - 510;
-    const eyebrowY     = SB - 458;
-    const heroY        = SB - 400;
-    const room         = statsTop - 96 - heroY;            // space for the hero plus its caption
-    const heroSize     = Math.max(84, Math.min(hero.size || 168, 180, room));
-    const heroBottom   = heroY + heroSize;
-    const subY         = heroBottom + 14;
-
-    // 1. Date · week strip (mono caps, dim)
-    const wk = getWeekNum();
-    const dateStr = new Date().toLocaleDateString('en-US',{month:'short', day:'numeric'}).toUpperCase();
-    ctx.font = '600 22px "JetBrains Mono", monospace';
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
-    ctx.textAlign = 'left';
+  drawCard(ctx, title, cells){
+    const L = this.layout(ctx, title, cells);
+    const cx = this.W / 2;
+    ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    this.fillTextSpaced(ctx, `${dateStr}  ·  WEEK ${String(wk).padStart(2,'0')} / ${programWeeks(getActiveProgram())}`, P, dateY, 2);
+    this.shadow(ctx, true);
 
-    // 2. Accent eyebrow (small, tracked, premium feel)
-    ctx.font = '700 25px "Inter", sans-serif';
-    ctx.fillStyle = this.ACCENT;
-    this.fillTextSpaced(ctx, eyebrow.toUpperCase(), P, eyebrowY, 5);
+    ctx.font = `700 ${L.size}px "Inter", sans-serif`;
+    ctx.fillStyle = this.TEXT;
+    const lineH = Math.round(L.size * 1.16);
+    L.lines.forEach((line, i) => ctx.fillText(line, cx, L.top + i * lineH));
 
-    // 3. Hero — bold sans-serif, the visual peak
-    ctx.font = `800 ${heroSize}px "Inter", sans-serif`;
-    ctx.fillStyle = '#fff';
-    ctx.fillText(String(hero.value), P, heroY);
+    const colW = L.cols === 2 ? (this.W - this.PAD * 2) / 2 - 20 : this.W - this.PAD * 2;
+    cells.forEach((cell, i) => {
+      const r = Math.floor(i / L.cols), c = i % L.cols;
+      const x = L.cols === 2 ? cx + (c === 0 ? -this.COL_OFFSET : this.COL_OFFSET) : cx;
+      const y = L.gridTop + r * (L.cellH + this.ROW_GAP);
+      ctx.font = `500 ${this.LABEL_SIZE}px "Inter", sans-serif`;
+      ctx.fillStyle = this.TEXT_2;
+      ctx.fillText(this.ellipsize(ctx, cell.label, colW), x, y);
+      ctx.font = `700 ${this.VALUE_SIZE}px "Inter", sans-serif`;
+      ctx.fillStyle = this.TEXT;
+      ctx.fillText(this.ellipsize(ctx, cell.value, colW), x, y + this.LABEL_SIZE + 12);
+    });
 
-    // 3a. Unit (small mono, baseline-aligned with the hero number)
-    if(hero.unit){
-      const w = ctx.measureText(String(hero.value)).width;
-      ctx.font = '500 34px "JetBrains Mono", monospace';
-      ctx.fillStyle = 'rgba(255,255,255,0.55)';
-      ctx.fillText(hero.unit, P + w + 18, heroBottom - 56);
-    }
-
-    // 4. Caption / subline (medium weight, soft white)
-    if(sub){
-      ctx.font = '500 30px "Inter", sans-serif';
-      ctx.fillStyle = 'rgba(255,255,255,0.85)';
-      ctx.fillText(sub, P, subY);
-    }
-
-    // 5. The chosen stats, on the frosted panel
-    this.drawStatCells(ctx, cells, {bottom: statsBottom, rowH, labelSize: 17, valueSize: 36,
-      hairline: 'rgba(255,255,255,0.13)', valueColor: '#fff',
-      dimColor: 'rgba(255,255,255,0.55)', faintColor: 'rgba(255,255,255,0.4)'});
+    // wordmark
+    ctx.font = `600 24px "Inter", sans-serif`;
+    ctx.fillStyle = this.TEXT_3;
+    if('letterSpacing' in ctx) ctx.letterSpacing = '0.22em';
+    ctx.fillText('DIVINIFY', cx, this.SAFE_BOTTOM - 34);
+    if('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+    this.shadow(ctx, false);
+    ctx.textAlign = 'left';
   },
 
   // ===== Per-card renderers =====
-  // Each card is the same shape: an accent eyebrow, one dominant hero, a quiet caption,
-  // then whichever secondary stats the user picked, anchored just above the footer.
-  EYEBROW_Y: 452,
-  HERO_Y: 560,
-  statsBottom(){ return this.SAFE_BOTTOM - 132; },
-
-  // The hero: a huge italic serif number, with an optional dimmed tail ("/23") and unit.
-  drawHero(ctx, main, opts = {}){
-    const size = opts.size || 340;
-    const y = opts.y ?? this.HERO_Y;
-    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-    ctx.font = `italic ${size}px "Instrument Serif", serif`;
-    ctx.fillStyle = opts.color || this.ACCENT;
-    const text = String(main);
-    ctx.fillText(text, this.PAD, y);
-    const w = ctx.measureText(text).width;
-    if(opts.tail){
-      ctx.font = `400 ${Math.round(size * 0.56)}px "Instrument Serif", serif`;
-      ctx.fillStyle = this.TEXT_3;
-      ctx.fillText(opts.tail, this.PAD + w + 16, y + Math.round(size * 0.25));
-    } else if(opts.unit){
-      ctx.font = `500 ${Math.round(size * 0.14)}px "JetBrains Mono", monospace`;
-      ctx.fillStyle = this.TEXT_3;
-      ctx.fillText(opts.unit, this.PAD + w + 20, y + size - Math.round(size * 0.30));
-    }
-    return y + size;
-  },
-
-  drawCard(ctx, {eyebrow, hero, caption, cells, photoHero}){
-    if(this.photo){
-      this.drawCompactHero(ctx, eyebrow, photoHero || {value: hero.main, size: 200, unit: hero.unit},
-        caption || '', cells);
-      return;
-    }
-    this.drawEyebrow(ctx, eyebrow, this.EYEBROW_Y);
-    const bottom = this.drawHero(ctx, hero.main, hero);
-    if(caption) this.drawSubline(ctx, caption, bottom + 44, {weight: 500, size: 40, color: this.TEXT_2});
-    this.drawStatCells(ctx, cells, {bottom: this.statsBottom()});
-  },
-
   drawSession(ctx){
     const t = statsToday();
-    const cells = this.statCells('session');
-    const eyebrow = t.isRest ? `${t.dayLabel} · Rest`
-      : t.completed ? `${t.dayLabel} · Complete` : `${t.dayLabel} · In progress`;
-    if(t.isRest){
-      this.drawCard(ctx, {eyebrow, hero: {main: '—', size: 300}, caption: 'recovery day', cells,
-        photoHero: {value: '—', size: 180}});
-      return;
-    }
-    this.drawCard(ctx, {
-      eyebrow,
-      hero: {main: t.setsLogged, tail: `/${t.setsTotal}`, size: 300},
-      caption: `sets · ${String(t.dayName || '').toLowerCase()}`,
-      cells,
-      photoHero: {value: `${t.setsLogged}/${t.setsTotal}`, size: 190},
-    });
+    this.drawCard(ctx, t.dayName || 'Workout', this.statCells('session'));
   },
-
   drawWeek(ctx){
-    const w = statsWeek();
-    const cells = this.statCells('week');
-    const range = `${new Date(w.start + 'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})} – ${new Date(w.end + 'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}`;
-    this.drawCard(ctx, {
-      eyebrow: 'This week',
-      hero: {main: w.workouts, tail: '/7', size: 300},
-      caption: `sessions · ${range.toLowerCase()}`,
-      cells,
-      photoHero: {value: `${w.workouts}/7`, size: 190},
-    });
+    this.drawCard(ctx, `Week ${getWeekNum()}`, this.statCells('week'));
   },
-
   drawPR(ctx){
     const pr = statsBestPR();
-    const cells = this.statCells('pr');
-    if(!pr){
-      this.drawCard(ctx, {eyebrow: 'Personal record', hero: {main: '—', size: 300},
-        caption: 'no PRs yet — go set one', cells: [], photoHero: {value: '—', size: 180}});
-      return;
-    }
-    if(this.photo){
-      this.drawCompactHero(ctx, 'Personal record', {value: String(pr.weight), size: 190, unit: 'lbs'},
-        pr.name, cells);
-      return;
-    }
-    this.drawEyebrow(ctx, 'Personal record', this.EYEBROW_Y);
-    // The lift names the card, so it leads; the number is still the thing you see.
-    ctx.font = '600 50px "Inter", sans-serif';
-    ctx.fillStyle = this.TEXT;
-    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-    const lines = this.wrapText(ctx, pr.name, this.W - this.PAD * 2).slice(0, 2);
-    let ny = 534;
-    lines.forEach(line => { ctx.fillText(line, this.PAD, ny); ny += 62; });
-    this.drawHero(ctx, pr.weight, {y: ny + 26, size: 300, unit: 'lbs'});
-    this.drawStatCells(ctx, cells, {bottom: this.statsBottom()});
+    this.drawCard(ctx, pr ? pr.name : 'No PRs yet', pr ? this.statCells('pr') : []);
   },
 
   wrapText(ctx, text, maxW){
