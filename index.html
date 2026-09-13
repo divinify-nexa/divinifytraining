@@ -299,6 +299,12 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 .pill:active{opacity:.6}
 .pill.active{background:var(--accent);color:var(--accent-text)}
 .pill.active small{color:var(--accent-text);opacity:.75}
+/* Day state without words: a dot for done, a struck label for skipped, a ring on the real today. */
+.pill::after{content:'';width:4px;height:4px;margin-top:1px;border-radius:var(--r-pill);background:transparent}
+.pill.done::after{background:var(--accent)}
+.pill.active.done::after{background:var(--accent-text);opacity:.8}
+.pill.skipped{color:var(--text-tertiary);text-decoration:line-through;text-decoration-thickness:1px}
+.pill.is-today{box-shadow:inset 0 0 0 1px var(--border-subtle);color:var(--text-primary)}
 
 /* --- Chips (filters, multi-select) --- */
 .share-pill,.wiz-chip{
@@ -842,6 +848,22 @@ body.scope-modal-open{overflow:hidden}
 .session-actions .btn{height:var(--tap)}
 .rest-state + .session-actions{margin-top:var(--s-4)}
 .rest-actions{display:flex;justify-content:center;gap:var(--s-2);margin-top:var(--s-5)}
+/* Programs manager — cards inside the shared sheet, on the existing tokens */
+.prog-card{display:flex;flex-direction:column;gap:var(--s-2);margin-bottom:var(--s-3)}
+.prog-name{font-size:var(--fs-body);line-height:var(--lh-body);color:var(--text-primary);font-weight:600;min-width:0;overflow-wrap:anywhere}
+.prog-meta{font-size:var(--fs-caption);line-height:var(--lh-caption);color:var(--text-secondary);overflow-wrap:anywhere}
+.prog-strip{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:2px;margin-top:var(--s-1)}
+.prog-strip-day{min-width:0;display:flex;flex-direction:column;align-items:center;gap:2px;padding:var(--s-2) 1px;background:var(--surface);border-radius:var(--r-sm);text-align:center}
+.prog-strip-day .day-marker{width:auto}
+.prog-strip-name{min-width:0;width:100%;font-size:var(--fs-micro);line-height:1.25;color:var(--text-secondary);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.prog-actions{gap:var(--s-2)}
+.prog-actions .btn{flex:0 1 auto;min-width:0;height:var(--tap)}
+.prog-new{width:100%;height:var(--tap)}
+.prog-back{align-self:flex-start;height:var(--tap)}
+.prog-confirm{background:var(--surface)}
+.prog-error{padding:var(--s-2) var(--s-3);background:var(--fill);border-radius:var(--r-sm);font-size:var(--fs-caption);line-height:var(--lh-caption);color:var(--danger)}
+.prog-deload{align-items:end}
+.prog-deload-x{grid-column:1/-1;height:var(--tap)}
 .move-list{display:flex;flex-direction:column}
 .move-list .row-value{text-align:right}
 .workout-meta-note{display:block;font-size:var(--fs-micro);line-height:var(--lh-micro);color:var(--text-tertiary)}
@@ -1296,9 +1318,9 @@ body[data-theme="dark"] .theme-switch::after{transform:translateX(20px)}
 <div class="page" id="page-workout">
   <div class="page-header">
     <div>
-      <div class="page-eyebrow">Train</div>
-      <h1 class="page-title">Workout</h1>
-      <div class="page-sub">Tap sets to mark complete</div>
+      <div class="page-eyebrow" id="train-eyebrow">Train</div>
+      <h1 class="page-title" id="train-title">Workout</h1>
+      <div class="page-sub" id="train-sub">Tap sets to mark complete</div>
     </div>
   </div>
 
@@ -1652,14 +1674,15 @@ function todayKey(){ return localDateKey(new Date()); }
 // The program a date belongs to: the active one from its own start date on, otherwise the
 // latest program that had already started. A day logged under an earlier program keeps
 // rendering against that program's schedule after a new one is seeded.
+function programOrigin(prog){ return prog?.originDate || prog?.startDate || ''; }
 function programForDate(date){
   const p = state.plan;
   if(!p || p.version !== 2 || !p.programs) return null;
   const active = getActiveProgram();
-  if(!date || !active || date >= (active.startDate || '')) return active;
-  const byStart = (a, b) => String(a.startDate || '').localeCompare(String(b.startDate || ''));
+  if(!date || !active || date >= programOrigin(active)) return active;
+  const byStart = (a, b) => programOrigin(a).localeCompare(programOrigin(b));
   const others = Object.values(p.programs).filter(x => x && x !== active).sort(byStart);
-  const started = others.filter(x => (x.startDate || '') <= date);
+  const started = others.filter(x => programOrigin(x) <= date);
   // Nothing had started yet: fall back to the earliest program, never to the newest one —
   // a day logged long ago belongs to the oldest program, not to today's.
   return started[started.length - 1] || others[0] || active;
@@ -3235,7 +3258,7 @@ function legacyPhases(){
 function buildPlanV2(workouts, pool, meta){
   const prog = {
     id: LEGACY_PROGRAM_ID, name: meta.name || '16-Week Strength + Hypertrophy', weeks: 16,
-    startDate: state.startDate, status: 'active', phases: legacyPhases(),
+    startDate: state.startDate, originDate: state.startDate, status: 'active', phases: legacyPhases(),
     library: {}, blocks: {}, templates: {},
     schedule: LEGACY_TEMPLATE_IDS.map(() => ({kind:'rest'})),
     conditioningPool: []
@@ -3262,6 +3285,7 @@ function initializePlan(){
       if(!prog.library) prog.library = {};
       if(!prog.blocks) prog.blocks = {};
       if(!prog.startDate) prog.startDate = state.startDate;
+      if(!prog.originDate) prog.originDate = prog.startDate;
       ensureConditioningPool(prog);
     });
     seedHybrid190();
@@ -3430,7 +3454,7 @@ function seedHybrid190(){
   if(plan.seeded.includes(HYBRID_ID) || plan.programs[HYBRID_ID]) return false;
   const prog = {
     id: HYBRID_ID, name: 'Hybrid 190 — 12 Week Athlete Rebuild', weeks: 12,
-    startDate: todayKey(), status: 'active',
+    startDate: todayKey(), originDate: todayKey(), status: 'active',
     phases: JSON.parse(JSON.stringify(HYBRID_PHASES)),
     progressionNote: HYBRID_PROGRESSION,
     deloadWeeks: [{week: 4, setsMultiplier: 0.7}, {week: 8, setsMultiplier: 0.7}],
@@ -4422,6 +4446,440 @@ const Sheet = {
     owner?.onSheetClose?.();
   }
 };
+// ===== Programs manager =====
+// Every program in the plan, in the shared sheet. Switching programs only changes what today
+// and later resolve to: past dates keep resolving against the program that was active then,
+// and no session, snapshot, logged row or PR is touched by anything in here.
+function programList(){
+  const p = state.plan;
+  if(!p?.programs) return [];
+  const active = p.activeId;
+  return Object.values(p.programs).filter(Boolean)
+    .sort((a, b) => (b.id === active) - (a.id === active) || String(a.name || '').localeCompare(String(b.name || '')));
+}
+function uniqueProgramId(base){
+  const slug = slugifyExerciseName(base) || 'program';
+  let id = slug;
+  for(let n = 2; state.plan?.programs?.[id]; n++) id = `${slug}-${n}`;
+  return id;
+}
+// A session belongs to a program through its snapshot; that is what blocks a delete.
+function sessionsUsingProgram(progId){
+  const prog = state.plan?.programs?.[progId];
+  const tplIds = new Set(Object.keys(prog?.templates || {}));
+  return Object.values(state.sessions || {})
+    .filter(s => s && (s.snapshot?.programId === progId || (s.template_id && tplIds.has(s.template_id))))
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+}
+// Deep copy with fresh ids for the program, its templates and its blocks. Library entries keep
+// their ids so both programs name the same exercises.
+function duplicateProgram(progId, name){
+  const src = state.plan?.programs?.[progId];
+  if(!src) return null;
+  const clone = v => JSON.parse(JSON.stringify(v));
+  const id = uniqueProgramId(name || `${src.name} copy`);
+  const blockMap = {}, tplMap = {};
+  Object.keys(src.blocks || {}).forEach(b => { blockMap[b] = `${id}_${b}`; });
+  Object.keys(src.templates || {}).forEach(t => { tplMap[t] = `${id}_${t}`; });
+  const copy = clone(src);
+  copy.id = id;
+  copy.name = name || `${src.name} (copy)`;
+  copy.status = 'archived';
+  copy.originDate = todayKey();
+  copy.blocks = {};
+  Object.entries(src.blocks || {}).forEach(([b, blk]) => { copy.blocks[blockMap[b]] = clone(blk); });
+  copy.templates = {};
+  Object.entries(src.templates || {}).forEach(([t, tpl]) => {
+    const c = clone(tpl);
+    c.id = tplMap[t];
+    c.blocks = (c.blocks || []).map(blk => blk?.ref ? {ref: blockMap[blk.ref] || blk.ref} : blk);
+    copy.templates[tplMap[t]] = c;
+  });
+  copy.schedule = (src.schedule || []).map(sp => sp?.templateId ? {...clone(sp), templateId: tplMap[sp.templateId] || sp.templateId} : clone(sp));
+  state.plan.programs[id] = copy;
+  return copy;
+}
+// Phases must tile 1..weeks exactly: no overlap, no gap, in order.
+function validatePhases(phases, weeks){
+  const list = (phases || []).map(p => ({from: parseInt(p.from), to: parseInt(p.to)}));
+  if(!list.length) return null;                       // a program may have no phases at all
+  for(const p of list) if(!(p.from >= 1 && p.to >= p.from && p.to <= weeks)) return `Each phase must run between week 1 and week ${weeks}`;
+  const sorted = [...list].sort((a, b) => a.from - b.from);
+  if(sorted[0].from !== 1) return 'Phases must start at week 1';
+  for(let i = 1; i < sorted.length; i++){
+    if(sorted[i].from <= sorted[i - 1].to) return `Weeks ${sorted[i].from}–${sorted[i].to} overlap the phase before it`;
+    if(sorted[i].from !== sorted[i - 1].to + 1) return `Week ${sorted[i - 1].to + 1} isn't covered by any phase`;
+  }
+  if(sorted[sorted.length - 1].to !== weeks) return `Phases must run to week ${weeks}`;
+  return null;
+}
+const Programs = {
+  view: 'list',        // 'list' | 'program' | 'phases' | 'new'
+  progId: null,
+  form: null,          // new-program form
+  confirm: null,       // {kind, progId, date?, error?}
+  renaming: null,      // progId being renamed inline
+  draftPhases: null,   // [{from,to,label,mainSets,mainRepsText,note}] while editing
+  draftDeloads: null,
+  phaseError: null,
+
+  open(){ this.view = 'list'; this.progId = null; this.form = null; this.confirm = null; this.renaming = null; Sheet.open(this, 'Programs'); this.render(); },
+  onSheetClose(){ this.view = 'list'; this.progId = null; this.form = null; this.confirm = null; this.renaming = null; this.draftPhases = null; },
+  prog(){ return this.progId ? state.plan?.programs?.[this.progId] : null; },
+  back(){ this.view = 'list'; this.progId = null; this.confirm = null; this.renaming = null; this.draftPhases = null; this.phaseError = null; this.render(); },
+
+  render(){
+    if(Sheet.owner !== this) return;
+    document.getElementById('move-title').textContent =
+      this.view === 'new' ? 'New program' : this.view === 'phases' ? 'Phases' : this.view === 'program' ? (this.prog()?.name || 'Program') : 'Programs';
+    Sheet.body(this.view === 'new' ? this.newHtml() : this.view === 'phases' ? this.phasesHtml() : this.view === 'program' ? this.programHtml() : this.listHtml());
+  },
+
+  // ----- list -----
+  scheduleStrip(prog){
+    return `<div class="prog-strip">${DAY_LABELS.map((lbl, i) => {
+      const sp = prog.schedule?.[i];
+      const name = !sp || sp.kind === 'rest' ? (sp?.name || 'Rest')
+        : sp.kind === 'sport' ? (sp.name || prog.templates?.[sp.templateId]?.name || 'Sport')
+        : (prog.templates?.[sp.templateId]?.name || 'Rest');
+      return `<div class="prog-strip-day"><span class="day-marker">${lbl}</span><span class="prog-strip-name">${escapeHtml(name)}</span></div>`;
+    }).join('')}</div>`;
+  },
+  listHtml(){
+    const activeId = state.plan?.activeId;
+    const cards = programList().map(prog => {
+      const isActive = prog.id === activeId;
+      const phases = (prog.phases || []).map(p => escapeHtml(p.label || '')).filter(Boolean).join(' · ') || 'No phases';
+      return `<div class="pe-block prog-card">
+        <div class="pe-block-head">
+          ${this.renaming === prog.id
+            ? `<input class="pe-input" type="text" value="${escapeHtml(prog.name || '')}" id="prog-rename-${prog.id}"
+                 onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}" onblur="Programs.commitRename('${prog.id}', this.value)">`
+            : `<span class="pe-section-label prog-name">${escapeHtml(prog.name || 'Untitled')}</span>
+               <span class="pe-ex-num">${isActive ? 'Active' : 'Archived'}</span>`}
+        </div>
+        <div class="prog-meta">${prog.weeks} week${prog.weeks === 1 ? '' : 's'} · ${phases}${isActive && prog.startDate ? ` · started ${formatViewDateLabel(prog.startDate)}` : ''}</div>
+        ${this.scheduleStrip(prog)}
+        <div class="pe-actions prog-actions">
+          <button class="btn btn-secondary btn-sm" onclick="Programs.openProgram('${prog.id}')">Edit</button>
+          ${isActive ? '' : `<button class="btn btn-secondary btn-sm" onclick="Programs.askActivate('${prog.id}')">Activate</button>`}
+          <button class="btn btn-ghost btn-sm" onclick="Programs.startRename('${prog.id}')">Rename</button>
+          <button class="btn btn-ghost btn-sm" onclick="Programs.duplicate('${prog.id}')">Duplicate</button>
+          ${isActive ? '' : `<button class="btn btn-ghost btn-sm danger" onclick="Programs.askDelete('${prog.id}')">Delete</button>`}
+        </div>
+        ${this.confirmHtml(prog.id)}
+      </div>`;
+    }).join('');
+    return `<div class="pe-section">${cards}</div>
+      <div class="pe-section"><button class="btn btn-primary prog-new" onclick="Programs.startNew()">+ New program</button></div>`;
+  },
+  confirmHtml(progId){
+    const c = this.confirm;
+    if(!c || c.progId !== progId) return '';
+    if(c.kind === 'activate'){
+      const prog = state.plan?.programs?.[progId];
+      return `<div class="pe-block pe-confirm prog-confirm">
+        <span class="pe-section-label">Make "${escapeHtml(prog?.name || '')}" the active program?</span>
+        <span class="prog-meta">Only today and later change. Every past date keeps resolving against the program that was active then, and nothing you have already logged is touched.</span>
+        <div class="pe-field"><span class="pe-field-label">Start date (drives week and phase)</span>
+          <input class="pe-input" type="date" id="prog-start-date" value="${c.date}" onchange="Programs.confirm.date=this.value"></div>
+        <div class="pe-confirm-actions">
+          <button class="btn btn-primary" onclick="Programs.doActivate()">Activate</button>
+          <button class="btn btn-secondary" onclick="Programs.cancelConfirm()">Cancel</button>
+        </div>
+      </div>`;
+    }
+    if(c.kind === 'delete'){
+      const prog = state.plan?.programs?.[progId];
+      return `<div class="pe-block pe-confirm prog-confirm">
+        <span class="pe-section-label">${c.error ? 'Can’t delete this program' : `Delete "${escapeHtml(prog?.name || '')}" for good?`}</span>
+        <span class="prog-meta">${c.error || 'Its templates and schedule go with it. Sessions you have already done are not affected, and exercises used by other programs stay in the library.'}</span>
+        <div class="pe-confirm-actions">
+          ${c.error ? '' : `<button class="btn btn-danger" onclick="Programs.doDelete()">Delete</button>`}
+          <button class="btn btn-secondary" onclick="Programs.cancelConfirm()">${c.error ? 'OK' : 'Cancel'}</button>
+        </div>
+      </div>`;
+    }
+    return '';
+  },
+  cancelConfirm(){ this.confirm = null; this.render(); },
+
+  // ----- rename -----
+  startRename(progId){ this.renaming = progId; this.render(); setTimeout(() => document.getElementById('prog-rename-' + progId)?.focus(), 0); },
+  commitRename(progId, value){
+    const prog = state.plan?.programs?.[progId];
+    const name = (value || '').trim();
+    this.renaming = null;
+    if(prog && name && name !== prog.name){ prog.name = name; savePlan(); renderActivePage(); }
+    this.render();
+  },
+
+  // ----- activate -----
+  askActivate(progId){ this.confirm = {kind: 'activate', progId, date: todayKey()}; this.render(); },
+  doActivate(){
+    const c = this.confirm;
+    const prog = c && state.plan?.programs?.[c.progId];
+    if(!prog) return;
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(c.date || '') ? c.date : todayKey();
+    Object.values(state.plan.programs).forEach(p => { if(p && p.status === 'active') p.status = 'archived'; });
+    prog.status = 'active';
+    prog.startDate = date;
+    // originDate is where this program's history begins and never moves, so re-activating one
+    // never changes which program a past date resolves against.
+    if(!prog.originDate) prog.originDate = date;
+    state.plan.activeId = prog.id;
+    this.confirm = null;
+    savePlan();
+    renderActivePage();
+    this.render();
+    toast(`${prog.name} is now active`);
+  },
+
+  // ----- duplicate -----
+  duplicate(progId){
+    const copy = duplicateProgram(progId);
+    if(!copy) return;
+    savePlan();
+    this.render();
+    toast(`Copied to "${copy.name}"`);
+  },
+
+  // ----- delete -----
+  askDelete(progId){
+    if(state.plan?.activeId === progId){ toast('Activate another program first'); return; }
+    const blocking = sessionsUsingProgram(progId)[0];
+    this.confirm = {kind: 'delete', progId,
+      error: blocking ? `Your ${formatViewDateLabel(blocking.date)} session was built from this program, so it has to stay.` : null};
+    this.render();
+  },
+  doDelete(){
+    const id = this.confirm?.progId;
+    if(!id || state.plan?.activeId === id || sessionsUsingProgram(id).length) return;
+    const name = state.plan.programs[id]?.name;
+    delete state.plan.programs[id];          // library entries live per program, so nothing else loses one
+    this.confirm = null;
+    savePlan();
+    renderActivePage();
+    this.render();
+    toast(`Deleted "${name}"`);
+  },
+
+  // ----- one program: its templates and schedule -----
+  openProgram(progId){ this.progId = progId; this.view = 'program'; this.confirm = null; this.render(); },
+  programHtml(){
+    const prog = this.prog();
+    if(!prog) return '<div class="empty">Program not found</div>';
+    const tpls = Object.values(prog.templates || {});
+    const dayOf = tplId => (prog.schedule || []).map((sp, i) => sp?.templateId === tplId ? DAY_LABELS[i] : null).filter(Boolean).join(' · ');
+    return `<div class="pe-section">
+        <button class="btn btn-ghost btn-sm prog-back" onclick="Programs.back()">← All programs</button>
+        <span class="pe-section-label">Week</span>
+        ${this.scheduleStrip(prog)}
+        <div class="pe-section-label">Each day picks a template below; tap a day to change what it runs.</div>
+        ${DAY_LABELS.map((lbl, i) => {
+          const sp = prog.schedule?.[i] || {kind: 'rest'};
+          return `<div class="pe-field"><span class="pe-field-label">${lbl}</span>
+            <select class="pe-input" onchange="Programs.setDaySpec(${i}, this.value)">
+              <option value="rest"${sp.kind === 'rest' ? ' selected' : ''}>Rest</option>
+              ${tpls.map(t => `<option value="tpl:${t.id}"${sp.templateId === t.id && sp.kind !== 'rest' ? ' selected' : ''}>${escapeHtml(t.name || t.id)}${sp.kind === 'sport' && sp.templateId === t.id ? ' (optional)' : ''}</option>`).join('')}
+            </select></div>`;
+        }).join('')}
+      </div>
+      <div class="pe-section">
+        <span class="pe-section-label">Templates</span>
+        ${tpls.length ? tpls.map(t => `<div class="pe-block prog-card">
+          <div class="pe-block-head"><span class="pe-section-label">${escapeHtml(t.name || t.id)}</span>
+            <span class="pe-ex-num">${dayOf(t.id) || 'unused'}</span></div>
+          <div class="prog-meta">${(t.blocks || []).length} block${(t.blocks || []).length === 1 ? '' : 's'}</div>
+          <div class="pe-actions prog-actions">
+            <button class="btn btn-secondary btn-sm" onclick="PlanEditor.openTemplate('${prog.id}','${t.id}')">Edit</button>
+            <button class="btn btn-ghost btn-sm danger" onclick="Programs.removeTemplate('${t.id}')">Remove</button>
+          </div>
+        </div>`).join('') : '<div class="empty">No templates yet — add one to start building this week.</div>'}
+        <button class="btn btn-secondary prog-new" onclick="Programs.addTemplate()">+ Add template</button>
+      </div>
+      <div class="pe-section">
+        <span class="pe-section-label">Phases &amp; deloads</span>
+        <div class="prog-meta">${(prog.phases || []).map(p => `${escapeHtml(p.label || '')} (w${p.from}–${p.to})`).join(' · ') || 'No phases'}</div>
+        <button class="btn btn-secondary prog-new" onclick="Programs.openPhases()">Edit phases</button>
+      </div>`;
+  },
+  setDaySpec(i, value){
+    const prog = this.prog();
+    if(!prog) return;
+    prog.schedule = prog.schedule || [];
+    prog.schedule[i] = value === 'rest' ? {kind: 'rest', name: 'Rest', desc: ''} : {kind: 'template', templateId: value.slice(4)};
+    savePlan(); renderActivePage(); this.render();
+  },
+  addTemplate(){
+    const prog = this.prog();
+    if(!prog) return;
+    prog.templates = prog.templates || {};
+    let id = `${prog.id}_tpl`;
+    for(let n = 2; prog.templates[id]; n++) id = `${prog.id}_tpl-${n}`;
+    prog.templates[id] = {id, name: 'New workout', desc: '', fullHiit: false, blocks: []};
+    savePlan();
+    PlanEditor.openTemplate(prog.id, id);
+  },
+  removeTemplate(tplId){
+    const prog = this.prog();
+    if(!prog) return;
+    const used = sessionsUsingProgram(prog.id).find(s => s.template_id === tplId);
+    if(used){ toast(`Your ${formatViewDateLabel(used.date)} session used this workout`); return; }
+    delete prog.templates[tplId];
+    prog.schedule = (prog.schedule || []).map(sp => sp?.templateId === tplId ? {kind: 'rest', name: 'Rest', desc: ''} : sp);
+    savePlan(); renderActivePage(); this.render();
+  },
+
+  // ----- phases -----
+  openPhases(){
+    const prog = this.prog();
+    if(!prog) return;
+    this.draftPhases = JSON.parse(JSON.stringify(prog.phases || []));
+    this.draftDeloads = JSON.parse(JSON.stringify(prog.deloadWeeks || []));
+    this.phaseError = null;
+    this.view = 'phases';
+    this.render();
+  },
+  phasesHtml(){
+    const prog = this.prog();
+    const rows = (this.draftPhases || []).map((p, i) => `<div class="pe-block prog-card">
+      <div class="pe-row cols-2">
+        <div class="pe-field"><span class="pe-field-label">From week</span>
+          <input class="pe-input" type="number" min="1" max="${prog?.weeks || 52}" value="${p.from ?? ''}" onchange="Programs.setPhase(${i},'from',this.value)"></div>
+        <div class="pe-field"><span class="pe-field-label">To week</span>
+          <input class="pe-input" type="number" min="1" max="${prog?.weeks || 52}" value="${p.to ?? ''}" onchange="Programs.setPhase(${i},'to',this.value)"></div>
+      </div>
+      <div class="pe-field"><span class="pe-field-label">Name</span>
+        <input class="pe-input" type="text" value="${escapeHtml(p.label || '')}" onchange="Programs.setPhase(${i},'label',this.value)"></div>
+      <div class="pe-row cols-2">
+        <div class="pe-field"><span class="pe-field-label">Main sets</span>
+          <input class="pe-input" type="number" min="1" max="10" value="${p.mainSets ?? ''}" onchange="Programs.setPhase(${i},'mainSets',this.value)"></div>
+        <div class="pe-field"><span class="pe-field-label">Main reps</span>
+          <input class="pe-input" type="text" value="${escapeHtml(p.mainRepsText || '')}" onchange="Programs.setPhase(${i},'mainRepsText',this.value)"></div>
+      </div>
+      <div class="pe-field"><span class="pe-field-label">Note</span>
+        <input class="pe-input" type="text" value="${escapeHtml(p.note || '')}" onchange="Programs.setPhase(${i},'note',this.value)"></div>
+      <button class="btn btn-ghost btn-sm danger" onclick="Programs.removePhase(${i})">Remove phase</button>
+    </div>`).join('');
+    const deloads = (this.draftDeloads || []).map((d, i) => `<div class="pe-row cols-2 prog-deload">
+      <div class="pe-field"><span class="pe-field-label">Deload week</span>
+        <input class="pe-input" type="number" min="1" max="${prog?.weeks || 52}" value="${d.week ?? ''}" onchange="Programs.setDeload(${i},'week',this.value)"></div>
+      <div class="pe-field"><span class="pe-field-label">Sets ×</span>
+        <input class="pe-input" type="number" min="0.1" max="1" step="0.05" value="${d.setsMultiplier ?? ''}" onchange="Programs.setDeload(${i},'setsMultiplier',this.value)"></div>
+      <button class="btn btn-ghost btn-sm danger prog-deload-x" onclick="Programs.removeDeload(${i})">Remove</button>
+    </div>`).join('');
+    return `<div class="pe-section">
+        <button class="btn btn-ghost btn-sm prog-back" onclick="Programs.back()">← All programs</button>
+        <div class="prog-meta">Phases must cover weeks 1–${prog?.weeks || 12} with no gaps or overlaps.</div>
+        ${this.phaseError ? `<div class="prog-error">${escapeHtml(this.phaseError)}</div>` : ''}
+        ${rows || '<div class="empty">No phases — the whole program runs the same way.</div>'}
+        <button class="btn btn-secondary prog-new" onclick="Programs.addPhase()">+ Add phase</button>
+      </div>
+      <div class="pe-section">
+        <span class="pe-section-label">Deload weeks</span>
+        ${deloads || '<div class="empty">No deload weeks.</div>'}
+        <button class="btn btn-secondary prog-new" onclick="Programs.addDeload()">+ Add deload week</button>
+      </div>
+      <div class="pe-section"><button class="btn btn-primary prog-new" onclick="Programs.savePhases()">Save phases</button></div>`;
+  },
+  setPhase(i, field, value){
+    const p = this.draftPhases?.[i];
+    if(!p) return;
+    p[field] = ['from', 'to', 'mainSets'].includes(field) ? (value === '' ? null : parseInt(value)) : value;
+  },
+  addPhase(){
+    const prog = this.prog();
+    const last = (this.draftPhases || [])[this.draftPhases.length - 1];
+    const from = last ? Math.min((parseInt(last.to) || 0) + 1, prog?.weeks || 12) : 1;
+    this.draftPhases.push({from, to: prog?.weeks || from, label: 'New phase', mainSets: 3, mainRepsText: '6–8', note: ''});
+    this.render();
+  },
+  removePhase(i){ this.draftPhases.splice(i, 1); this.render(); },
+  addDeload(){ this.draftDeloads.push({week: 4, setsMultiplier: 0.7}); this.render(); },
+  removeDeload(i){ this.draftDeloads.splice(i, 1); this.render(); },
+  setDeload(i, field, value){
+    const d = this.draftDeloads?.[i];
+    if(!d) return;
+    d[field] = field === 'week' ? parseInt(value) || 1 : parseFloat(value) || 1;
+  },
+  savePhases(){
+    const prog = this.prog();
+    if(!prog) return;
+    const err = validatePhases(this.draftPhases, prog.weeks);
+    if(err){ this.phaseError = err; this.render(); return; }
+    prog.phases = (this.draftPhases || []).map(p => ({from: +p.from, to: +p.to, label: p.label || '',
+      ...(p.mainSets != null ? {mainSets: +p.mainSets} : {}), ...(p.mainRepsText ? {mainRepsText: p.mainRepsText} : {}), note: p.note || ''}))
+      .sort((a, b) => a.from - b.from);
+    prog.deloadWeeks = (this.draftDeloads || []).filter(d => d.week).map(d => ({week: +d.week, setsMultiplier: +d.setsMultiplier || 1}));
+    this.phaseError = null;
+    savePlan(); renderActivePage();
+    this.view = 'program'; this.render();
+    toast('Phases updated');
+  },
+
+  // ----- new program -----
+  startNew(){ this.form = {mode: 'scratch', name: '', weeks: 12, phases: true, from: programList()[0]?.id || '', error: null}; this.view = 'new'; this.render(); },
+  setForm(field, value){
+    if(!this.form) return;
+    this.form[field] = field === 'weeks' ? (parseInt(value) || 0) : field === 'phases' ? !!value : value;
+    if(field === 'mode') this.render();
+  },
+  newHtml(){
+    const f = this.form || {};
+    const progs = programList();
+    return `<div class="pe-section">
+        <button class="btn btn-ghost btn-sm prog-back" onclick="Programs.back()">← All programs</button>
+        <div class="pe-field"><span class="pe-field-label">Start from</span>
+          <select class="pe-input" onchange="Programs.setForm('mode', this.value)">
+            <option value="scratch"${f.mode === 'scratch' ? ' selected' : ''}>Scratch — an empty week</option>
+            <option value="copy"${f.mode === 'copy' ? ' selected' : ''}>A copy of an existing program</option>
+          </select></div>
+        ${f.mode === 'copy' ? `<div class="pe-field"><span class="pe-field-label">Program to copy</span>
+          <select class="pe-input" onchange="Programs.setForm('from', this.value)">
+            ${progs.map(p => `<option value="${p.id}"${f.from === p.id ? ' selected' : ''}>${escapeHtml(p.name || p.id)}</option>`).join('')}
+          </select></div>` : ''}
+        <div class="pe-field"><span class="pe-field-label">Name</span>
+          <input class="pe-input" type="text" placeholder="${f.mode === 'copy' ? 'Defaults to "… (copy)"' : 'e.g. Off-season base'}" value="${escapeHtml(f.name || '')}" oninput="Programs.setForm('name', this.value)"></div>
+        ${f.mode === 'copy' ? '' : `<div class="pe-field"><span class="pe-field-label">Weeks (1–52)</span>
+          <input class="pe-input" type="number" min="1" max="52" value="${f.weeks}" onchange="Programs.setForm('weeks', this.value)"></div>
+        <div class="pe-field"><span class="pe-field-label">Phases</span>
+          <select class="pe-input" onchange="Programs.setForm('phases', this.value === 'yes')">
+            <option value="yes"${f.phases ? ' selected' : ''}>Add one phase covering every week</option>
+            <option value="no"${f.phases ? '' : ' selected'}>No phases</option>
+          </select></div>`}
+        ${f.error ? `<div class="prog-error">${escapeHtml(f.error)}</div>` : ''}
+        <button class="btn btn-primary prog-new" onclick="Programs.createProgram()">Create program</button>
+      </div>`;
+  },
+  createProgram(){
+    const f = this.form;
+    if(!f) return;
+    const name = (f.name || '').trim();
+    if(f.mode === 'copy'){
+      const copy = duplicateProgram(f.from, name || undefined);
+      if(!copy){ f.error = 'Pick a program to copy'; this.render(); return; }
+      savePlan();
+      this.form = null; this.progId = copy.id; this.view = 'program'; this.render();
+      toast(`Created "${copy.name}"`);
+      return;
+    }
+    if(!name){ f.error = 'Give the program a name'; this.render(); return; }
+    const weeks = parseInt(f.weeks);
+    if(!(weeks >= 1 && weeks <= 52)){ f.error = 'Weeks must be between 1 and 52'; this.render(); return; }
+    const id = uniqueProgramId(name);
+    state.plan.programs[id] = {
+      id, name, weeks, startDate: todayKey(), originDate: todayKey(), status: 'archived',
+      phases: f.phases ? [{from: 1, to: weeks, label: 'Base', mainSets: 3, mainRepsText: '6–8', note: ''}] : [],
+      deloadWeeks: [], library: {}, blocks: {}, templates: {},
+      schedule: Array.from({length: 7}, () => ({kind: 'rest', name: 'Rest', desc: ''})),
+      conditioningPool: []
+    };
+    this.form = null; this.progId = id; this.view = 'program';
+    savePlan(); this.render();
+    toast(`Created "${name}"`);
+  }
+};
 const ExercisePicker = {
   query: '', category: '', onPick: null,
   open(title, onPick){
@@ -4823,9 +5281,53 @@ function saveNewMeal(){
 
 let activeDay = 0;
 
+// The Train header names the workout you are looking at: which program and week, the session's
+// own name, and what state that day is in.
+function trainHeaderParts(){
+  const dateKey = viewKey(), dayIdx = activeDay;
+  const prog = programForDate(dateKey);
+  const live = isSessionDay(dayIdx);
+  const res = live ? Session.resolve(dateKey) : null;
+  const session = res?.source === 'row' ? res.session : null;
+  const day = live ? (session ? Session.toLegacyWorkout(session) : getWorkout(dayIdx, dateKey)) : getWorkout(dayIdx, dateKey);
+  const covered = !session && res?.spec?.coveredBy;
+  const doneNow = session ? session.status === 'done' : (state.workoutsCompleted || []).includes(`${dateKey}-${dayIdx}`);
+  const rest = !!day?.rest || !!covered;
+  const title = covered ? 'Rest' : (day?.name || (rest ? 'Rest' : 'Workout'));
+  const eyebrow = [prog?.name, `Week ${getWeekNum(dateKey)}`].filter(Boolean).join(' · ');
+  const dateLabel = isViewingToday() ? 'Today' : formatViewDateLabel(dateKey);
+  let state_ = 'Tap sets to mark complete';
+  if(!live) state_ = 'Plan preview';
+  else if(session?.status === 'skipped') state_ = 'Skipped';
+  else if(doneNow) state_ = 'Session complete';
+  else if(rest) state_ = 'Rest day';
+  else if(res?.spec?.kind === 'sport') state_ = res?.spec?.optional ? 'Optional session' : 'Sport session';
+  else if(isViewingFuture()) state_ = 'Planned';
+  else if(!isViewingToday()) state_ = 'Past day · read-only';
+  return {eyebrow, title, sub: `${dateLabel} · ${state_}`};
+}
+function renderTrainHeader(){
+  const {eyebrow, title, sub} = trainHeaderParts();
+  const set = (id, text) => { const el = document.getElementById(id); if(el) el.textContent = text; };
+  set('train-eyebrow', eyebrow); set('train-title', title); set('train-sub', sub);
+}
+// Day pills: the three-letter label only. State is shown, not spelled out — a dot for a completed
+// session, a struck label for a skipped one, a ring on the real today when it isn't the one selected.
+function dayPillState(i){
+  const date = shiftDateKey(viewKey(), i - getViewDayIdx());
+  const r = Session.resolve(date);
+  const dayIdx = getDayIdxFromDate(date);
+  const doneLegacy = (state.workoutsCompleted || []).includes(`${date}-${dayIdx}`);
+  const cls = [];
+  if(r.session?.status === 'skipped') cls.push('skipped');
+  else if(r.session?.status === 'done' || (r.source === 'legacy' && doneLegacy)) cls.push('done');
+  if(date === todayKey() && i !== activeDay) cls.push('is-today');
+  return cls.join(' ');
+}
 function renderWorkout(){
   renderDateNav('date-nav-workout');
-  const pills = getPlanWorkouts().map((d,i)=>`<button class="pill ${i===activeDay?'active':''}" onclick="setDay(${i})">${d.label}<small>${d.name}</small></button>`).join('');
+  renderTrainHeader();
+  const pills = getPlanWorkouts().map((d,i)=>`<button class="pill ${i===activeDay?'active':''} ${dayPillState(i)}" onclick="setDay(${i})" title="${escapeHtml(d?.name || 'Rest')}">${d.label}</button>`).join('');
   document.getElementById('day-pills').innerHTML=pills;
   renderWorkoutContent();
 }
@@ -4882,6 +5384,7 @@ function renderBlockWorkout({day, blocks, session, dateKey, preview, actions, me
       <span class="workout-meta-time">~${estimateWorkoutMinutes(activeDay, day)} min</span>
       <span class="workout-meta-info">${itemCount} exercise${itemCount === 1 ? '' : 's'} · ${blocks.length} block${blocks.length === 1 ? '' : 's'}${metaNote}${session && Session.isUnsynced(session.id) ? UNSYNCED_NOTE : ''}</span>
       <button class="btn btn-ghost btn-sm editable-only" onclick="PlanEditor.open(${activeDay})" title="Edit workout">Edit</button>
+      <button class="btn btn-ghost btn-sm" onclick="Programs.open()" title="Programs">Programs</button>
     </div>${actions}`;
   const editable = !!session && Session.isLive(session) && !preview && isViewingToday();
   visibleBlocks(blocks).forEach(({blk, b}) => {
@@ -5023,6 +5526,7 @@ function renderWorkoutContent(){
       <span class="workout-meta-time">~${estMin} min</span>
       <span class="workout-meta-info">${parts.join(' · ')}${metaNote}${session && Session.isUnsynced(session.id) ? UNSYNCED_NOTE : ''}</span>
       <button class="btn btn-ghost btn-sm editable-only" onclick="PlanEditor.open(${activeDay})" title="Edit workout">Edit</button>
+      <button class="btn btn-ghost btn-sm" onclick="Programs.open()" title="Programs">Programs</button>
     </div>${actions}`;
     const editable = !!session && Session.isLive(session) && !preview && isViewingToday();
     // For a session, walk the snapshot's own items so a hidden or reordered item keeps its storage index.
@@ -7929,7 +8433,7 @@ const CLOSE_SVG = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><p
 function defaultCategoryFor(blockType){ return LIBRARY_CATEGORIES.includes(blockType) ? blockType : blockType === 'cooldown' ? 'mobility' : 'strength'; }
 // How many of the program's workouts use an exercise (the draft template standing in for its saved copy).
 function exerciseUsage(id, draft){
-  const prog = getActiveProgram();
+  const prog = draft?.progId ? state.plan?.programs?.[draft.progId] : getActiveProgram();
   const templates = Object.values(prog?.templates || {}).map(t => draft?.tplId === t.id ? draft.tpl : t);
   if(draft?.tplId && !templates.some(t => t?.id === draft.tplId)) templates.push(draft.tpl);
   return templates.filter(t => (t?.blocks || []).some(b => (b.items || []).some(it => it.exerciseId === id))).length;
@@ -7947,13 +8451,24 @@ const PlanEditor = {
   confirm: null,      // {b, i, kind:'rename'|'exists', name, otherId}
   focus: null,
 
-  open(dayIdx, focus = null){
-    const prog = getActiveProgram();
-    const spec = prog?.schedule?.[dayIdx];
+  // The editor works on any program, not only the active one: a weekday of its schedule
+  // (dayIdx) or a template that no weekday points at yet (tplId).
+  prog(){ const d = this.draft; return d ? (d.progId ? state.plan?.programs?.[d.progId] : getActiveProgram()) : null; },
+  openTemplate(progId, tplId){
+    const prog = state.plan?.programs?.[progId];
+    if(!prog?.templates?.[tplId]) return;
+    const dayIdx = (prog.schedule || []).findIndex(sp => sp?.templateId === tplId);
+    this.open(dayIdx >= 0 ? dayIdx : null, null, progId, tplId);
+  },
+  open(dayIdx, focus = null, progId = null, forceTplId = null){
+    const prog = progId ? state.plan?.programs?.[progId] : getActiveProgram();
+    const spec = dayIdx == null ? {kind: 'template', templateId: forceTplId} : prog?.schedule?.[dayIdx];
     if(!prog || !spec) return;
     const clone = v => JSON.parse(JSON.stringify(v));
-    const tplId = spec.templateId && prog.templates?.[spec.templateId] ? spec.templateId : null;
+    const wanted = forceTplId || spec.templateId;
+    const tplId = wanted && prog.templates?.[wanted] ? wanted : null;
     this.draft = {
+      progId: progId || null,
       dayIdx, tplId, spec: clone(spec), lib: clone(prog.library || {}), sharedBlocks: clone(prog.blocks || {}),
       tpl: tplId ? {...clone(prog.templates[tplId]), blocks: resolveBlocks(prog, clone(prog.templates[tplId]).blocks)} : null,
       get name(){ return (this.spec.kind === 'sport' ? this.spec.name ?? this.tpl?.name : this.tpl ? this.tpl.name : this.spec.name) ?? ''; },
@@ -7974,6 +8489,7 @@ const PlanEditor = {
     document.getElementById('plan-editor').classList.remove('open');
     if(!document.getElementById('move-sheet').classList.contains('open')) document.body.classList.remove('plan-editor-open');
     this.draft = null; this.view = 'template'; this.exForm = null; this.confirm = null; this.focus = null;
+    if(Sheet.owner === Programs) Programs.render();
   },
   item(b, i){ return this.draft?.tpl?.blocks?.[b]?.items?.[i] || null; },
 
@@ -8019,12 +8535,12 @@ const PlanEditor = {
   ensureTemplate(){
     const d = this.draft;
     if(d.tpl) return d.tpl;
-    const prog = getActiveProgram();
-    const base = LEGACY_TEMPLATE_IDS[d.dayIdx] || `day-${d.dayIdx}`;
+    const prog = this.prog();
+    const base = d.dayIdx == null ? 'tpl' : (LEGACY_TEMPLATE_IDS[d.dayIdx] || `day-${d.dayIdx}`);
     let id = base;
     for(let n = 2; prog.templates[id]; n++) id = `${base}-${n}`;
     d.tplId = id;
-    d.tpl = {id, name: d.spec.name || '', desc: d.spec.desc || '', legacyDayIdx: +d.dayIdx, fullHiit: false, blocks: []};
+    d.tpl = {id, name: d.spec.name || '', desc: d.spec.desc || '', ...(d.dayIdx == null ? {} : {legacyDayIdx: +d.dayIdx}), fullHiit: false, blocks: []};
     return d.tpl;
   },
   addBlock(){
@@ -8172,7 +8688,7 @@ const PlanEditor = {
     const used = exerciseUsage(f.id, this.draft);
     if(used){ f.error = `Used in ${used} workout${used === 1 ? '' : 's'} — remove it there first`; this.render(); return; }
     if(exerciseInSessions(f.id)){ f.error = 'Logged in a session already — it stays in the library'; this.render(); return; }
-    if((getActiveProgram()?.conditioningPool || []).includes(f.id)){ f.error = 'In the HIIT picker list — remove it there first'; this.render(); return; }
+    if((this.prog()?.conditioningPool || []).includes(f.id)){ f.error = 'In the HIIT picker list — remove it there first'; this.render(); return; }
     delete lib[f.id];
     this.exForm = null;
     this.view = 'library';
@@ -8358,8 +8874,8 @@ const PlanEditor = {
   save(){
     const d = this.draft;
     if(!d) return;
-    const prog = getActiveProgram();
-    if(!prog || !prog.schedule?.[d.dayIdx]){ this.close(true); return; }
+    const prog = this.prog();
+    if(!prog || (d.dayIdx != null && !prog.schedule?.[d.dayIdx])){ this.close(true); return; }
     prog.library = d.lib;
     if(d.tplId && d.tpl){
       d.tpl.blocks = (d.tpl.blocks || []).filter(b => b && Array.isArray(b.items));
@@ -8373,15 +8889,15 @@ const PlanEditor = {
         return {ref};
       });
       prog.templates[d.tplId] = d.tpl;
-      if(!prog.schedule[d.dayIdx].templateId) prog.schedule[d.dayIdx].templateId = d.tplId;
+      if(d.dayIdx != null && !prog.schedule[d.dayIdx].templateId) prog.schedule[d.dayIdx].templateId = d.tplId;
     }
-    const spec = prog.schedule[d.dayIdx];
-    if(spec.kind === 'rest' || spec.kind === 'sport'){ spec.name = d.spec.name; spec.desc = d.spec.desc; }
+    const spec = d.dayIdx == null ? null : prog.schedule[d.dayIdx];
+    if(spec && (spec.kind === 'rest' || spec.kind === 'sport')){ spec.name = d.spec.name; spec.desc = d.spec.desc; }
     prog.conditioningPool = (prog.conditioningPool || []).filter(id => prog.library[id]);
-    const dayIdx = d.dayIdx;
+    const dayIdx = d.dayIdx, wasActive = prog === getActiveProgram();
     savePlan();
     this.close(true);
-    const shown = isSessionDay(dayIdx) ? state.sessions?.[viewKey()] : null;
+    const shown = wasActive && dayIdx != null && isSessionDay(dayIdx) ? state.sessions?.[viewKey()] : null;
     if(shown && Session.isStarted(shown)) planUpdatedFor = shown.id;   // the Train tab says it applies next time
     if(typeof renderActivePage === 'function') renderActivePage();
     toast(shown?.status === 'done' ? 'Plan updated · this completed session keeps its snapshot'
