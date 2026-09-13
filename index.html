@@ -414,8 +414,10 @@ body.share-open{overflow:hidden}
 .share-stats{display:flex;flex-wrap:wrap;gap:var(--s-2);justify-content:center}
 .share-pills .share-pill,.share-stats .share-pill{height:var(--tap)}
 .share-stats .share-pill[disabled]{opacity:.4;cursor:default}
-.share-canvas-wrap{position:relative;background:var(--media-bg);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-elevated);width:min(320px, 75vw);aspect-ratio:9/16;display:flex;align-items:center;justify-content:center}
-.share-canvas-wrap canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+/* The preview declares the card's exact aspect and must not be shrunk by the column flexbox —
+   a squashed box used to stretch the canvas with it, which is what distorted the photo. */
+.share-canvas-wrap{position:relative;flex:0 0 auto;background:var(--media-bg);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-elevated);width:min(320px, 75vw);aspect-ratio:1080/1350;display:flex;align-items:center;justify-content:center}
+.share-canvas-wrap canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block}
 .share-canvas-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);font-size:var(--fs-caption);line-height:var(--lh-caption);font-weight:500;}
 .share-actions{flex:0 0 auto;display:flex;gap:var(--s-3);padding:var(--s-3) var(--s-5) calc(var(--s-5) + env(safe-area-inset-bottom));background:var(--bg-elevated)}
 .share-actions .btn, .share-actions .share-ig-btn{flex:1}
@@ -1103,7 +1105,7 @@ body[data-theme="dark"] .theme-switch::after{transform:translateX(20px)}
   <div class="share-body">
     <div class="share-canvas-wrap">
       <div class="share-canvas-loading" id="share-loading">Rendering…</div>
-      <canvas id="share-canvas" width="1080" height="1920"></canvas>
+      <canvas id="share-canvas" width="1080" height="1350"></canvas>
     </div>
     <div class="share-stats-wrap">
       <span class="share-stats-label">Add up to four stats</span>
@@ -6778,7 +6780,7 @@ function statsDiscipline(period = 30){
 // ===== Story-card renderer =====
 const Cards = {
   W: 1080,
-  H: 1920,
+  H: 1350,
   current: 'session',
   period: 'week', // for cards that need period (currently unused, reserved)
   fontsReady: false,
@@ -7000,16 +7002,14 @@ const Cards = {
   // One layout for every card: a centred group — title, then the chosen stats — sitting in the
   // upper-middle third, and a small wordmark at the foot. White on near-black, nothing else.
   PAD: 96,
-  // Instagram Story safe area: IG covers the top ~250px and bottom ~250px of the 9:16 frame
-  // with its own UI. Everything readable lives between SAFE_TOP and SAFE_BOTTOM; the
-  // background may still run full-bleed behind IG's chrome.
-  SAFE_TOP: 250,
-  SAFE_BOTTOM: 1670,
+  // Safe band, proportional to the card height (the old 250/1670 of a 1920-tall story).
+  SAFE_TOP: 176,
+  SAFE_BOTTOM: 1174,
   BG: '#0A0A0B',
   TEXT: '#ffffff',
   TEXT_2: 'rgba(255,255,255,0.85)',
   TEXT_3: 'rgba(255,255,255,0.70)',
-  GROUP_CENTER: 760,            // optical centre of the content group
+  GROUP_CENTER: 534,            // optical centre of the content group
   TITLE_SIZE: 68,
   LABEL_SIZE: 28,
   VALUE_SIZE: 58,
@@ -7022,37 +7022,32 @@ const Cards = {
     ctx.fillRect(0, 0, this.W, this.H);
   },
 
-  // Photo: full-bleed, with a wide feathered scrim behind the content group only. No panel,
-  // no blur, no edge — the darkening has to be invisible as a shape.
+  // Cover-fit that preserves the source aspect exactly: one scale for both axes, overflow
+  // centred. The photo is drawn once, from the full-resolution source — no intermediate
+  // canvas, no downscale pass — and nothing is laid over it.
+  photoFit(img){
+    const scale = Math.max(this.W / img.width, this.H / img.height);
+    const dw = img.width * scale, dh = img.height * scale;
+    return {scale, dw, dh, dx: (this.W - dw) / 2, dy: (this.H - dh) / 2};
+  },
   drawPhotoBackground(ctx){
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, this.W, this.H);
     const img = this.photo;
-    const targetRatio = this.W / this.H, imgRatio = img.width / img.height;
-    let dw, dh, dx, dy;
-    if(imgRatio > targetRatio){ dh = this.H; dw = dh * imgRatio; dx = (this.W - dw) / 2; dy = 0; }
-    else { dw = this.W; dh = dw / imgRatio; dx = 0; dy = (this.H - dh) / 2; }
-    ctx.drawImage(img, dx, dy, dw, dh);
-
-    const g = ctx.createRadialGradient(this.W / 2, this.GROUP_CENTER, 0, this.W / 2, this.GROUP_CENTER, 900);
-    g.addColorStop(0,    'rgba(0,0,0,0.72)');
-    g.addColorStop(0.30, 'rgba(0,0,0,0.66)');
-    g.addColorStop(0.62, 'rgba(0,0,0,0.30)');
-    g.addColorStop(1,    'rgba(0,0,0,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, this.W, this.H);
-
-    // and a much softer one under the wordmark, which sits outside the group's scrim
-    const wg = ctx.createRadialGradient(this.W / 2, this.SAFE_BOTTOM - 20, 0, this.W / 2, this.SAFE_BOTTOM - 20, 440);
-    wg.addColorStop(0,   'rgba(0,0,0,0.70)');
-    wg.addColorStop(0.4, 'rgba(0,0,0,0.42)');
-    wg.addColorStop(1,   'rgba(0,0,0,0)');
-    ctx.fillStyle = wg;
-    ctx.fillRect(0, this.SAFE_BOTTOM - 480, this.W, 480);
+    const f = this.photoFit(img);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, f.dx, f.dy, f.dw, f.dh);
+    // An image smaller than the card has to be enlarged; say so rather than quietly blurring it.
+    if(f.scale > 1 && this.photoWarned !== img.src){
+      this.photoWarned = img.src;
+      toast(`That photo is ${img.width}×${img.height} — smaller than the card, so it will look soft`);
+    }
   },
 
+  // Legibility over a photo comes from the type alone: no scrim, no panel, no vignette.
   shadow(ctx, on){
-    if(on && this.photo){ ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = 12; ctx.shadowOffsetY = 2; }
+    if(on && this.photo){ ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 16; ctx.shadowOffsetY = 2; }
     else { ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0; }
   },
 
@@ -7097,8 +7092,13 @@ const Cards = {
     this.shadow(ctx, true);
 
     ctx.font = `700 ${L.size}px "Inter", sans-serif`;
-    ctx.fillStyle = this.TEXT;
     const lineH = Math.round(L.size * 1.16);
+    if(this.photo){
+      ctx.lineWidth = 3; ctx.lineJoin = 'round';
+      ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+      L.lines.forEach((line, i) => ctx.strokeText(line, cx, L.top + i * lineH));
+    }
+    ctx.fillStyle = this.TEXT;
     L.lines.forEach((line, i) => ctx.fillText(line, cx, L.top + i * lineH));
 
     const colW = L.cols === 2 ? (this.W - this.PAD * 2) / 2 - 20 : this.W - this.PAD * 2;
