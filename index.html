@@ -409,6 +409,11 @@ body.share-open{overflow:hidden}
 .share-pills{flex:0 0 auto;display:flex;gap:var(--s-2);padding:var(--s-2) var(--s-5);overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;-ms-overflow-style:none}
 .share-pills::-webkit-scrollbar{display:none}
 .share-body{flex:1 1 auto;display:flex;flex-direction:column;align-items:center;gap:var(--s-3);padding:var(--s-3) var(--s-5);overflow-y:auto}
+.share-stats-wrap{display:flex;flex-direction:column;gap:var(--s-2);width:100%}
+.share-stats-label{font-size:var(--fs-caption);line-height:var(--lh-caption);color:var(--text-secondary)}
+.share-stats{display:flex;flex-wrap:wrap;gap:var(--s-2);justify-content:center}
+.share-pills .share-pill,.share-stats .share-pill{height:var(--tap)}
+.share-stats .share-pill[disabled]{opacity:.4;cursor:default}
 .share-canvas-wrap{position:relative;background:var(--media-bg);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-elevated);width:min(320px, 75vw);aspect-ratio:9/16;display:flex;align-items:center;justify-content:center}
 .share-canvas-wrap canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 .share-canvas-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);font-size:var(--fs-caption);line-height:var(--lh-caption);font-weight:500;}
@@ -418,7 +423,7 @@ body.share-open{overflow:hidden}
 .share-ig-btn:active{opacity:.85}
 .share-ig-btn svg{width:16px;height:16px;stroke-width:2}
 .share-photo-controls{display:flex;gap:var(--s-2);justify-content:center;align-items:center;width:100%}
-.share-photo-btn{position:relative;height:36px;display:flex;align-items:center;gap:var(--s-2);padding:0 var(--s-4);background:var(--fill);border:0;border-radius:var(--r-pill);color:var(--text-primary);font-family:var(--font-sans);font-size:var(--fs-caption);font-weight:500;cursor:pointer;transition:var(--t-ui)}
+.share-photo-btn{position:relative;height:var(--tap);display:flex;align-items:center;gap:var(--s-2);padding:0 var(--s-4);background:var(--fill);border:0;border-radius:var(--r-pill);color:var(--text-primary);font-family:var(--font-sans);font-size:var(--fs-caption);font-weight:500;cursor:pointer;transition:var(--t-ui)}
 .share-photo-btn:hover{background:var(--fill-strong)}
 .share-photo-btn svg{width:16px;height:16px;stroke-width:2}
 .share-photo-btn.danger{color:var(--text-secondary)}
@@ -1099,6 +1104,10 @@ body[data-theme="dark"] .theme-switch::after{transform:translateX(20px)}
     <div class="share-canvas-wrap">
       <div class="share-canvas-loading" id="share-loading">Rendering…</div>
       <canvas id="share-canvas" width="1080" height="1920"></canvas>
+    </div>
+    <div class="share-stats-wrap">
+      <span class="share-stats-label">Add up to four stats</span>
+      <div class="share-stats" id="share-stats"></div>
     </div>
     <div class="share-photo-controls" id="share-photo-controls">
       <input type="file" id="share-photo-input" accept="image/*" hidden onchange="Cards.handlePhotoSelect(this.files[0])">
@@ -6770,22 +6779,152 @@ function statsDiscipline(period = 30){
 const Cards = {
   W: 1080,
   H: 1920,
-  current: 'workouts',
+  current: 'session',
   period: 'week', // for cards that need period (currently unused, reserved)
   fontsReady: false,
 
   photo: null, // HTMLImageElement when user has selected a photo
 
   TYPES: [
-    {id:'session',    label:'Session',    filename:'session'},
-    {id:'workouts',   label:'Workouts',   filename:'workouts'},
-    {id:'macros',     label:'Macros',     filename:'macros'},
-    {id:'pr',         label:'PR',         filename:'pr'},
-    {id:'streak',     label:'Streak',     filename:'streak'},
-    {id:'week',       label:'Week',       filename:'week-recap'},
-    {id:'month',      label:'Month',      filename:'month-recap'},
-    {id:'discipline', label:'Discipline', filename:'discipline'},
+    {id:'session', label:'Session', filename:'session'},
+    {id:'week',    label:'Week',    filename:'week-recap'},
+    {id:'pr',      label:'PR',      filename:'pr'},
   ],
+
+  // ----- selectable secondary stats -----
+  // Each card is a fixed hero plus up to four stats the user picks. A stat whose get()
+  // returns null has no data behind it: the chip is disabled and it never renders.
+  MAX_STATS: 4,
+  DEFAULT_STATS: {
+    session: ['toplift', 'reps', 'duration'],
+    week:    ['sets', 'protein', 'streak'],
+    pr:      ['prev', 'date', 'reps'],
+  },
+  weekLabel(){
+    const wk = getWeekNum(), total = programWeeks(getActiveProgram());
+    return {value: `${wk}/${total}`, sub: getPhase(wk)?.label || ''};
+  },
+  proteinToday(){
+    const log = state.foodLog?.[todayKey()] || [];
+    const p = log.reduce((a, b) => a + (b.prot || 0), 0);
+    return p > 0 ? {value: String(p), unit: 'g'} : null;
+  },
+  STATS: {
+    session: [
+      {id:'reps',     label:'Total reps', get(){ const t = statsToday(); return t.totalReps ? {value: String(t.totalReps)} : null; }},
+      {id:'toplift',  label:'Top lift',   get(){ const t = statsToday(); return t.topLift.weight ? {value: String(t.topLift.weight), unit:'lbs', sub: t.topLift.name, accent: true} : null; }},
+      {id:'duration', label:'Duration',   get(){ const t = statsToday(); if(t.isRest) return null;
+                                                 const m = estimateWorkoutMinutes(getTodayDayIdx()); return m ? {value: String(m), unit:'min'} : null; }},
+      {id:'blocks',   label:'Blocks',     get(){ const b = Cards.blockProgress(); return b ? {value: `${b.done}/${b.total}`} : null; }},
+      {id:'week',     label:'Week',       get(){ return Cards.weekLabel(); }},
+      {id:'protein',  label:'Protein',    get(){ return Cards.proteinToday(); }},
+      {id:'streak',   label:'Streak',     get(){ const d = statsCurrentStreak(); return d ? {value: String(d), unit:'days'} : null; }},
+    ],
+    week: [
+      {id:'sets',     label:'Total sets', get(){ const w = statsWeek(); return w.totalSets ? {value: String(w.totalSets)} : null; }},
+      {id:'protein',  label:'Avg protein',get(){ const w = statsWeek(); return w.proteinAvg ? {value: String(w.proteinAvg), unit:'g'} : null; }},
+      {id:'calories', label:'Avg calories',get(){ const w = statsWeek(); return w.calAvg ? {value: String(w.calAvg), unit:'kcal'} : null; }},
+      {id:'weight',   label:'Weight',     get(){ const d = Cards.weightChange(); return d ? {value: (d > 0 ? '+' : '') + d.toFixed(1), unit:'lbs'} : null; }},
+      {id:'streak',   label:'Streak',     get(){ const d = statsCurrentStreak(); return d ? {value: String(d), unit:'days'} : null; }},
+      {id:'dots',     label:'This week',  get(){ const w = statsWeek(); const today = todayKey();
+                                                 return {kind:'dots', dates: w.dates.map(d => ({date: d, status: d > today ? 'future' : statsTrainedOn(d)}))}; }},
+      {id:'week',     label:'Week',       get(){ return Cards.weekLabel(); }},
+    ],
+    pr: [
+      {id:'prev',     label:'Previous',   get(){ const p = Cards.prDetail(); return p && p.prev != null ? {value: String(p.prev), unit:'lbs', sub: `+${p.weight - p.prev} lbs`} : null; }},
+      {id:'date',     label:'Set on',     get(){ const p = Cards.prDetail();
+                                                 return p && p.date ? {value: new Date(p.date + 'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})} : null; }},
+      {id:'reps',     label:'Reps at it', get(){ const p = Cards.prDetail(); return p && p.reps ? {value: String(p.reps)} : null; }},
+      {id:'week',     label:'Week',       get(){ return Cards.weekLabel(); }},
+      {id:'total',    label:'PRs logged', get(){ const n = Object.values(state.prs || {}).filter(w => +w > 0).length;
+                                                 return n ? {value: String(n)} : null; }},
+    ],
+  },
+  // Blocks finished in today's session, from the snapshot when there is one.
+  blockProgress(){
+    const s = state.sessions?.[todayKey()];
+    const blocks = s?.snapshot?.blocks;
+    if(!blocks?.length) return null;
+    let done = 0, total = 0;
+    visibleBlocks(blocks).forEach(({blk, b}) => {
+      const items = visibleItems(blk);
+      if(!items.length) return;
+      total++;
+      const all = items.every(({item, i}) => {
+        const cells = Session.sets(s, b, i);
+        return isSetItem(item) ? Array.from({length: +item.sets}, (_, k) => cells[k]?.done).every(Boolean) : !!cells[0]?.done;
+      });
+      if(all) done++;
+    });
+    return total ? {done, total} : null;
+  },
+  // Change across the weights logged in the current week.
+  weightChange(){
+    const w = statsWeek();
+    const inWeek = (state.weights || []).filter(x => x.date >= w.start && x.date <= w.end);
+    if(inWeek.length < 2) return null;
+    const d = +inWeek[inWeek.length - 1].lbs - +inWeek[0].lbs;
+    return Math.abs(d) < 0.05 ? null : d;
+  },
+  // The best PR plus whatever the logs can say about how it was set.
+  prDetail(){
+    const pr = statsBestPR();
+    if(!pr) return null;
+    let date = null, reps = null, prev = null;
+    Object.entries(state.setLog || {}).sort((a, b) => a[0].localeCompare(b[0])).forEach(([d, days]) => {
+      Object.entries(days || {}).forEach(([dayIdx, exs]) => {
+        const day = getWorkout(+dayIdx, d);
+        Object.entries(exs || {}).forEach(([ei, sets]) => {
+          if(day?.exercises?.[+ei]?.name !== pr.name) return;
+          Object.values(sets || {}).forEach(c => {
+            const wgt = +c.weight || 0;
+            if(wgt === pr.weight && !date){ date = d; reps = +c.reps || null; }
+            if(wgt > 0 && wgt < pr.weight && (prev == null || wgt > prev)) prev = wgt;
+          });
+        });
+      });
+    });
+    return {...pr, date, reps, prev};
+  },
+  statSelection(type = this.current){
+    const avail = (this.STATS[type] || []).map(s => s.id);
+    const saved = state.settings?.cardStats?.[type];
+    const list = Array.isArray(saved) ? saved.filter(id => avail.includes(id)) : (this.DEFAULT_STATS[type] || []);
+    return list.slice(0, this.MAX_STATS);
+  },
+  // localStorage only: card choices are a per-device preference, never pushed to the backend.
+  setStatSelection(type, ids){
+    state.settings = state.settings || {};
+    state.settings.cardStats = {...(state.settings.cardStats || {}), [type]: ids};
+    save();
+  },
+  toggleStat(id){
+    const type = this.current, cur = this.statSelection(type);
+    const next = cur.includes(id) ? cur.filter(x => x !== id)
+      : cur.length >= this.MAX_STATS ? cur : [...cur, id];
+    this.setStatSelection(type, next);
+    this.renderStatPicker();
+    this.render();
+  },
+  statCells(type = this.current){
+    return this.statSelection(type).map(id => {
+      const def = (this.STATS[type] || []).find(x => x.id === id);
+      const v = def && def.get();
+      return v ? {label: def.label, ...v} : null;
+    }).filter(Boolean);
+  },
+  renderStatPicker(){
+    const el = document.getElementById('share-stats');
+    if(!el) return;
+    const type = this.current, sel = this.statSelection(type);
+    el.innerHTML = (this.STATS[type] || []).map(st => {
+      const has = !!st.get(), on = sel.includes(st.id), full = !on && sel.length >= this.MAX_STATS;
+      const off = !has || full;
+      return `<button class="share-pill${on ? ' active' : ''}" ${off ? 'disabled' : ''}
+        title="${!has ? 'Nothing logged for this yet' : full ? 'Pick up to four' : ''}"
+        onclick="Cards.toggleStat('${st.id}')">${st.label}</button>`;
+    }).join('');
+  },
 
   async ensureFonts(){
     if(this.fontsReady) return;
@@ -6807,11 +6946,14 @@ const Cards = {
   },
 
   open(initialType){
-    if(initialType && this.TYPES.some(t => t.id === initialType)) this.current = initialType;
+    // A card type that no longer exists (the five retired in Phase 9) falls back to the session.
+    this.current = initialType && this.TYPES.some(t => t.id === initialType) ? initialType
+      : this.TYPES.some(t => t.id === this.current) ? this.current : 'session';
     document.getElementById('share-backdrop').classList.add('open');
     document.getElementById('share-sheet').classList.add('open');
     document.body.classList.add('share-open');
     this.renderPills();
+    this.renderStatPicker();
     this.render();
   },
 
@@ -6824,6 +6966,7 @@ const Cards = {
   setType(id){
     this.current = id;
     this.renderPills();
+    this.renderStatPicker();
     this.render();
   },
 
@@ -6887,14 +7030,9 @@ const Cards = {
       this.drawFooter(ctx);
     }
     switch(this.current){
-      case 'session':    this.drawSession(ctx);    break;
-      case 'workouts':   this.drawWorkouts(ctx);   break;
-      case 'macros':     this.drawMacros(ctx);     break;
-      case 'pr':         this.drawPR(ctx);         break;
-      case 'streak':     this.drawStreak(ctx);     break;
-      case 'week':       this.drawWeek(ctx);       break;
-      case 'month':      this.drawMonth(ctx);      break;
-      case 'discipline': this.drawDiscipline(ctx); break;
+      case 'week': this.drawWeek(ctx); break;
+      case 'pr':   this.drawPR(ctx);   break;
+      default:     this.drawSession(ctx);
     }
     loading.style.display = 'none';
   },
@@ -7029,8 +7167,8 @@ const Cards = {
 
   drawFooter(ctx){
     const wk = getWeekNum();
-    const phaseIdx = wk<=4?0:wk<=8?1:wk<=12?2:3;
-    const phase = PHASES[phaseIdx].label;
+    const total = programWeeks(getActiveProgram());
+    const phase = getPhase(wk)?.label || '';
     ctx.strokeStyle = this.BORDER;
     ctx.beginPath();
     ctx.moveTo(this.PAD, this.SAFE_BOTTOM - 80);
@@ -7040,7 +7178,7 @@ const Cards = {
     ctx.fillStyle = this.TEXT_3;
     ctx.textBaseline = 'top';
     ctx.textAlign = 'left';
-    ctx.fillText(`WEEK ${String(wk).padStart(2,'0')} / 16`, this.PAD, this.SAFE_BOTTOM - 48);
+    ctx.fillText(`WEEK ${String(wk).padStart(2,'0')} / ${total}`, this.PAD, this.SAFE_BOTTOM - 48);
     ctx.textAlign = 'right';
     ctx.fillText(phase.toUpperCase(), this.W - this.PAD, this.SAFE_BOTTOM - 48);
   },
@@ -7150,6 +7288,65 @@ const Cards = {
     });
   },
 
+  // Up to four chosen stats, as one even row (1–3) or a 2×2 grid (4), anchored so the
+  // block always ends just above the footer whatever the count. Hairlines, no boxes.
+  ellipsize(ctx, text, maxW){
+    let t = String(text ?? '');
+    if(ctx.measureText(t).width <= maxW) return t;
+    while(t.length > 1 && ctx.measureText(t + '…').width > maxW) t = t.slice(0, -1);
+    return t + '…';
+  },
+  statBlockHeight(cells, opts = {}){
+    if(!cells.length) return 0;
+    return Math.ceil(cells.length / (cells.length > 3 ? 2 : cells.length)) * (opts.rowH ?? 150);
+  },
+  drawStatCells(ctx, cells, opts = {}){
+    if(!cells.length) return;
+    const P = this.PAD, W = this.W;
+    const cols = cells.length > 3 ? 2 : cells.length;
+    const rows = Math.ceil(cells.length / cols);
+    const rowH = opts.rowH ?? 150;
+    const labelSize = opts.labelSize ?? 20, valueSize = opts.valueSize ?? 54;
+    const top = opts.bottom - rows * rowH;
+    const colW = (W - P * 2) / cols;
+    const dim = opts.dimColor || this.TEXT_3, faint = opts.faintColor || this.TEXT_4;
+    for(let r = 0; r < rows; r++){
+      const y = top + r * rowH;
+      ctx.strokeStyle = opts.hairline || this.BORDER;
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(P, y); ctx.lineTo(W - P, y); ctx.stroke();
+      for(let c = 0; c < cols; c++){
+        const cell = cells[r * cols + c];
+        if(!cell) continue;
+        const x = P + c * colW;
+        ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+        ctx.font = `700 ${labelSize}px "Inter", sans-serif`;
+        ctx.fillStyle = dim;
+        this.fillTextSpaced(ctx, String(cell.label).toUpperCase(), x, y + 28, 3);
+        if(cell.kind === 'dots'){
+          this.drawDotGrid(ctx, cell.dates, x, y + 74, {dotR: 9, gap: 12});
+          continue;
+        }
+        const valueY = y + 62;
+        ctx.font = `500 ${valueSize}px "Inter", sans-serif`;
+        ctx.fillStyle = cell.accent ? this.ACCENT : (opts.valueColor || this.TEXT);
+        const v = this.ellipsize(ctx, cell.value, colW - 40);
+        ctx.fillText(v, x, valueY);
+        if(cell.unit){
+          const vw = ctx.measureText(v).width;
+          ctx.font = `500 ${Math.round(valueSize * 0.45)}px "JetBrains Mono", monospace`;
+          ctx.fillStyle = dim;
+          ctx.fillText(cell.unit, x + vw + 10, valueY + valueSize - Math.round(valueSize * 0.52));
+        }
+        if(cell.sub){
+          ctx.font = `400 ${Math.round(labelSize * 1.1)}px "Inter", sans-serif`;
+          ctx.fillStyle = faint;
+          ctx.fillText(this.ellipsize(ctx, cell.sub, colW - 30), x, valueY + valueSize + 10);
+        }
+      }
+    }
+  },
+
   drawProgressBar(ctx, x, y, w, h, pct, opts = {}){
     const r = h / 2;
     // Track
@@ -7206,17 +7403,21 @@ const Cards = {
   drawCompactHero(ctx, eyebrow, hero, sub, stats){
     const W = this.W, P = this.PAD;
     const SB = this.SAFE_BOTTOM;
-    const heroSize = Math.min(hero.size || 168, 180);
+    const cells = stats || [];
+    // The stat block is laid out first, from the bottom of the panel up; the hero then takes
+    // whatever height is left, so four stats never collide with a big number.
+    const rowH = 112;
+    const statsBottom = SB - 26;
+    const statsTop = cells.length ? statsBottom - this.statBlockHeight(cells, {rowH}) : statsBottom;
 
     // Anchored Y positions inside the panel (panel top = SB - 600)
     const dateY        = SB - 510;
     const eyebrowY     = SB - 458;
     const heroY        = SB - 400;
+    const room         = statsTop - 96 - heroY;            // space for the hero plus its caption
+    const heroSize     = Math.max(84, Math.min(hero.size || 168, 180, room));
     const heroBottom   = heroY + heroSize;
-    const subY         = heroBottom + 18;
-    const dividerY     = SB - 142;
-    const statsLabelY  = SB - 108;
-    const statsValueY  = SB - 62;
+    const subY         = heroBottom + 14;
 
     // 1. Date · week strip (mono caps, dim)
     const wk = getWeekNum();
@@ -7225,7 +7426,7 @@ const Cards = {
     ctx.fillStyle = 'rgba(255,255,255,0.5)';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    this.fillTextSpaced(ctx, `${dateStr}  ·  WEEK ${String(wk).padStart(2,'0')} / 16`, P, dateY, 2);
+    this.fillTextSpaced(ctx, `${dateStr}  ·  WEEK ${String(wk).padStart(2,'0')} / ${programWeeks(getActiveProgram())}`, P, dateY, 2);
 
     // 2. Accent eyebrow (small, tracked, premium feel)
     ctx.font = '700 25px "Inter", sans-serif';
@@ -7252,390 +7453,108 @@ const Cards = {
       ctx.fillText(sub, P, subY);
     }
 
-    // 5. Hairline divider above the stat row
-    ctx.strokeStyle = 'rgba(255,255,255,0.13)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(P, dividerY);
-    ctx.lineTo(W - P, dividerY);
-    ctx.stroke();
-
-    // 6. 2-column stat row (tracked caps label + bold value)
-    if(stats && stats.length){
-      const colW = (W - P*2) / stats.length;
-      stats.forEach((s, i) => {
-        const x = P + i * colW;
-        ctx.font = '700 17px "Inter", sans-serif';
-        ctx.fillStyle = 'rgba(255,255,255,0.5)';
-        ctx.textAlign = 'left';
-        this.fillTextSpaced(ctx, s.label.toUpperCase(), x, statsLabelY, 3);
-        ctx.font = '600 34px "Inter", sans-serif';
-        ctx.fillStyle = '#fff';
-        ctx.fillText(`${s.value}${s.unit ? ' ' + s.unit : ''}`, x, statsValueY);
-      });
-    }
+    // 5. The chosen stats, on the frosted panel
+    this.drawStatCells(ctx, cells, {bottom: statsBottom, rowH, labelSize: 17, valueSize: 36,
+      hairline: 'rgba(255,255,255,0.13)', valueColor: '#fff',
+      dimColor: 'rgba(255,255,255,0.55)', faintColor: 'rgba(255,255,255,0.4)'});
   },
 
   // ===== Per-card renderers =====
+  // Each card is the same shape: an accent eyebrow, one dominant hero, a quiet caption,
+  // then whichever secondary stats the user picked, anchored just above the footer.
+  EYEBROW_Y: 452,
+  HERO_Y: 560,
+  statsBottom(){ return this.SAFE_BOTTOM - 132; },
+
+  // The hero: a huge italic serif number, with an optional dimmed tail ("/23") and unit.
+  drawHero(ctx, main, opts = {}){
+    const size = opts.size || 340;
+    const y = opts.y ?? this.HERO_Y;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.font = `italic ${size}px "Instrument Serif", serif`;
+    ctx.fillStyle = opts.color || this.ACCENT;
+    const text = String(main);
+    ctx.fillText(text, this.PAD, y);
+    const w = ctx.measureText(text).width;
+    if(opts.tail){
+      ctx.font = `400 ${Math.round(size * 0.56)}px "Instrument Serif", serif`;
+      ctx.fillStyle = this.TEXT_3;
+      ctx.fillText(opts.tail, this.PAD + w + 16, y + Math.round(size * 0.25));
+    } else if(opts.unit){
+      ctx.font = `500 ${Math.round(size * 0.14)}px "JetBrains Mono", monospace`;
+      ctx.fillStyle = this.TEXT_3;
+      ctx.fillText(opts.unit, this.PAD + w + 20, y + size - Math.round(size * 0.30));
+    }
+    return y + size;
+  },
+
+  drawCard(ctx, {eyebrow, hero, caption, cells, photoHero}){
+    if(this.photo){
+      this.drawCompactHero(ctx, eyebrow, photoHero || {value: hero.main, size: 200, unit: hero.unit},
+        caption || '', cells);
+      return;
+    }
+    this.drawEyebrow(ctx, eyebrow, this.EYEBROW_Y);
+    const bottom = this.drawHero(ctx, hero.main, hero);
+    if(caption) this.drawSubline(ctx, caption, bottom + 44, {weight: 500, size: 40, color: this.TEXT_2});
+    this.drawStatCells(ctx, cells, {bottom: this.statsBottom()});
+  },
+
   drawSession(ctx){
     const t = statsToday();
-    const wk = getWeekNum();
-    const eyebrow = t.isRest
-      ? `${t.dayLabel} · Rest`
-      : (t.completed ? `${t.dayLabel} · Complete` : `${t.dayLabel} · In progress`);
-    if(this.photo){
-      const stats = [];
-      if(t.topLift.weight) stats.push({label:'Top lift', value:String(t.topLift.weight), unit:'lbs'});
-      stats.push({label:'Week', value:String(wk), unit:'/16'});
-      this.drawCompactHero(ctx,
-        eyebrow,
-        {value: t.isRest ? '—' : `${t.setsLogged}/${t.setsTotal}`, size: 240},
-        t.isRest ? 'recovery day' : `sets · ${t.dayName.toLowerCase()}`,
-        stats
-      );
-      return;
-    }
-    this.drawEyebrow(ctx, eyebrow, 460);
+    const cells = this.statCells('session');
+    const eyebrow = t.isRest ? `${t.dayLabel} · Rest`
+      : t.completed ? `${t.dayLabel} · Complete` : `${t.dayLabel} · In progress`;
     if(t.isRest){
-      this.drawHugeNumber(ctx, '—', 560, {size:340});
-      this.drawSubline(ctx, 'recovery day', 980, {weight:500, size:42, color:this.TEXT_2});
+      this.drawCard(ctx, {eyebrow, hero: {main: '—', size: 300}, caption: 'recovery day', cells,
+        photoHero: {value: '—', size: 180}});
       return;
     }
-    // Big "X / Y" sets count
-    ctx.font = `italic 320px "Instrument Serif", serif`;
-    ctx.fillStyle = this.ACCENT;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    const a = String(t.setsLogged);
-    ctx.fillText(a, this.PAD, 580);
-    const aw = ctx.measureText(a).width;
-    ctx.font = `400 180px "Instrument Serif", serif`;
-    ctx.fillStyle = this.TEXT_3;
-    ctx.fillText(`/${t.setsTotal}`, this.PAD + aw + 16, 660);
-
-    this.drawSubline(ctx, `sets · ${t.dayName.toLowerCase()}`, 980, {weight:500, size:42, color:this.TEXT_2});
-
-    this.drawStatGrid(ctx, [
-      {label:'Top lift', value: t.topLift.weight ? String(t.topLift.weight) : '—', unit: t.topLift.weight ? 'lbs' : '', accent:true},
-      {label:'Total reps', value: String(t.totalReps)},
-    ], this.SAFE_BOTTOM - 320);
-  },
-
-  drawWorkouts(ctx){
-    const {dates, monthLabel} = statsMonthDates();
-    const today = todayKey();
-    const entries = dates.map(d => {
-      if(d > today) return {date:d, status:'future'};
-      return {date:d, status: statsTrainedOn(d)};
+    this.drawCard(ctx, {
+      eyebrow,
+      hero: {main: t.setsLogged, tail: `/${t.setsTotal}`, size: 300},
+      caption: `sets · ${String(t.dayName || '').toLowerCase()}`,
+      cells,
+      photoHero: {value: `${t.setsLogged}/${t.setsTotal}`, size: 190},
     });
-    const trained = entries.filter(e => e.status === 'done').length;
-    const streak = statsCurrentStreak();
-    const best = statsBestPR();
-
-    if(this.photo){
-      this.drawCompactHero(ctx,
-        `Workouts · ${monthLabel}`,
-        {value: trained, size: 280},
-        'workouts this month',
-        [
-          {label:'Streak', value:String(streak), unit:'d'},
-          best ? {label:'Top lift', value:String(best.weight), unit:'lbs'} : {label:'Top lift', value:'—'},
-        ]
-      );
-      return;
-    }
-
-    this.drawEyebrow(ctx, `Workouts · ${monthLabel}`, 460);
-    // Hero sized down from 380→260: the italic-serif "2" had a low swash that
-    // overlapped the subline and dot-grid labels at the larger size.
-    this.drawHugeNumber(ctx, trained, 540, {size: 260});
-    const subY = 830;
-    this.drawSubline(ctx, 'workouts this month', subY, {weight:500, size:38, color:this.TEXT_2});
-
-    const gridY = subY + 80;
-    this.drawDotGrid(ctx, entries, this.PAD, gridY, {cols:7, dotR:16, gap:20, showLabels:true});
-
-    this.drawStatGrid(ctx, [
-      {label:'Current streak', value:String(streak), unit:'days', accent:true},
-      {label:'Top lift', value: best ? String(best.weight) : '—', unit: best ? 'lbs' : ''},
-    ], this.SAFE_BOTTOM - 280);
   },
 
-  drawMacros(ctx){
-    const log = state.foodLog?.[todayKey()] || [];
-    const cal = log.reduce((a,b)=>a+(b.cal||0),0);
-    const prot = log.reduce((a,b)=>a+(b.prot||0),0);
-    const carb = log.reduce((a,b)=>a+(b.carb||0),0);
-    const fat = log.reduce((a,b)=>a+(b.fat||0),0);
-    const targets = {cal:3300, prot:190, carb:425, fat:90};
-
-    if(this.photo){
-      this.drawCompactHero(ctx,
-        "Today's fuel",
-        {value: cal, size: 280, unit: '/ '+targets.cal},
-        'calories logged',
-        [
-          {label:'Protein', value:String(prot), unit:'g'},
-          {label:'Carbs',   value:String(carb), unit:'g'},
-        ]
-      );
-      return;
-    }
-
-    this.drawEyebrow(ctx, "Today's fuel", 460);
-
-    // Big calorie number
-    ctx.font = `italic 320px "Instrument Serif", serif`;
-    ctx.fillStyle = this.ACCENT;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    ctx.fillText(String(cal), this.PAD, 540);
-    const w = ctx.measureText(String(cal)).width;
-    ctx.font = '500 42px "JetBrains Mono", monospace';
-    ctx.fillStyle = this.TEXT_3;
-    ctx.fillText(`/ ${targets.cal}`, this.PAD + w + 22, 660);
-
-    this.drawSubline(ctx, 'calories', 870, {weight:500, size:38, color:this.TEXT_2});
-
-    // Macro bars (anchored to safe bottom so they never clip)
-    const bars = [
-      {label:'Protein', val:prot, target:targets.prot, unit:'g', accent:true},
-      {label:'Carbs',   val:carb, target:targets.carb, unit:'g'},
-      {label:'Fat',     val:fat,  target:targets.fat,  unit:'g'},
-    ];
-    const barRowH = 110;
-    let by = this.SAFE_BOTTOM - 200 - bars.length * barRowH;
-    bars.forEach(b => {
-      ctx.font = '700 22px "Inter", sans-serif';
-      ctx.fillStyle = this.TEXT_3;
-      ctx.textAlign = 'left';
-      this.fillTextSpaced(ctx, b.label.toUpperCase(), this.PAD, by, 5);
-      ctx.font = '500 32px "JetBrains Mono", monospace';
-      ctx.fillStyle = this.TEXT;
-      ctx.textAlign = 'right';
-      ctx.fillText(`${b.val} / ${b.target} ${b.unit}`, this.W - this.PAD, by - 6);
-      this.drawProgressBar(ctx, this.PAD, by + 38, this.W - this.PAD*2, 12, b.val / b.target, {color: b.accent ? this.ACCENT : 'rgba(255,255,255,0.4)'});
-      by += barRowH;
+  drawWeek(ctx){
+    const w = statsWeek();
+    const cells = this.statCells('week');
+    const range = `${new Date(w.start + 'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})} – ${new Date(w.end + 'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}`;
+    this.drawCard(ctx, {
+      eyebrow: 'This week',
+      hero: {main: w.workouts, tail: '/7', size: 300},
+      caption: `sessions · ${range.toLowerCase()}`,
+      cells,
+      photoHero: {value: `${w.workouts}/7`, size: 190},
     });
   },
 
   drawPR(ctx){
     const pr = statsBestPR();
-    if(this.photo){
-      if(!pr){
-        this.drawCompactHero(ctx, 'New PR', {value:'—', size:240}, 'no PRs yet', null);
-        return;
-      }
-      this.drawCompactHero(ctx,
-        'Personal record',
-        {value: pr.weight, size: 320, unit: 'lbs'},
-        pr.name.length > 32 ? pr.name.slice(0, 30) + '…' : pr.name,
-        null
-      );
-      return;
-    }
-
-    this.drawEyebrow(ctx, 'New PR', 460);
+    const cells = this.statCells('pr');
     if(!pr){
-      this.drawSubline(ctx, 'No PRs yet — go set one.', 660, {size:42, color:this.TEXT_2});
+      this.drawCard(ctx, {eyebrow: 'Personal record', hero: {main: '—', size: 300},
+        caption: 'no PRs yet — go set one', cells: [], photoHero: {value: '—', size: 180}});
       return;
     }
-    ctx.font = '600 52px "Inter", sans-serif';
+    if(this.photo){
+      this.drawCompactHero(ctx, 'Personal record', {value: String(pr.weight), size: 190, unit: 'lbs'},
+        pr.name, cells);
+      return;
+    }
+    this.drawEyebrow(ctx, 'Personal record', this.EYEBROW_Y);
+    // The lift names the card, so it leads; the number is still the thing you see.
+    ctx.font = '600 50px "Inter", sans-serif';
     ctx.fillStyle = this.TEXT;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    const nameLines = this.wrapText(ctx, pr.name, this.W - this.PAD*2);
-    let ny = 540;
-    nameLines.forEach(line => { ctx.fillText(line, this.PAD, ny); ny += 64; });
-
-    ctx.font = `italic 400px "Instrument Serif", serif`;
-    ctx.fillStyle = this.ACCENT;
-    ctx.fillText(String(pr.weight), this.PAD, ny + 40);
-    const w = ctx.measureText(String(pr.weight)).width;
-    ctx.font = '500 52px "JetBrains Mono", monospace';
-    ctx.fillStyle = this.TEXT_3;
-    ctx.fillText('lbs', this.PAD + w + 22, ny + 320);
-  },
-
-  drawStreak(ctx){
-    const streak = statsCurrentStreak();
-    if(this.photo){
-      this.drawCompactHero(ctx,
-        'Current streak',
-        {value: streak, size: 300, unit: 'days'},
-        'no skipped sessions',
-        null
-      );
-      return;
-    }
-
-    this.drawEyebrow(ctx, 'Current streak', 460);
-    const streakSize = streak >= 100 ? 320 : 380;
-    this.drawHugeNumber(ctx, streak, 540, {size: streakSize});
-
-    ctx.font = `italic ${streakSize}px "Instrument Serif", serif`;
-    const numW = ctx.measureText(String(streak)).width;
-    ctx.font = '500 44px "JetBrains Mono", monospace';
-    ctx.fillStyle = this.TEXT_3;
-    ctx.fillText('days', this.PAD + numW + 22, 540 + streakSize - 100);
-
-    this.drawSubline(ctx, 'no skipped sessions', 540 + streakSize + 30, {weight:500, size:36, color:this.TEXT_2});
-
-    const days = 28;
-    const today = todayKey();
-    const start = shiftDateKey(today, -(days-1));
-    const entries = [];
-    for(let i=0; i<days; i++){
-      const d = shiftDateKey(start, i);
-      entries.push({date:d, status: statsTrainedOn(d)});
-    }
-    // Anchor dot grid above safe footer (4 rows × ~50px = ~200px tall + label)
-    this.drawDotGrid(ctx, entries, this.PAD, this.SAFE_BOTTOM - 320, {cols:7, dotR:18, gap:24, showLabels:true});
-  },
-
-  drawWeek(ctx){
-    const wk = statsWeek(0);
-    const startLabel = new Date(wk.start + 'T00:00:00').toLocaleDateString('en-US',{month:'short', day:'numeric'});
-    const endLabel = new Date(wk.end + 'T00:00:00').toLocaleDateString('en-US',{month:'short', day:'numeric'});
-    const best = statsBestPR();
-
-    if(this.photo){
-      this.drawCompactHero(ctx,
-        `Week ${wk.weekNum} recap`,
-        {value: wk.workouts, size: 280, unit: 'sessions'},
-        `${startLabel} → ${endLabel}`,
-        [
-          {label:'Sets', value:String(wk.totalSets)},
-          {label:'Protein', value:String(wk.proteinAvg), unit:'g/d'},
-        ]
-      );
-      return;
-    }
-
-    this.drawEyebrow(ctx, `Week ${wk.weekNum} recap`, 460);
-    this.drawSubline(ctx, `${startLabel} → ${endLabel}`, 510, {weight:500, size:28, color:this.TEXT_3});
-
-    // Big workouts number
-    ctx.font = `italic 280px "Instrument Serif", serif`;
-    ctx.fillStyle = this.ACCENT;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    ctx.fillText(String(wk.workouts), this.PAD, 580);
-    const w = ctx.measureText(String(wk.workouts)).width;
-    ctx.font = '500 34px "JetBrains Mono", monospace';
-    ctx.fillStyle = this.TEXT_3;
-    ctx.fillText('sessions', this.PAD + w + 24, 760);
-
-    // 7-day dot row
-    // Future days within the current week render as outline circles — no judgement
-    // until they happen. Past days fall through to statsTrainedOn (done/rest/missed).
-    const today = todayKey();
-    const entries = wk.dates.map(d => ({
-      date: d,
-      status: d > today ? 'future' : statsTrainedOn(d)
-    }));
-    this.drawDotGrid(ctx, entries, this.PAD, 920, {cols:7, dotR:20, gap:24, showLabels:true});
-
-    this.drawStatGrid(ctx, [
-      {label:'Sets logged', value:String(wk.totalSets)},
-      {label:'Top lift', value: best ? String(best.weight) : '—', unit: best ? 'lbs' : '', accent:true},
-      {label:'Protein avg', value:String(wk.proteinAvg), unit:'g/day'},
-      {label:'Cal avg', value:String(wk.calAvg)},
-    ], this.SAFE_BOTTOM - 460);
-  },
-
-  drawMonth(ctx){
-    const m = statsMonth();
-    const disc = statsDiscipline(30);
-
-    if(this.photo){
-      this.drawCompactHero(ctx,
-        `${m.monthLabel} recap`,
-        {value: m.workouts, size: 280, unit: 'sessions'},
-        `${m.monthLabel} ${m.year}`,
-        [
-          {label:'Discipline', value:String(disc.score), unit:'/100'},
-          {label:'Protein', value:String(m.proteinAvg), unit:'g/d'},
-        ]
-      );
-      return;
-    }
-
-    this.drawEyebrow(ctx, `${m.monthLabel} recap`, 460);
-
-    ctx.font = `italic 280px "Instrument Serif", serif`;
-    ctx.fillStyle = this.ACCENT;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    ctx.fillText(String(m.workouts), this.PAD, 540);
-    const w = ctx.measureText(String(m.workouts)).width;
-    ctx.font = '500 34px "JetBrains Mono", monospace';
-    ctx.fillStyle = this.TEXT_3;
-    ctx.fillText('sessions', this.PAD + w + 24, 720);
-
-    this.drawSubline(ctx, `${m.monthLabel} ${m.year}`, 880, {weight:500, size:30, color:this.TEXT_2});
-
-    const wd = m.weightDelta;
-    this.drawStatGrid(ctx, [
-      {label:'Sets logged', value:String(m.totalSets)},
-      {label:'Discipline', value:String(disc.score), unit:'/100', accent:true},
-      {label:'Protein avg', value:String(m.proteinAvg), unit:'g/day'},
-      {label:'Weight Δ', value: wd != null ? (wd > 0 ? '+'+wd : String(wd)) : '—', unit: wd != null ? 'lbs' : ''},
-    ], this.SAFE_BOTTOM - 460);
-  },
-
-  drawDiscipline(ctx){
-    const d = statsDiscipline(30);
-
-    if(this.photo){
-      this.drawCompactHero(ctx,
-        'Discipline · 30 days',
-        {value: d.score, size: 280, unit: '/ 100'},
-        d.score >= 90 ? 'elite consistency' : d.score >= 75 ? 'on track' : d.score >= 50 ? 'building' : 'reset incoming',
-        [
-          {label:'Workouts', value:`${d.trainedCount}/${d.trainingTotal}`},
-          {label:'Protein', value:`${d.proteinHitDays}/${d.period}`},
-        ]
-      );
-      return;
-    }
-
-    this.drawEyebrow(ctx, 'Discipline · 30 days', 460);
-
-    const cx = this.W / 2;
-    const cy = 880;
-    const r = 240;
-    this.drawProgressRing(ctx, cx, cy, r, d.score / 100, {lineWidth:32, color:this.ACCENT});
-    // Score number centered in ring
-    ctx.font = `italic 240px "Instrument Serif", serif`;
-    ctx.fillStyle = this.TEXT;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(String(d.score), cx, cy + 8);
-    ctx.font = '500 26px "JetBrains Mono", monospace';
-    ctx.fillStyle = this.TEXT_3;
-    ctx.fillText('/ 100', cx, cy + 170);
-
-    // Two component bars anchored above safe footer
-    const components = [
-      {label:'Workouts hit', val: d.trainedCount, target: d.trainingTotal, pct: d.workoutHitRate},
-      {label:'Protein hit',  val: d.proteinHitDays, target: d.period, pct: d.proteinHitRate},
-    ];
-    const compRowH = 110;
-    let by = this.SAFE_BOTTOM - 220 - components.length * compRowH;
-    components.forEach(c => {
-      ctx.font = '700 22px "Inter", sans-serif';
-      ctx.fillStyle = this.TEXT_3;
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'top';
-      this.fillTextSpaced(ctx, c.label.toUpperCase(), this.PAD, by, 4);
-      ctx.font = '500 30px "JetBrains Mono", monospace';
-      ctx.fillStyle = this.TEXT;
-      ctx.textAlign = 'right';
-      ctx.fillText(`${c.val} / ${c.target}`, this.W - this.PAD, by - 4);
-      this.drawProgressBar(ctx, this.PAD, by + 38, this.W - this.PAD*2, 12, c.pct, {color:this.ACCENT});
-      by += compRowH;
-    });
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    const lines = this.wrapText(ctx, pr.name, this.W - this.PAD * 2).slice(0, 2);
+    let ny = 534;
+    lines.forEach(line => { ctx.fillText(line, this.PAD, ny); ny += 62; });
+    this.drawHero(ctx, pr.weight, {y: ny + 26, size: 300, unit: 'lbs'});
+    this.drawStatCells(ctx, cells, {bottom: this.statsBottom()});
   },
 
   wrapText(ctx, text, maxW){
