@@ -943,6 +943,17 @@ body.scope-modal-open{overflow:hidden}
 .move-list{display:flex;flex-direction:column}
 .move-list .row-value{text-align:right}
 .workout-meta-note{display:block;font-size:var(--fs-micro);line-height:var(--lh-micro);color:var(--text-tertiary)}
+/* The session no longer matches its schedule entry. Worth reading, so it takes the secondary text
+   colour rather than the tertiary the quieter notes use, and wraps rather than truncating. */
+.workout-meta-note.diverged{color:var(--text-secondary);text-wrap:pretty}
+/* It is a sentence, not a tag: give it the full width on its own line rather than letting it
+   wrap seven times in the narrow column between the time and the Edit button. */
+.workout-meta.has-diverged{flex-wrap:wrap}
+.workout-meta.has-diverged .workout-meta-info{flex-basis:100%;order:3}
+.workout-meta.has-diverged .workout-meta-info:not(:empty)::before{content:none}
+.meta-reset{display:inline-flex;align-items:center;height:var(--tap);margin-left:var(--s-1);padding:0 var(--s-2);
+  color:var(--text-primary);font-size:var(--fs-micro);line-height:var(--lh-micro);font-weight:600;text-decoration:underline;
+  text-underline-offset:2px;white-space:nowrap}
 /* Another day's plan viewed today: session controls read as disabled (same treatment as past days) */
 #workout-content[data-preview] .session-only{opacity:.55;pointer-events:none}
 #workout-content[data-preview] .session-only :where(input){background:transparent;border-color:var(--border-subtle);color:var(--text-secondary)}
@@ -3961,8 +3972,24 @@ const Session = {
   },
   // Today's session, under way and not finished — the one you can still reshape.
   isLive(session){ return !!session && session.date === todayKey() && session.status !== 'done' && session.status !== 'skipped'; },
-  isStarted(session){ return this.isLive(session) && this.hasLoggedSets(session); },
-  hasLoggedSets(s){ return Object.values(state.sessionSets?.[s.id] || {}).some(items => Object.values(items || {}).some(sets => Object.keys(sets || {}).length)); },
+  isStarted(session){ return this.isLive(session) && this.hasStartedWork(session); },
+  // Something was actually logged — not merely that a cell object exists. Ticking a row and
+  // unticking it leaves a hollow {reps:null, weight:null, duration_sec:null, done:false} cell
+  // behind; counting those as work made an untouched session look started, which is why it then
+  // stopped following the plan. cellLogged() is the same test isItemLocked() already used.
+  hasLoggedSets(s){ return Object.values(state.sessionSets?.[s.id] || {}).some(items =>
+    Object.values(items || {}).some(sets => Object.values(sets || {}).some(c => this.cellLogged(c)))); },
+  // Phase 12 metrics are work too: distance, effort, stamina and the note live on the snapshot
+  // (a logged duration is a set-row cell, so hasLoggedSets already sees it).
+  hasRecordedMetrics(s){
+    const filled = m => !!m && Object.keys(m).length > 0;
+    if(filled(s?.snapshot?.metrics)) return true;
+    return (s?.snapshot?.blocks || []).some(blk => (blk?.items || []).some(it => filled(it?.metrics)));
+  },
+  hasStartedWork(s){ return this.hasLoggedSets(s) || this.hasRecordedMetrics(s); },
+  // Nothing has been recorded against this session and it has not been finished or skipped: it is
+  // still just a plan, and may be re-derived or thrown away without losing anything.
+  isUntouched(s){ return !!s && s.status !== 'done' && s.status !== 'skipped' && !this.hasStartedWork(s); },
   // Sets done / prescribed across every set-logged item.
   progress(session){
     let logged = 0, total = 0;
@@ -4129,6 +4156,55 @@ const Session = {
     if(this.hasLegacyLog(date, getDayIdxFromDate(date))) return `${formatViewDateLabel(date)} already has a logged session`;
     return null;
   },
+  // ----- A session versus the schedule it came from -----
+  // What the schedule calls this date's workout now.
+  scheduledName(date){
+    const spec = this.specFor(date);
+    if(!spec || spec.kind === 'rest') return spec?.name || 'Rest';
+    const tpl = spec.templateId ? programForDate(date)?.templates?.[spec.templateId] : null;
+    return (spec.kind === 'sport' ? spec.name ?? tpl?.name : tpl?.name) || 'Rest';
+  },
+  // True when the session is no longer the workout its date is scheduled for. A session moved here
+  // from another day is not this date's scheduled workout at all, so it never counts as diverged;
+  // nor does a flex day standing down because another day claimed the group.
+  divergesFromSchedule(s){
+    if(!s || this.originDate(s) !== s.date) return false;
+    const spec = this.specFor(s.date);
+    if(spec?.coveredBy) return false;
+    const kind = ['rest', 'sport', 'flex'].includes(spec?.kind) ? spec.kind : 'template';
+    return (spec?.templateId ?? null) !== (s.template_id ?? null) || kind !== s.kind;
+  },
+  // Exactly what would be lost by throwing this session away, in the user's terms.
+  lossSummary(s){
+    let sets = 0;
+    Object.values(state.sessionSets?.[s.id] || {}).forEach(items => Object.values(items || {}).forEach(cells =>
+      Object.values(cells || {}).forEach(c => { if(this.cellLogged(c)) sets++; })));
+    const fields = [];
+    const add = f => { if(!fields.includes(f)) fields.push(f); };
+    Metrics.forSession(s).forEach(m => {
+      if(m.durationMin != null) add('duration'); if(m.distanceMi != null) add('distance');
+      if(m.effort != null) add('effort'); if(m.stamina != null) add('stamina'); if(m.note) add('note');
+    });
+    const parts = [];
+    if(sets) parts.push(`${sets} logged set${sets === 1 ? '' : 's'}`);
+    if(fields.length) parts.push(`the recorded ${fields.length > 1 ? fields.slice(0, -1).join(', ') + ' and ' + fields[fields.length - 1] : fields[0]}`);
+    return parts.join(' and ');
+  },
+  // Throw a session away entirely: the row, its logged sets, its legacy projection and its place in
+  // the queue. The date then resolves against the schedule again, as if the session never existed.
+  remove(s){
+    if(!s) return false;
+    if(s.status === 'done') this.setLegacyDone(s, false);
+    this.unproject(s);
+    delete state.sessions?.[s.date];
+    if(state.sessionSets) delete state.sessionSets[s.id];
+    delete this.rev[s.id];
+    state.pendingSessionSync = (state.pendingSessionSync || []).filter(x => x !== s.id);
+    save();
+    Sync.deleteSession(s.id);
+    this.renderSyncState();
+    return true;
+  },
   move(sessionId, newDate){
     const s = this.byId(sessionId);
     if(this.moveRefusal(s, newDate)) return false;
@@ -4163,9 +4239,17 @@ const Session = {
   // session is started and frozen: its snapshot and (block, item, set) rows are never renumbered.
   followPlan(){
     const today = todayKey(), prog = getActiveProgram();
-    Object.values(state.sessions || {}).forEach(s => {
+    Object.values(state.sessions || {}).slice().forEach(s => {
       const open = (s.status === 'in_progress' && s.date === today) || (s.status === 'planned' && s.date >= today);
-      if(!open || s.kind === 'rest' || !prog?.templates?.[s.template_id] || this.hasLoggedSets(s)) return;
+      if(!open || !this.isUntouched(s)) return;
+      // A schedule entry that changed wholesale — Monday from lifting to soccer, or to rest — is not
+      // something a snapshot rebuild can follow: the row's template_id, kind, title, optional and
+      // flex_group all came from the old entry, and rebuilding from s.template_id just rebuilds the
+      // workout the user is trying to get rid of. Dropping the untouched row is the whole fix in one
+      // step — the date then resolves against the schedule, which derives every one of those fields
+      // fresh and cannot leave a stale one behind.
+      if(this.divergesFromSchedule(s)){ this.remove(s); return; }
+      if(s.kind === 'rest' || !prog?.templates?.[s.template_id]) return;
       const next = this.buildSnapshot({kind: s.kind, templateId: s.template_id, ...(s.kind === 'sport' ? {name: s.snapshot?.name, desc: s.snapshot?.desc} : {})}, s.date);
       // Key-order-insensitive (a pulled snapshot comes back from jsonb with its keys reordered).
       const canon = v => Array.isArray(v) ? v.map(canon) : v && typeof v === 'object'
@@ -4860,7 +4944,7 @@ const Programs = {
   editingSchedule: false,
 
   open(){ this.view = 'list'; this.progId = null; this.form = null; this.confirm = null; this.renaming = null; this.editingSchedule = false; Sheet.open(this, 'Programs'); this.render(); },
-  onSheetClose(){ this.view = 'list'; this.progId = null; this.form = null; this.confirm = null; this.renaming = null; this.draftPhases = null; this.editingSchedule = false; },
+  onSheetClose(){ this.view = 'list'; this.progId = null; this.form = null; this.confirm = null; this.renaming = null; this.draftPhases = null; this.editingSchedule = false; renderPlanSurfaces(); },
   prog(){ return this.progId ? state.plan?.programs?.[this.progId] : null; },
   back(){ this.view = 'list'; this.progId = null; this.confirm = null; this.renaming = null; this.draftPhases = null; this.phaseError = null; this.editingSchedule = false; this.render(); },
 
@@ -5708,12 +5792,46 @@ function renderWorkout(){
 
 function setDay(i){ activeDay=i; renderWorkout(); }
 
+// A schedule or template change moves every surface that reads the plan, not just the one on
+// screen: the Train header, day pills and content, and the Today hero. Repaint them all, so
+// closing the Programs sheet never leaves yesterday's workout showing behind it.
+function renderPlanSurfaces(){
+  if(document.getElementById('day-pills')) renderWorkout();
+  if(document.getElementById('page-dashboard')) renderDashboard();
+  renderActivePage();
+}
+
 // Set when the template behind a started session is edited from the template editor; the Train tab
 // says so until the session is finished or the day moves on. Module-level: nothing to persist.
 let planUpdatedFor = null;
 function planUpdatedNote(session){
   return planUpdatedFor && session && planUpdatedFor === session.id
     ? `<span class="workout-meta-note">Plan updated · applies from your next session</span>` : '';
+}
+// A started or completed session keeps the workout it was started as, even after the schedule for
+// its date changes. Silence about that is what made the change look like it had not worked at all,
+// so say it plainly — and, while the session can still be thrown away, offer that as one action.
+function scheduleDivergenceNote(session, dateKey){
+  if(!session || session.date !== dateKey || session.status === 'skipped') return '';
+  if(!Session.divergesFromSchedule(session)) return '';
+  const was = session.snapshot?.name || session.title || 'another workout';
+  const now = Session.scheduledName(session.date);
+  const done = session.status === 'done';
+  const canReset = !done && isViewingToday() && Session.isLive(session);
+  return `<span class="workout-meta-note diverged">${done ? 'Completed as' : 'Started as'} ${escapeHtml(was)} · schedule now says ${escapeHtml(now)} — applies from your next session${
+    canReset ? `<button class="btn btn-ghost btn-sm meta-reset" onclick="resetToScheduled()">Reset to scheduled</button>` : ''}</span>`;
+}
+// Throw today's diverged session away and fall back to what the schedule says now. Destructive and
+// irreversible, so the confirm names exactly what goes with it.
+function resetToScheduled(){
+  const date = viewKey(), s = state.sessions?.[date];
+  if(!s || s.status === 'done' || !Session.divergesFromSchedule(s)) return;
+  const lost = Session.lossSummary(s);
+  const to = Session.scheduledName(date);
+  if(!confirm(`Reset ${formatViewDateLabel(date)} to ${to}?\n\n${lost ? `This permanently deletes ${lost} from "${s.snapshot?.name || s.title}".` : `This discards the unstarted "${s.snapshot?.name || s.title}" session.`} It can't be undone.`)) return;
+  Session.remove(s);
+  renderPlanSurfaces();
+  toast(`Reset to ${to}`);
 }
 function snapshotNote(session){
   return `<span class="workout-meta-note">Snapshot · frozen ${formatViewDateLabel(localDateKey(new Date(session.snapshot?.frozenAt || session.started_at || session.date + 'T00:00:00')))}</span>`;
@@ -5760,7 +5878,7 @@ function renderBlockWorkout({day, blocks, session, dateKey, preview, actions, me
   const cellsFor = (b, i, item) => session ? Session.sets(session, b, i) : legacyCells(b, i, item);
   const itemCount = flat.sets.length + flat.ticks.length;
   const only = preview ? ' session-only' : '';
-  let html = `<div class="workout-meta">
+  let html = `<div class="workout-meta${scheduleDivergenceNote(session, dateKey) ? ' has-diverged' : ''}">
       <span class="workout-meta-time">~${estimateWorkoutMinutes(activeDay, day, session)} min</span>
       <span class="workout-meta-info">${itemCount} exercise${itemCount === 1 ? '' : 's'} · ${blocks.length} block${blocks.length === 1 ? '' : 's'}${metaNote}${session && Session.isUnsynced(session.id) ? UNSYNCED_NOTE : ''}</span>
       <button class="btn btn-ghost btn-sm editable-only" onclick="PlanEditor.open(${activeDay})" title="Edit workout">Edit</button>
@@ -5887,7 +6005,7 @@ function renderWorkoutContent(){
     const sportFlat = flattenBlocks(viewBlocks);
     if(sportFlat.sets.length + sportFlat.ticks.length)
       html += renderBlockWorkout({day, blocks: viewBlocks, session, dateKey, preview, actions: '', metricsOn: shown, omitMetrics: sportRef,
-        metaNote: deloadNote(session, dateKey) + planUpdatedNote(session)});
+        metaNote: deloadNote(session, dateKey) + planUpdatedNote(session) + scheduleDivergenceNote(session, dateKey)});
   } else if(day.rest){
     html=`<div class="rest-state">
       <div class="rest-title">Rest</div>
@@ -5896,7 +6014,7 @@ function renderWorkoutContent(){
     </div>`;
   } else if(!isLegacyShape(viewBlocks)){
     html = renderBlockWorkout({day, blocks: viewBlocks, session, dateKey, preview, actions, metricsOn: shown,
-      metaNote: (session?.status === 'done' ? snapshotNote(session) : preview ? `<span class="workout-meta-note">Plan preview · today's session is ${DAY_LABELS[getDayIdxFromDate(dateKey)]}</span>` : '') + deloadNote(session, dateKey) + planUpdatedNote(session)});
+      metaNote: (session?.status === 'done' ? snapshotNote(session) : preview ? `<span class="workout-meta-note">Plan preview · today's session is ${DAY_LABELS[getDayIdxFromDate(dateKey)]}</span>` : '') + deloadNote(session, dateKey) + planUpdatedNote(session) + scheduleDivergenceNote(session, dateKey)});
   } else {
     const estMin = estimateWorkoutMinutes(activeDay, day);
     const exCount = day.exercises.length;
@@ -5906,8 +6024,8 @@ function renderWorkoutContent(){
     if(hiitCount) parts.push(`${hiitCount} HIIT`);
     const metaNote = (session?.status === 'done'
       ? snapshotNote(session)
-      : preview ? `<span class="workout-meta-note">Plan preview · today's session is ${DAY_LABELS[getDayIdxFromDate(dateKey)]}</span>` : '') + deloadNote(session, dateKey) + planUpdatedNote(session);
-    html+=`<div class="workout-meta">
+      : preview ? `<span class="workout-meta-note">Plan preview · today's session is ${DAY_LABELS[getDayIdxFromDate(dateKey)]}</span>` : '') + deloadNote(session, dateKey) + planUpdatedNote(session) + scheduleDivergenceNote(session, dateKey);
+    html+=`<div class="workout-meta${scheduleDivergenceNote(session, dateKey) ? ' has-diverged' : ''}">
       <span class="workout-meta-time">~${estMin} min</span>
       <span class="workout-meta-info">${parts.join(' · ')}${metaNote}${session && Session.isUnsynced(session.id) ? UNSYNCED_NOTE : ''}</span>
       <button class="btn btn-ghost btn-sm editable-only" onclick="PlanEditor.open(${activeDay})" title="Edit workout">Edit</button>
@@ -8528,6 +8646,7 @@ const PlanEditor = {
     if(!document.getElementById('move-sheet').classList.contains('open')) document.body.classList.remove('plan-editor-open');
     this.draft = null; this.view = 'template'; this.exForm = null; this.confirm = null; this.focus = null;
     if(Sheet.owner === Programs) Programs.render();
+    renderPlanSurfaces();
   },
   item(b, i){ return this.draft?.tpl?.blocks?.[b]?.items?.[i] || null; },
 
