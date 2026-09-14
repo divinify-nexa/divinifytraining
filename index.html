@@ -418,11 +418,18 @@ body.share-open{overflow:hidden}
 .share-stats-wrap{display:flex;flex-direction:column;gap:var(--s-2);width:100%}
 .share-stats-label{font-size:var(--fs-caption);line-height:var(--lh-caption);color:var(--text-secondary);text-align:center}
 /* Equal-width cells on a fixed grid: the last row lines up with the ones above it instead of
-   leaving a lone chip floating in the middle. */
-.share-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--s-2)}
-.share-stats .share-pill{height:var(--tap);width:100%;justify-content:center;padding:0 var(--s-2);
-  font-size:var(--fs-caption);overflow:hidden;text-overflow:ellipsis}
-.share-stats .share-pill[disabled]{opacity:.45;cursor:default}
+   leaving a lone chip floating in the middle. The visual box is short; the tap area is not. */
+.share-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--s-2) var(--s-2)}
+.stat-chip{position:relative;width:100%;min-width:0;height:34px;padding:0 var(--s-2);
+  display:inline-flex;align-items:center;justify-content:center;
+  background:var(--fill);border:1px solid transparent;border-radius:var(--r-md);
+  color:var(--text-secondary);font-family:var(--font-sans);font-size:var(--fs-caption);font-weight:500;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;transition:var(--t-ui)}
+.stat-chip::before{content:'';position:absolute;left:0;right:0;top:-5px;bottom:-5px}   /* 44px hit area */
+.stat-chip:active{opacity:.6}
+.stat-chip.active{background:var(--text-primary);color:var(--bg);font-weight:600}
+.stat-chip.active.pending{background:transparent;border-color:var(--text-tertiary);color:var(--text-secondary)}
+.stat-chip[disabled]{background:transparent;border-color:var(--border-subtle);color:var(--text-tertiary);opacity:.55;cursor:default}
 @media (max-width:360px){.share-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
 /* The preview declares the card's exact aspect and must not be shrunk by the column flexbox —
    a squashed box used to stretch the canvas with it, which is what distorted the photo. */
@@ -434,7 +441,7 @@ body.share-open{overflow:hidden}
 .share-ig-btn{height:var(--tap);display:inline-flex;align-items:center;justify-content:center;gap:var(--s-2);border:0;border-radius:var(--r-md);background:var(--accent);color:var(--accent-text);font-family:var(--font-sans);font-size:var(--fs-body);font-weight:600;cursor:pointer;transition:var(--t-ui)}
 .share-ig-btn:active{opacity:.85}
 .share-ig-btn svg{width:16px;height:16px;stroke-width:2}
-.share-photo-controls{display:flex;gap:var(--s-2);justify-content:center;align-items:center;width:100%}
+.share-photo-controls{display:flex;gap:var(--s-2);justify-content:center;align-items:center;width:100%;margin-top:calc(-1 * var(--s-2))}
 .share-photo-btn{position:relative;flex:0 1 auto;min-width:0;height:var(--tap);display:flex;align-items:center;justify-content:center;gap:var(--s-2);padding:0 var(--s-4);background:transparent;border:0;border-radius:var(--r-pill);color:var(--text-secondary);font-family:var(--font-sans);font-size:var(--fs-caption);font-weight:500;white-space:nowrap;cursor:pointer;transition:var(--t-ui)}
 .share-photo-btn:hover{background:var(--fill-strong)}
 .share-photo-btn svg{width:16px;height:16px;stroke-width:2}
@@ -1117,10 +1124,6 @@ body[data-theme="dark"] .theme-switch::after{transform:translateX(20px)}
       <div class="share-canvas-loading" id="share-loading">Rendering…</div>
       <canvas id="share-canvas" width="1080" height="1350"></canvas>
     </div>
-    <div class="share-stats-wrap">
-      <span class="share-stats-label">Add up to four stats</span>
-      <div class="share-stats" id="share-stats"></div>
-    </div>
     <div class="share-photo-controls" id="share-photo-controls">
       <input type="file" id="share-photo-input" accept="image/*" hidden onchange="Cards.handlePhotoSelect(this.files[0])">
       <button class="share-photo-btn" id="share-photo-add-btn" onclick="document.getElementById('share-photo-input').click()">
@@ -1131,6 +1134,10 @@ body[data-theme="dark"] .theme-switch::after{transform:translateX(20px)}
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
         Remove photo
       </button>
+    </div>
+    <div class="share-stats-wrap">
+      <span class="share-stats-label">Add up to four stats</span>
+      <div class="share-stats" id="share-stats"></div>
     </div>
   </div>
   <div class="share-actions">
@@ -1704,7 +1711,7 @@ const STORAGE_KEY = 'carter_training_v1';
 
 let state = {
   startDate:null,foodLog:{},setLog:{},weights:[],workoutsCompleted:[],prs:{},theme:'dark',
-  customExercises:{},customHiit:{},meals:null,hiitLog:{},sessions:{},sessionSets:{},pendingSessionSync:[],
+  customExercises:{},customHiit:{},meals:null,hiitLog:{},sessions:{},sessionSets:{},pendingSessionSync:[],pendingFoodSync:[],
   apiKey:null,coachStyle:'friendly',artemisChat:[],dailyFocus:null,artemisSettingsOpen:false,
   usdaKey:null,usdaKeyFormOpen:false,settings:{restTimer:true}
 };
@@ -1857,6 +1864,44 @@ function save(){
   catch(e){ console.warn('Save failed:', e); }
 }
 
+// A day's food whose server copy may be missing or behind. The entry is just the date: the
+// flush re-reads whatever is in state.foodLog now, so a queued write is always current and
+// re-queueing the same day costs nothing. Same shape as Session's queue (Phase 2b).
+const FoodSync = {
+  isUnsynced(date){ return (state.pendingFoodSync || []).includes(date); },
+  enqueue(date){
+    const q = state.pendingFoodSync ||= [];
+    if(!q.includes(date)){ q.push(date); save(); }
+  },
+  afterPush(date, ok){
+    if(ok){
+      state.pendingFoodSync = (state.pendingFoodSync || []).filter(d => d !== date);
+      save();
+      if((state.pendingFoodSync || []).length) this.flush();
+    }
+  },
+  flushing: false,
+  async flush(){
+    if(this.flushing) return;
+    if(!Sync.ready || !(state.pendingFoodSync || []).length) return;
+    this.flushing = true;
+    try {
+      for(const date of (state.pendingFoodSync || []).slice()){
+        const ok = await Sync.replaceFoodLog(date);
+        if(!ok) break;                       // still offline or failing — keep the rest queued
+        state.pendingFoodSync = (state.pendingFoodSync || []).filter(d => d !== date);
+        save();
+      }
+    } finally { this.flushing = false; }
+  },
+  // Dates the cloud does not have yet: a pull must not overwrite these with its own answer.
+  unsyncedCopy(){
+    const out = {};
+    (state.pendingFoodSync || []).forEach(d => { if(state.foodLog?.[d]) out[d] = state.foodLog[d]; });
+    return out;
+  },
+};
+
 // ===== Supabase cloud sync =====
 // localStorage is the primary cache. Supabase is the source of truth across
 // devices/browsers. On first sync (state.syncInitialized falsy) we push local
@@ -1916,6 +1961,7 @@ const Sync = {
     ]);
     const synced = !!state.syncInitialized;
     const unsynced = Session.unsyncedCopy();
+    const unsyncedFood = FoodSync.unsyncedCopy();
     const queryErrors = [foods, sets, weights, woComp, hiit, prs, profile, plan, water, sessions, sessionSets].map(r => r.error).filter(Boolean);   // taken before the cloud copy replaces local sessions
 
     if(!profile.error && profile.data?.data){
@@ -1944,6 +1990,10 @@ const Sync = {
         if(!fl[r.date]) fl[r.date] = [];
         fl[r.date].push({name:r.name, cal:+r.cal, prot:+r.prot, carb:+r.carb, fat:+r.fat});
       });
+      // The rule: the cloud owns every date except those with a write still queued on this
+      // device. Those stay as they are here and are pushed — a pull can never be the thing
+      // that empties a day you have just logged.
+      Object.assign(fl, unsyncedFood);
       if(synced || Object.keys(fl).length) state.foodLog = fl;
     }
     if(!sets.error){
@@ -2016,19 +2066,16 @@ const Sync = {
     }
     if(threw) throw threw;
     Session.flush();
+    FoodSync.flush();
   },
 
   async backfillFromLocal(){
     if(!this.ready) return [];
     const tasks = [];
-    // Food log — replace each date (delete, then insert) so re-running backfill never duplicates rows
+    // Food log — insert the replacement first and drop the old rows by id afterwards, so a
+    // backfill that dies half way can duplicate but can never empty a day.
     Object.entries(state.foodLog || {}).forEach(([date, rows]) => {
-      if(rows && rows.length){
-        tasks.push(this.client.from('training_food_log').delete().eq('date', date).then(del => del.error ? del :
-          this.client.from('training_food_log').insert(
-            rows.map(r => ({date, name:r.name, cal:r.cal||0, prot:r.prot||0, carb:r.carb||0, fat:r.fat||0}))
-          )));
-      }
+      if(rows && rows.length) tasks.push(this.replaceFoodLog(date).then(ok => FoodSync.afterPush(date, ok)));
     });
     // Sessions, then their sets (FK) — upserts keyed by id / (session, block, item, set), so re-running never duplicates.
     // The legacy set and HIIT logs are a read-only archive and are no longer written.
@@ -2078,21 +2125,34 @@ const Sync = {
     return results;
   },
 
+  foodRows(date){
+    return (state.foodLog[date] || []).map(r => ({date, name:r.name, cal:r.cal||0, prot:r.prot||0, carb:r.carb||0, fat:r.fat||0}));
+  },
+  // Replace a day's food without ever leaving the server empty: note which rows are there now,
+  // insert the replacement, and only then delete the ones we noted. A failure part-way through
+  // leaves duplicates — which the next successful push clears — never a hole.
+  async replaceFoodLog(date){
+    if(!this.ready) return false;
+    try {
+      const existing = await this.client.from('training_food_log').select('id').eq('date', date);
+      if(existing.error) throw existing.error;
+      const oldIds = (existing.data || []).map(r => r.id);
+      const rows = this.foodRows(date);
+      if(rows.length){
+        const ins = await this.client.from('training_food_log').insert(rows);
+        if(ins.error) throw ins.error;
+      }
+      if(oldIds.length){
+        const del = await this.client.from('training_food_log').delete().in('id', oldIds);
+        if(del.error) throw del.error;      // the new rows are already safe; retry clears the rest
+      }
+      return true;
+    } catch(e){ console.warn('pushFoodLog failed:', e); return false; }
+  },
   pushFoodLog(date){
+    FoodSync.enqueue(date);
     if(!this.ready) return;
-    const rows = state.foodLog[date] || [];
-    (async () => {
-      try {
-        const del = await this.client.from('training_food_log').delete().eq('date', date);
-        if(del.error) throw del.error;
-        if(rows.length){
-          const ins = await this.client.from('training_food_log').insert(
-            rows.map(r => ({date, name:r.name, cal:r.cal||0, prot:r.prot||0, carb:r.carb||0, fat:r.fat||0}))
-          );
-          if(ins.error) throw ins.error;
-        }
-      } catch(e){ console.warn('pushFoodLog failed:', e); }
-    })();
+    this.replaceFoodLog(date).then(ok => FoodSync.afterPush(date, ok));
   },
 
   // ----- Sessions -----
@@ -2290,9 +2350,9 @@ function renderSyncStatus(){
     </button>`;
     return;
   }
-  const unsynced = (state.pendingSessionSync || []).length;
+  const unsynced = (state.pendingSessionSync || []).length + (state.pendingFoodSync || []).length;
   if(unsynced){
-    el.innerHTML = `<button class="sync-pill stale" type="button" onclick="Session.flush()" title="Saved on this device — tap to sync now">
+    el.innerHTML = `<button class="sync-pill stale" type="button" onclick="Session.flush();FoodSync.flush()" title="Saved on this device — tap to sync now">
       <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
       ${unsynced} session${unsynced === 1 ? '' : 's'} not synced · tap to retry
     </button>`;
@@ -2356,6 +2416,7 @@ async function initSync(){
     console.warn('initSync failed (continuing with local data):', e);
   }
   Session.flush();
+  FoodSync.flush();
 }
 
 // Manual re-sync — forces a fresh pull regardless of syncInitialized state.
@@ -2406,6 +2467,7 @@ function load(){
     if(!state.sessions || typeof state.sessions !== 'object') state.sessions={};
     if(!state.sessionSets || typeof state.sessionSets !== 'object') state.sessionSets={};
     if(!Array.isArray(state.pendingSessionSync)) state.pendingSessionSync=[];
+    if(!Array.isArray(state.pendingFoodSync)) state.pendingFoodSync=[];
     if(!state.settings || typeof state.settings !== 'object') state.settings={restTimer:true};
     if(!state.coachStyle) state.coachStyle='friendly';
     if(!Array.isArray(state.artemisChat)) state.artemisChat=[];
@@ -4170,7 +4232,7 @@ const Session = {
   }
 };
 const UNSYNCED_NOTE = '<span class="workout-meta-note" data-unsynced>Saved on this device · not synced yet</span>';
-window.addEventListener('online', () => Session.flush());
+window.addEventListener('online', () => { Session.flush(); FoodSync.flush(); });
 // ===== Rest timer =====
 // Counts down from the item's rest between sets. Module-level only: never written to state,
 // localStorage or Supabase. Remaining time always comes from the end timestamp, so a spell in the
@@ -6919,9 +6981,14 @@ const Cards = {
     return {...pr, date, reps, prev};
   },
   statSelection(type = this.current){
-    const avail = (this.STATS[type] || []).map(s => s.id);
+    const defs = this.STATS[type] || [];
+    const ids = defs.map(s => s.id);
     const saved = state.settings?.cardStats?.[type];
-    const list = Array.isArray(saved) ? saved.filter(id => avail.includes(id)) : (this.DEFAULT_STATS[type] || []);
+    // An explicit choice is kept as the user made it, even if a stat has nothing to show yet.
+    // The defaults, though, skip what has no data — otherwise a fresh card arrives with two
+    // empty stats selected, which reads as "available" and eats two of the four slots.
+    const list = Array.isArray(saved) ? saved.filter(id => ids.includes(id))
+      : (this.DEFAULT_STATS[type] || []).filter(id => !!defs.find(d => d.id === id)?.get());
     return list.slice(0, this.MAX_STATS);
   },
   // localStorage only: card choices are a per-device preference, never pushed to the backend.
@@ -6930,10 +6997,14 @@ const Cards = {
     state.settings.cardStats = {...(state.settings.cardStats || {}), [type]: ids};
     save();
   },
+  // The cap counts what the card will actually draw. A stat that is selected but has no data
+  // yet renders nothing, so it must not hold a slot hostage — that was what limited the picker
+  // to two: the three defaults were selected, two of them dataless, and all four slots were gone.
+  statsShown(type = this.current){ return this.statCells(type).length; },
   toggleStat(id){
     const type = this.current, cur = this.statSelection(type);
     const next = cur.includes(id) ? cur.filter(x => x !== id)
-      : cur.length >= this.MAX_STATS ? cur : [...cur, id];
+      : this.statsShown(type) >= this.MAX_STATS ? cur : [...cur, id];
     this.setStatSelection(type, next);
     this.renderStatPicker();
     this.render();
@@ -6945,16 +7016,22 @@ const Cards = {
       return v ? {label: def.label, ...v} : null;
     }).filter(Boolean);
   },
+  // Three states, and only three: selected (filled), available (quiet fill), unavailable
+  // (dimmed, with the reason). A selected chip is always clickable, so it can be taken off
+  // again even when it has nothing to show.
   renderStatPicker(){
     const el = document.getElementById('share-stats');
     if(!el) return;
     const type = this.current, sel = this.statSelection(type);
+    const full = this.statsShown(type) >= this.MAX_STATS;
     el.innerHTML = (this.STATS[type] || []).map(st => {
-      const has = !!st.get(), on = sel.includes(st.id), full = !on && sel.length >= this.MAX_STATS;
-      const off = !has || full;
-      return `<button class="share-pill${on ? ' active' : ''}" ${off ? 'disabled' : ''}
-        title="${!has ? 'Nothing logged for this yet' : full ? 'Pick up to four' : ''}"
-        onclick="Cards.toggleStat('${st.id}')">${st.label}</button>`;
+      const has = !!st.get(), on = sel.includes(st.id);
+      const capped = !on && has && full;
+      const off = !on && (!has || capped);
+      const why = on ? (has ? '' : 'Waiting on data — tap to remove')
+        : !has ? 'Nothing logged for this yet' : capped ? 'Pick up to four' : '';
+      return `<button class="stat-chip${on ? ' active' : ''}${on && !has ? ' pending' : ''}" ${off ? 'disabled' : ''}
+        title="${why}" onclick="Cards.toggleStat('${st.id}')">${escapeHtml(st.label)}</button>`;
     }).join('');
   },
 
