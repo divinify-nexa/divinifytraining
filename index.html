@@ -191,6 +191,10 @@ nav{
 .nav-btn.active{color:var(--text-primary);font-weight:600}
 .nav-btn.active::after{content:'';position:absolute;bottom:3px;left:50%;width:4px;height:4px;margin-left:-2px;border-radius:var(--r-pill);background:var(--accent)}
 .nav-icon{width:22px;height:22px;stroke-width:1.75;margin-top:-2px}
+/* While a text field has focus on a touch device the keyboard covers the tab bar, as in a native
+   app. Hiding it means it can't surface mid-screen as iOS pans the viewport, and it is rebuilt
+   against the settled viewport when the keyboard goes (see ViewportGuard). */
+@media (hover:none) and (pointer:coarse){body.kb-open nav{display:none}}
 
 /* --- Section + labels --- */
 .section{margin-top:var(--s-8)}
@@ -2606,6 +2610,51 @@ function showPage(id, btn){
   if(id==='artemis') renderArtemis();
   window.scrollTo(0,0);
 }
+
+// ===== Viewport guard (iOS) =====
+// iOS 26+ can leave the visual viewport offset after the keyboard closes (WebKit 297779,
+// FB19889436): fixed layers keep their keyboard-era position, so the nav paints mid-screen and the
+// page draws under the status bar until a reload. The nav is hidden while a text field has focus;
+// once focus leaves and the viewport has settled, a stale offset is nudged back with a 1px scroll
+// and the fixed bars are rebuilt against the real viewport.
+const ViewportGuard = {
+  timer: null,
+  typing(el = document.activeElement){
+    if(!el || el === document.body) return false;
+    if(el.isContentEditable || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') return true;
+    return el.tagName === 'INPUT' && !/^(button|submit|reset|checkbox|radio|range|color|file|image)$/.test(el.type);
+  },
+  init(){
+    document.addEventListener('focusin', () => { if(this.typing()) document.body.classList.add('kb-open'); });
+    // focusout fires before focus lands on the next field, so check once it has
+    document.addEventListener('focusout', () => setTimeout(() => {
+      if(this.typing()) return;
+      document.body.classList.remove('kb-open');
+      this.settleSoon();
+    }, 0));
+    window.visualViewport?.addEventListener('resize', () => this.settleSoon());
+    window.addEventListener('orientationchange', () => this.settleSoon());
+    window.addEventListener('pageshow', () => this.settleSoon());
+    document.addEventListener('visibilitychange', () => { if(!document.hidden) this.settleSoon(); });
+  },
+  // The keyboard animates out over ~350ms; measure once it has gone.
+  settleSoon(){ clearTimeout(this.timer); this.timer = setTimeout(() => this.settle(), 400); },
+  stale(){
+    const vv = window.visualViewport;
+    return !!vv && vv.scale < 1.01 && (vv.offsetTop > 0.5 || window.innerHeight - vv.height > 0.5);
+  },
+  settle(){
+    if(this.typing()) return;   // keyboard still up: iOS owns the viewport
+    if(this.stale()){
+      const y = window.scrollY;
+      window.scrollTo(window.scrollX, y > 0 ? y - 1 : y + 1);
+      requestAnimationFrame(() => window.scrollTo(window.scrollX, y));
+    }
+    document.querySelectorAll('nav, .rest-timer').forEach(el => {
+      el.style.display = 'none'; void el.offsetHeight; el.style.display = '';
+    });
+  }
+};
 
 function toast(msg){
   const t=document.getElementById('toast');
@@ -9830,6 +9879,7 @@ applyReadonlyMode();
 renderDashboard();
 attachFoodSearchListener();
 renderFoodKeyBar();
+ViewportGuard.init();
 initSync().then(() => {
   // Auto-launch profile setup on first run (or if onboarding never completed).
   // Wait for sync so we don't show the wizard when cloud already has a profile.
