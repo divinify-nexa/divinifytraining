@@ -766,6 +766,37 @@ body.scanner-open{overflow:hidden}
 .hiit-info{flex:1;min-width:0}
 .hiit-row .icon-btn{margin-right:calc(-1 * var(--s-3))}
 .hiit-card{padding:var(--s-3) var(--s-4)}
+/* Recording a conditioning, cardio or sport session. The strip runs to the card's edges so the
+   two 1–10 scales get the full width: ten targets across 335px at a 375px screen is 33.5px each,
+   clear of the 32px floor, with no gap between tracks to eat into it. */
+.metrics-strip{--metrics-gutter:var(--s-4);display:flex;flex-direction:column;gap:var(--s-3);
+  margin:var(--s-2) calc(-1 * var(--metrics-gutter)) 0;padding:var(--s-3) 0 var(--s-1);
+  border-top:1px solid var(--border-subtle);text-align:left}
+.rest-state .metrics-strip{--metrics-gutter:var(--s-5);margin-top:var(--s-5);padding-bottom:0}
+.metrics-line{display:flex;gap:var(--s-2);padding-inline:var(--metrics-gutter)}
+.metrics-field{flex:1;min-width:0;display:flex;flex-direction:column;gap:var(--s-1)}
+.metrics-field > span,.metrics-q{font-size:var(--fs-caption);line-height:var(--lh-caption);font-weight:500;color:var(--text-secondary)}
+.metrics-field select.pe-input,.metrics-field input.pe-input{width:100%;min-width:0}
+.metrics-scale{display:flex;flex-direction:column;gap:var(--s-1)}
+.metrics-q{padding-inline:var(--metrics-gutter)}
+.scale-row{display:grid;grid-template-columns:repeat(10,minmax(0,1fr))}
+.scale-btn{height:var(--tap);min-width:0;padding:0;display:flex;align-items:center;justify-content:center;
+  background:var(--fill);border:0;border-left:1px solid var(--surface);
+  color:var(--text-secondary);font-family:var(--font-mono);font-size:var(--fs-caption);font-weight:500;
+  cursor:pointer;transition:var(--t-ui)}
+.scale-btn:first-child{border-left:0;border-radius:var(--r-sm) 0 0 var(--r-sm)}
+.scale-btn:last-child{border-radius:0 var(--r-sm) var(--r-sm) 0}
+.scale-btn.on{background:var(--text-primary);color:var(--bg);font-weight:600}
+.scale-btn[disabled]{opacity:.55;cursor:default}
+.scale-ends{display:flex;justify-content:space-between;gap:var(--s-2);padding-inline:var(--metrics-gutter);
+  font-size:var(--fs-micro);line-height:var(--lh-micro);letter-spacing:var(--ls-micro);color:var(--text-tertiary)}
+.metrics-note{padding-inline:var(--metrics-gutter)}
+.metrics-note-btn{height:var(--tap);margin-inline-start:calc(-1 * var(--s-2));padding:0 var(--s-2);
+  background:transparent;border:0;border-radius:var(--r-md);color:var(--text-secondary);
+  font-family:var(--font-sans);font-size:var(--fs-caption);font-weight:500;cursor:pointer;transition:var(--t-ui)}
+.metrics-note-input{display:none;width:100%}
+.metrics-note.open .metrics-note-btn{display:none}
+.metrics-note.open .metrics-note-input{display:block}
 .rest-state{padding:var(--s-12) var(--s-5);text-align:center;background:var(--surface);border-radius:var(--r-lg)}
 .rest-title{margin-bottom:var(--s-2);font-size:var(--fs-display);line-height:var(--lh-display);font-weight:600;letter-spacing:var(--ls-display)}
 .rest-desc{font-size:var(--fs-body);line-height:var(--lh-body);font-weight:500;color:var(--text-primary)}
@@ -1487,6 +1518,11 @@ body[data-theme="dark"] .theme-switch::after{transform:translateX(20px)}
 
   <div class="section-label">Current phase</div>
   <div class="card phase-card" id="prog-phase-card"></div>
+
+  <div class="section" id="conditioning-section">
+    <div class="section-label">Conditioning this week</div>
+    <div class="card rows" id="conditioning-card"></div>
+  </div>
 
   <div class="section">
     <div class="section-label">Lift PRs</div>
@@ -2882,7 +2918,20 @@ function buildArtemisSystemPrompt(){
     ).join('\n');
     return `  Block ${b} · ${blockLabel(blk)} (type ${blk.type}):\n${rows || '    (empty)'}`;
   }).join('\n');
-  const todayEst = estimateWorkoutMinutes(dayIdx);
+  const todayEst = estimateWorkoutMinutes(dayIdx, today, todayRes.source === 'row' ? todayRes.session : null);
+  // What today's conditioning, cardio or sport rows recorded about themselves, so the coach can
+  // talk about the run that actually happened rather than the one on the plan.
+  const todayMetrics = Metrics.forSession(todayRes.source === 'row' ? todayRes.session : null).map(m => {
+    const bits = [m.durationMin != null && `${m.durationMin} min`, m.distanceMi != null && `${m.distanceMi} mi`,
+      m.effort != null && `effort ${m.effort}/10`, m.stamina != null && `stamina ${m.stamina}/10`].filter(Boolean).join(', ');
+    return `  - ${m.name}: ${bits}${m.note ? ` — "${m.note}"` : ''}`;
+  }).join('\n');
+  const condWeek = statsConditioningWeek();
+  // Folded into one block so a week with nothing recorded adds nothing at all to the prompt.
+  const condLines = [
+    todayMetrics ? `Recorded today (conditioning / cardio / sport):\n${todayMetrics}` : '',
+    condWeek.sessions ? `This week's conditioning: ${condWeek.minutes} min${condWeek.miles ? `, ${condWeek.miles} mi` : ''} across ${condWeek.sessions} session${condWeek.sessions === 1 ? '' : 's'}.` : '',
+  ].filter(Boolean).join('\n');
 
   // Today's set log progress
   const dk = todayKey();
@@ -3006,7 +3055,7 @@ ${profileBlock}
 TODAY'S PRESCRIBED SESSION (${todayWeekday}): ${today.name}${today.rest?' — REST DAY':''}
 ${today.rest ? '(Rest / recovery day)' : `Estimated time: ~${todayEst} min`}
 ${todayBlocks ? `Blocks${todayTemplateId ? ` (templateId ${todayTemplateId})` : ''}:\n${todayBlocks}` : ''}
-${!today.rest ? `Sets completed today so far: ${setsLogged} / ${setsTotal}` : ''}
+${!today.rest ? `Sets completed today so far: ${setsLogged} / ${setsTotal}` : ''}${condLines ? '\n' + condLines : ''}
 
 ALL-TIME PRs:
 ${prs}
@@ -3309,9 +3358,13 @@ function workSecondsForReps(repStr){
   // ~3.5s per rep + setup time
   return Math.round(reps*3.5 + 8);
 }
-function estimateWorkoutMinutes(dayIdx, day = getWorkout(dayIdx)){
+// `session` is optional: when it is given, a tick row with a logged duration contributes the time
+// it actually took instead of the heuristic below. day.hiit and the snapshot's tick rows are built
+// from the same flattenBlocks() order, so they line up index for index.
+function estimateWorkoutMinutes(dayIdx, day = getWorkout(dayIdx), session = null){
   if(day.rest) return 0;
   let seconds = 0;
+  const loggedMin = session?.snapshot ? flattenBlocks(session.snapshot.blocks).ticks.map(({b, i}) => Metrics.minutes(session, b, i)) : [];
   // Lifting: warmup + working sets + transitions
   if(day.exercises && day.exercises.length){
     seconds += 5*60; // warmup
@@ -3323,15 +3376,17 @@ function estimateWorkoutMinutes(dayIdx, day = getWorkout(dayIdx)){
       seconds += 45; // transition + setup for next exercise
     });
   }
-  // HIIT
+  // HIIT — rows with a logged duration count for what they took; the rest keep the estimate.
   const hiit = day.hiit || [];
-  if(hiit && hiit.length){
+  let estimatedRows = 0;
+  hiit.forEach((h, n) => { if(loggedMin[n] != null) seconds += loggedMin[n] * 60; else estimatedRows++; });
+  if(estimatedRows){
     if(day.fullHiit){
       // Full conditioning workout: ~50s per movement × 5 rounds + rest between
-      seconds += hiit.length * 5 * 50 + 4 * 90; // 4 rests between rounds
+      seconds += estimatedRows * 5 * 50 + 4 * 90; // 4 rests between rounds
     } else {
       // Finisher: ~3 min per movement (work+rest cycles)
-      seconds += hiit.length * 180;
+      seconds += estimatedRows * 180;
     }
   }
   return Math.max(1, Math.round(seconds/60));
@@ -4436,6 +4491,152 @@ const SessionEdit = {
     if(ok) savePlan();
     return ok;
   }
+};
+
+// ===== Conditioning, cardio and sport metrics =====
+// A duration-based row (the Tuesday Zone 2 walk, the weekend run) and an optional sport session
+// used to record one thing: a done flag. They now record what actually happened — how long, how
+// far, how hard, how the tank felt, and a line about it.
+//
+// Storage, and why. Duration goes where a duration already belongs: training_session_sets.
+// duration_sec on the item's own set row (set_idx 0 for a tick row), a column and a primary key
+// that already exist. Distance, effort, stamina and the note have no column, so they ride on the
+// session snapshot at blocks[b].items[i].metrics — per-session by construction, already synced
+// with training_sessions, and needing no DDL. A sport session with no items of its own (a bare
+// "Soccer" day with no template behind it) has nowhere to hang an item, so it writes to
+// snapshot.metrics instead, duration included; values() normalizes the two.
+//
+// These are records of what HAPPENED, not changes to the prescription. That is what makes writing
+// them to a started session's snapshot correct under the Phase 2 immutability rule, and it is why
+// they never ask the Phase 5b scope question, never propagate to the template, and never renumber
+// a logged row: nothing is added, removed or reordered — one key is set on an item already there.
+const Metrics = {
+  DURATIONS: [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 75, 90, 105, 120],
+  SCALES: [
+    {id: 'effort',  q: 'How hard did you work?',      lo: 'Easy',   hi: 'All out'},
+    {id: 'stamina', q: 'How did your stamina feel?',  lo: 'Gassed', hi: 'Strong'},
+  ],
+  // Distance is only meaningful where you cover ground. Gated on the library category first, so a
+  // drill that happens to contain one of these words never picks it up.
+  DISTANCE_NAME: /\b(run|running|jog|walk|hike|bike|biking|cycl|ride|elliptical|row|rowing|swim|soccer)/i,
+  MINUTES_RE: /(\d+(?:\.\d+)?)\s*(?:[–—-]\s*(\d+(?:\.\d+)?)\s*)?(?:min|hour|hr)[a-z]*\b/i,
+
+  item(session, b, i){ return b == null ? null : session?.snapshot?.blocks?.[b]?.items?.[i] || null; },
+  category(session, b, i){
+    const it = this.item(session, b, i);
+    return programForDate(session?.date)?.library?.[it?.exerciseId]?.category
+      || session?.snapshot?.blocks?.[b]?.type || '';
+  },
+  // Which rows record a session rather than a set. A conditioning or sport item always does; so
+  // does any tick row whose prescription is written in minutes, wherever it sits. Rep- and
+  // second-scale rows — warm-ups, mobility holds, agility drills — are deliberately left alone:
+  // a strip under all five warm-up rows would bury the one row on the day that matters.
+  appliesTo(session, b, i){
+    const it = this.item(session, b, i);
+    if(!it || isSetItem(it) || itemHidden(it)) return false;
+    const cat = this.category(session, b, i);
+    if(cat === 'conditioning' || cat === 'sport') return true;
+    if(+it.durationSec >= 60 || it.durationByPhase) return true;
+    return this.MINUTES_RE.test(it.detail || '');
+  },
+  offersDistance(session, b, i){
+    if(b == null) return true;                      // a bare sport session: soccer, a pickup game
+    const cat = this.category(session, b, i);
+    return (cat === 'conditioning' || cat === 'sport') && this.DISTANCE_NAME.test(this.item(session, b, i)?.name || '');
+  },
+  // "35–45 min" → 40, "20–35 min" → 30: the midpoint of the range, snapped to the nearest option.
+  // A row with no duration in its prescription ("Play", "3 rounds") gets no default.
+  prescribedMin(item){
+    const m = this.MINUTES_RE.exec(String(item?.detail || ''));
+    let mid = m ? (m[2] ? (+m[1] + +m[2]) / 2 : +m[1]) : (+item?.durationSec >= 60 ? item.durationSec / 60 : null);
+    if(mid == null || !isFinite(mid)) return null;
+    if(/hour|hr/i.test(m?.[0] || '')) mid *= 60;
+    const want = Math.round(mid);
+    return this.DURATIONS.reduce((a, v) => Math.abs(v - want) < Math.abs(a - want) ? v : a);
+  },
+  // The sport item a "Did it" session records against, or null for a bare one.
+  sportRef(session){
+    const blocks = session?.snapshot?.blocks || [];
+    for(let b = 0; b < blocks.length; b++){
+      if(blocks[b]?.type !== 'sport' || blocks[b].hidden) continue;
+      const v = visibleItems(blocks[b])[0];
+      if(v) return {b, i: v.i};
+    }
+    return null;
+  },
+
+  // ----- reads -----
+  minutes(session, b, i){
+    if(b == null) return session?.snapshot?.metrics?.durationMin ?? null;
+    const sec = Session.sets(session, b, i)[0]?.duration_sec;
+    return sec == null ? null : Math.round(sec / 60);
+  },
+  values(session, b, i){
+    const host = b == null ? session?.snapshot : this.item(session, b, i);
+    const m = host?.metrics || {};
+    return {durationMin: this.minutes(session, b, i), distanceMi: m.distanceMi ?? null,
+      effort: m.effort ?? null, stamina: m.stamina ?? null, note: m.note || ''};
+  },
+  any(session, b, i){
+    const v = this.values(session, b, i);
+    return v.durationMin != null || v.distanceMi != null || v.effort != null || v.stamina != null || !!v.note;
+  },
+  // Every recorded row of a session, as {b, i, name, ...values}. Used by the cards, the Progress
+  // summary and the Artemis prompt, none of which should know where any of it is stored.
+  forSession(session){
+    if(!session) return [];
+    const out = [];
+    (session.snapshot?.blocks || []).forEach((blk, b) => (blk?.items || []).forEach((it, i) => {
+      if(this.appliesTo(session, b, i) && this.any(session, b, i))
+        out.push({b, i, name: it.name || '', category: this.category(session, b, i), ...this.values(session, b, i)});
+    }));
+    if(this.any(session, null, null))
+      out.push({b: null, i: null, name: session.snapshot?.name || session.title || 'Session', category: 'sport', ...this.values(session, null, null)});
+    return out;
+  },
+
+  // ----- writes -----
+  // Queue the session before the push, not just on failure: a pull landing while a metrics write
+  // is still in flight then restores this device's copy instead of replacing it (Phase 11's rule
+  // — the cloud owns everything except what this device still has queued).
+  commitSnapshot(session){
+    Session.enqueue(session.id);
+    SessionEdit.saveSnapshot(session);
+  },
+  slot(session, b, i){
+    const host = b == null ? session?.snapshot : this.item(session, b, i);
+    return host ? (host.metrics ||= {}) : null;
+  },
+  setDuration(session, b, i, min){
+    const v = min === '' || min == null ? null : Math.round(+min);
+    if(b == null){
+      const m = this.slot(session, null, null);
+      if(!m) return;
+      if(v == null) delete m.durationMin; else m.durationMin = v;
+      this.commitSnapshot(session);
+      return;
+    }
+    Session.cell(session, b, i, 0).duration_sec = v == null ? null : v * 60;
+    Session.enqueue(session.id);
+    Session.commit(session, b, i, 0);
+  },
+  // The dropdown shows the prescribed duration before anything is logged — it is what the user is
+  // looking at when they record anything else about the session, and picking the value already on
+  // screen fires no change event. So the moment they record anything, the number they can see
+  // becomes part of the record. Ticking the row done is deliberately not one of those moments:
+  // "done with nothing filled in" stays exactly that.
+  adoptDefault(session, b, i){
+    if(this.minutes(session, b, i) != null) return;
+    const d = this.prescribedMin(this.item(session, b, i));
+    if(d != null) this.setDuration(session, b, i, d);
+  },
+  setField(session, b, i, key, value){
+    const m = this.slot(session, b, i);
+    if(!m) return;
+    if(value == null || value === '') delete m[key]; else m[key] = value;
+    this.adoptDefault(session, b, i);
+    this.commitSnapshot(session);
+  },
 };
 
 // The scope question, as a modal over the page: it opens where you are looking, the moment the
@@ -5543,8 +5744,14 @@ function deloadNote(session, dateKey){
   const on = session?.snapshot ? !!session.snapshot.deload : !!deloadFor(getWeekNum(dateKey), programForDate(dateKey));
   return on ? '<span class="workout-meta-note">Deload week · reduced volume</span>' : '';
 }
-function renderBlockWorkout({day, blocks, session, dateKey, preview, actions, metaNote}){
+// metricsOn is the session a duration/sport row records into — the stored row, or today's virtual
+// one, which the first write materializes. omitMetrics is the item a "Did it" card already carries
+// the strip for, so a sport session never shows the same strip twice.
+function renderBlockWorkout({day, blocks, session, dateKey, preview, actions, metaNote, metricsOn = session, omitMetrics = null}){
   const flat = flattenBlocks(blocks);
+  const canRecord = !preview && isViewingToday() && isSessionDay(activeDay) && !!metricsOn && metricsOn.status !== 'skipped';
+  const stripFor = (b, i) => canRecord && Metrics.appliesTo(metricsOn, b, i)
+    && !(omitMetrics && omitMetrics.b === b && omitMetrics.i === i) ? metricsStripHtml(metricsOn, b, i) : '';
   const legacyCells = (b, i, item) => {
     if(!isSetItem(item)) return {0: {done: isHiitDone(activeDay, item.name)}};
     const k = flat.sets.findIndex(x => x.b === b && x.i === i);
@@ -5554,7 +5761,7 @@ function renderBlockWorkout({day, blocks, session, dateKey, preview, actions, me
   const itemCount = flat.sets.length + flat.ticks.length;
   const only = preview ? ' session-only' : '';
   let html = `<div class="workout-meta">
-      <span class="workout-meta-time">~${estimateWorkoutMinutes(activeDay, day)} min</span>
+      <span class="workout-meta-time">~${estimateWorkoutMinutes(activeDay, day, session)} min</span>
       <span class="workout-meta-info">${itemCount} exercise${itemCount === 1 ? '' : 's'} · ${blocks.length} block${blocks.length === 1 ? '' : 's'}${metaNote}${session && Session.isUnsynced(session.id) ? UNSYNCED_NOTE : ''}</span>
       <button class="btn btn-ghost btn-sm editable-only" onclick="PlanEditor.open(${activeDay})" title="Edit workout">Edit</button>
       <button class="btn btn-ghost btn-sm" onclick="Programs.open()" title="Programs">Programs</button>
@@ -5582,7 +5789,7 @@ function renderBlockWorkout({day, blocks, session, dateKey, preview, actions, me
           <div class="hiit-num">${String(n + 1).padStart(2, '0')}</div>
           <div class="hiit-info"><div class="hiit-name">${escapeHtml(item.name || '')}</div>${detail ? `<div class="hiit-detail">${escapeHtml(detail)}</div>` : ''}</div>
           <button class="set-check ${done ? 'done' : ''}${only}" title="Mark complete" onclick="toggleBlockTick(${activeDay},${b},${i})">${CHECK_SVG}</button>
-        </div>${editable ? itemToolsHtml(session, b, i, {canUp: n > 0, canDown: n < items.length - 1, sets: false}) : ''}`);
+        </div>${stripFor(b, i)}${editable ? itemToolsHtml(session, b, i, {canUp: n > 0, canDown: n < items.length - 1, sets: false}) : ''}`);
         return;
       }
       flushTicks();
@@ -5662,6 +5869,10 @@ function renderWorkoutContent(){
       ${isPlannable(dateKey) ? `<div class="rest-actions"><button class="btn btn-secondary" onclick="unskipViewedSession()">Undo skip</button></div>` : ''}
     </div>`;
   } else if(live && shown?.kind === 'sport'){
+    // "Did it" is the whole log for an optional session, so the strip belongs on it: how long you
+    // played, how far you covered, how hard it was, how the tank felt. It records against the
+    // session's own sport item where there is one, so the row below never repeats the strip.
+    const sportRef = Metrics.sportRef(shown) || {b: null, i: null};
     html=`<div class="rest-state">
       <div class="rest-title">${day.name || 'Optional session'}</div>
       <div class="rest-desc">${day.desc || 'No sets to log.'}</div>
@@ -5669,12 +5880,13 @@ function renderWorkoutContent(){
       ${isViewingToday() ? `<div class="rest-actions"><button class="btn ${doneNow ? 'btn-secondary' : 'btn-primary'}" aria-pressed="${doneNow}" onclick="toggleOptionalDone()">
         <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="${doneNow ? 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' : 'M5 13l4 4L19 7'}"/></svg>
         ${doneNow ? 'Did it · undo' : 'Did it'}</button></div>` : ''}
+      ${isViewingToday() && shown.status !== 'skipped' ? metricsStripHtml(shown, sportRef.b, sportRef.i) : ''}
     </div>${actions}`;
     // An optional session with a workout behind it (a warm-up, a drill list) shows it below the
     // card. A bare one — just a name — keeps the single "Did it" card it has always had.
     const sportFlat = flattenBlocks(viewBlocks);
     if(sportFlat.sets.length + sportFlat.ticks.length)
-      html += renderBlockWorkout({day, blocks: viewBlocks, session, dateKey, preview, actions: '',
+      html += renderBlockWorkout({day, blocks: viewBlocks, session, dateKey, preview, actions: '', metricsOn: shown, omitMetrics: sportRef,
         metaNote: deloadNote(session, dateKey) + planUpdatedNote(session)});
   } else if(day.rest){
     html=`<div class="rest-state">
@@ -5683,7 +5895,7 @@ function renderWorkoutContent(){
       <div class="rest-sub">Recovery is when growth happens.</div>
     </div>`;
   } else if(!isLegacyShape(viewBlocks)){
-    html = renderBlockWorkout({day, blocks: viewBlocks, session, dateKey, preview, actions,
+    html = renderBlockWorkout({day, blocks: viewBlocks, session, dateKey, preview, actions, metricsOn: shown,
       metaNote: (session?.status === 'done' ? snapshotNote(session) : preview ? `<span class="workout-meta-note">Plan preview · today's session is ${DAY_LABELS[getDayIdxFromDate(dateKey)]}</span>` : '') + deloadNote(session, dateKey) + planUpdatedNote(session)});
   } else {
     const estMin = estimateWorkoutMinutes(activeDay, day);
@@ -5927,6 +6139,86 @@ async function toggleBlockTick(dayIdx, b, i){
   cell.done = !cell.done;
   Session.commit(session, b, i, 0);
   renderWorkoutContent();
+}
+
+// ----- Recording a conditioning, cardio or sport session -----
+// The session to record into. An optional sport day takes no set logs, so it materializes the way
+// "Did it" does; everything else goes through the normal start-on-first-write path.
+async function metricsSession(dayIdx){
+  if(!assertEditable('Recording this session') || !assertSessionDay(dayIdx)) return null;
+  const date = viewKey();
+  if(Session.resolve(date).session?.kind === 'sport') return Session.materialize(date, {status: 'planned'});
+  return Session.begin(date);
+}
+async function setMetricDuration(dayIdx, b, i, value){
+  const s = await metricsSession(dayIdx);
+  if(!s) return;
+  Metrics.setDuration(s, b, i, value);
+}
+async function setMetricDistance(dayIdx, b, i, value){
+  const s = await metricsSession(dayIdx);
+  if(!s) return;
+  const mi = value === '' || value == null ? null : Math.round(Math.abs(parseFloat(value)) * 10) / 10;
+  Metrics.setField(s, b, i, 'distanceMi', mi != null && isFinite(mi) && mi > 0 ? mi : null);
+}
+// Tapping the value already selected clears it — the scales are single-value and never trap you
+// on a rating you didn't mean. The row repaints in place so a half-typed note survives the tap.
+async function setMetricScale(dayIdx, b, i, key, n, el){
+  const s = await metricsSession(dayIdx);
+  if(!s) return;
+  const next = Metrics.values(s, b, i)[key] === n ? null : n;
+  Metrics.setField(s, b, i, key, next);
+  const row = el?.parentElement;
+  if(row) [...row.children].forEach((c, ix) => c.classList.toggle('on', next === ix + 1));
+}
+async function setMetricNote(dayIdx, b, i, value){
+  const s = await metricsSession(dayIdx);
+  if(!s) return;
+  Metrics.setField(s, b, i, 'note', String(value || '').trim().slice(0, 140) || null);
+}
+// Which note fields are open, keyed like openCues: presentation state, so an expanded note stays
+// expanded when renderWorkoutContent() rebuilds after a tick.
+const openNotes = new Set();
+function openMetricNote(el, key){
+  openNotes.add(key);
+  const wrap = el.closest('.metrics-note');
+  wrap?.classList.add('open');
+  wrap?.querySelector('input')?.focus();
+}
+
+// The strip itself: duration, distance where it means something, the two 1–10 scales stacked so
+// they read as a pair, and a note behind a small affordance. Every field is optional.
+function metricsStripHtml(session, b, i, {editable = true} = {}){
+  const v = Metrics.values(session, b, i);
+  const shown = v.durationMin ?? Metrics.prescribedMin(Metrics.item(session, b, i));
+  const key = `${b}-${i}`;
+  const dis = editable ? '' : ' disabled';
+  const opts = [`<option value=""${shown == null ? ' selected' : ''}>—</option>`]
+    .concat(Metrics.DURATIONS.map(m => `<option value="${m}"${shown === m ? ' selected' : ''}>${m} min</option>`)).join('');
+  const scales = Metrics.SCALES.map(sc => `
+      <div class="metrics-scale">
+        <div class="metrics-q" id="scale-${key}-${sc.id}">${sc.q}</div>
+        <div class="scale-row" role="group" aria-labelledby="scale-${key}-${sc.id}">${
+          Array.from({length: 10}, (_, n) => `<button type="button" class="scale-btn${v[sc.id] === n + 1 ? ' on' : ''}"${dis}
+            aria-pressed="${v[sc.id] === n + 1}" onclick="setMetricScale(${activeDay},${b},${i},'${sc.id}',${n + 1},this)">${n + 1}</button>`).join('')}</div>
+        <div class="scale-ends"><span>${sc.lo}</span><span>${sc.hi}</span></div>
+      </div>`).join('');
+  const noteOpen = openNotes.has(key) || !!v.note;
+  return `<div class="metrics-strip" data-metrics="${key}">
+    <div class="metrics-line">
+      <label class="metrics-field"><span>Duration</span>
+        <select class="pe-input"${dis} onchange="setMetricDuration(${activeDay},${b},${i},this.value)">${opts}</select></label>
+      ${Metrics.offersDistance(session, b, i) ? `<label class="metrics-field"><span>Distance</span>
+        <input class="pe-input" type="number" inputmode="decimal" step="0.1" min="0" placeholder="mi"${dis}
+          value="${v.distanceMi ?? ''}" onchange="setMetricDistance(${activeDay},${b},${i},this.value)"></label>` : ''}
+    </div>
+    ${scales}
+    <div class="metrics-note${noteOpen ? ' open' : ''}">
+      <button type="button" class="metrics-note-btn"${dis} onclick="openMetricNote(this,'${key}')">+ Add note</button>
+      <input class="pe-input metrics-note-input" type="text" maxlength="140" placeholder="How did it go?"${dis}
+        value="${escapeAttr(v.note)}" onchange="setMetricNote(${activeDay},${b},${i},this.value)">
+    </div>
+  </div>`;
 }
 
 async function markWorkoutDone(){
@@ -6471,6 +6763,9 @@ function renderNutritionTotals(){
 function escapeHtml(s){
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
+// Free text that lands inside a double-quoted attribute needs the quote escaped as well —
+// escapeHtml alone is only safe for a text node.
+function escapeAttr(s){ return escapeHtml(s).replace(/"/g, '&quot;'); }
 
 function renderArtemis(){
   const root = document.getElementById('artemis-content');
@@ -6552,7 +6847,7 @@ function renderArtStats(){
 
   return `<div class="card rows art-stats">
     <div class="row"><span class="row-title">Week</span><span class="row-value"><span class="row-data">${wk}/${programWeeks(getActiveProgram())}</span> · ${ph.label ?? ''}</span></div>
-    <div class="row"><span class="row-title">Today</span><span class="row-value">${today.name} · ${today.rest?'rest':estimateWorkoutMinutes(dayIdx)+' min'}</span></div>
+    <div class="row"><span class="row-title">Today</span><span class="row-value">${today.name} · ${today.rest?'rest':estimateWorkoutMinutes(dayIdx, today, state.sessions?.[todayKey()] || null)+' min'}</span></div>
     <div class="row"><span class="row-title">Protein</span><span class="row-value"><span class="row-data">${todayProt}g</span> / 190g</span></div>
     <div class="row"><span class="row-title">Sessions</span><span class="row-value"><span class="row-data">${sessions}</span> total</span></div>
   </div>`;
@@ -6696,6 +6991,13 @@ function renderProgress(){
     <p class="phase-note">${ph.note ?? ''}</p>
     ${prog?.progressionNote ? `<p class="phase-note">${prog.progressionNote}</p>` : ''}`;
 
+  // What the conditioning and sport days added up to this week. Empty until something is recorded.
+  const cond = statsConditioningWeek();
+  document.getElementById('conditioning-card').innerHTML = cond.sessions
+    ? row('Minutes', `${cond.minutes}`) + row('Miles', cond.miles ? cond.miles.toFixed(1) : null)
+      + row('Sessions', `${cond.sessions}`)
+    : `<div class="row"><span class="row-title">Nothing logged yet</span><span class="row-value row-data">—</span></div>`;
+
   const prs = state.prs||{};
   let prHtml = programKeyLifts().map(({name})=>`
     <div class="row">
@@ -6788,6 +7090,24 @@ function statsBestPR(){
   if(!prs.length) return null;
   prs.sort((a,b) => b[1] - a[1]);
   return {name: prs[0][0], weight: +prs[0][1]};
+}
+// Conditioning and sport recorded this calendar week: minutes, miles, and how many sessions
+// contributed. A new helper rather than a change to statsWeek(), whose shape other callers rely on.
+function statsConditioningWeek(weekOffset = 0){
+  const w = statsWeek(weekOffset);
+  let minutes = 0, miles = 0;
+  const sessions = new Set();
+  for(let i = 0; i < 7; i++){
+    const d = shiftDateKey(w.start, i), s = state.sessions?.[d];
+    if(!s) continue;
+    Metrics.forSession(s).forEach(m => {
+      if(m.category !== 'conditioning' && m.category !== 'sport') return;
+      minutes += +m.durationMin || 0;
+      miles += +m.distanceMi || 0;
+      if(m.durationMin != null || m.distanceMi != null) sessions.add(s.id);
+    });
+  }
+  return {start: w.start, end: w.end, minutes, miles: Math.round(miles * 10) / 10, sessions: sessions.size};
 }
 function statsWeek(weekOffset = 0){
   // Current calendar week (Mon → Sun) so the dot grid labels (M T W T F S S)
@@ -6913,7 +7233,10 @@ const Cards = {
       {id:'reps',     label:'Total reps', get(){ const t = statsToday(); return t.totalReps ? {value: String(t.totalReps)} : null; }},
       {id:'toplift',  label:'Top lift',   get(){ const t = statsToday(); return t.topLift.weight ? {value: Cards.lbs(t.topLift.weight)} : null; }},
       {id:'duration', label:'Duration',   get(){ const t = statsToday(); if(t.isRest) return null;
-                                                 const m = estimateWorkoutMinutes(getTodayDayIdx()); return m ? {value: Cards.duration(m)} : null; }},
+                                                 const m = Cards.sessionMinutes(); return m ? {value: Cards.duration(m)} : null; }},
+      {id:'distance', label:'Distance',   get(){ const d = Cards.sessionDistance(); return d ? {value: `${d.toFixed(1)} mi`} : null; }},
+      {id:'effort',   label:'Effort',     get(){ const n = Cards.sessionScale('effort'); return n ? {value: `${n} / 10`} : null; }},
+      {id:'stamina',  label:'Stamina',    get(){ const n = Cards.sessionScale('stamina'); return n ? {value: `${n} / 10`} : null; }},
       {id:'volume',   label:'Volume',     get(){ const v = Cards.sessionVolume(); return v ? {value: `${v.toLocaleString('en-US')} lbs`} : null; }},
       {id:'exercises',label:'Exercises',  get(){ const n = Cards.sessionExercises(); return n ? {value: String(n)} : null; }},
       {id:'protein',  label:'Protein',    get(){ const p = Cards.proteinToday(); return p ? {value: `${p} g`} : null; }},
@@ -6942,6 +7265,23 @@ const Cards = {
     Object.values(state.setLog?.[dk]?.[dayIdx] || {}).forEach(sets =>
       Object.values(sets || {}).forEach(c => { v += (+c.reps || 0) * (+c.weight || 0); }));
     return Math.round(v) || null;
+  },
+  // What today's session recorded about itself. A conditioning or soccer day logs almost no sets,
+  // so without these there is nothing on the card worth posting.
+  todaySession(){ return state.sessions?.[todayKey()] || null; },
+  // Logged where logged, estimated where not.
+  sessionMinutes(){
+    const s = this.todaySession();
+    return estimateWorkoutMinutes(getTodayDayIdx(), s ? Session.toLegacyWorkout(s) : getWorkout(getTodayDayIdx(), todayKey()), s) || null;
+  },
+  sessionDistance(){
+    const mi = Metrics.forSession(this.todaySession()).reduce((a, m) => a + (+m.distanceMi || 0), 0);
+    return mi > 0 ? Math.round(mi * 10) / 10 : null;
+  },
+  // Several recorded rows average out — one number for how the day felt, not a list.
+  sessionScale(key){
+    const vals = Metrics.forSession(this.todaySession()).map(m => m[key]).filter(n => n != null);
+    return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null;
   },
   // How many exercises today's session holds.
   sessionExercises(){
