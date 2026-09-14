@@ -406,26 +406,36 @@ body.share-open{overflow:hidden}
 .share-grabber{flex:0 0 auto;width:36px;height:5px;margin:var(--s-2) auto 0;border-radius:var(--r-pill);background:var(--fill-strong)}
 .share-head{flex:0 0 auto;display:flex;justify-content:space-between;align-items:center;padding:var(--s-2) var(--s-3) var(--s-1) var(--s-5)}
 .share-head h3{font-family:var(--font-sans);font-size:var(--fs-heading);font-weight:600;letter-spacing:var(--ls-heading);color:var(--text-primary)}
-.share-pills{flex:0 0 auto;display:flex;gap:var(--s-2);padding:var(--s-2) var(--s-5);overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;-ms-overflow-style:none}
-.share-pills::-webkit-scrollbar{display:none}
-.share-body{flex:1 1 auto;display:flex;flex-direction:column;align-items:center;gap:var(--s-3);padding:var(--s-3) var(--s-5);overflow-y:auto}
+/* Card chooser: one continuous track, three equal segments. */
+.share-pills{flex:0 0 auto;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:2px;margin:var(--s-2) var(--s-5) 0;padding:var(--s-1);background:var(--fill);border-radius:var(--r-md)}
+.share-seg{min-width:0;height:var(--tap);display:flex;align-items:center;justify-content:center;
+  background:transparent;border:0;border-radius:var(--r-sm);
+  color:var(--text-secondary);font-family:var(--font-sans);font-size:var(--fs-caption);font-weight:600;line-height:1;
+  white-space:nowrap;cursor:pointer;transition:var(--t-ui)}
+.share-seg:active{opacity:.6}
+.share-seg.active{background:var(--bg-elevated);color:var(--text-primary);box-shadow:var(--shadow-elevated)}
+.share-body{flex:1 1 auto;display:flex;flex-direction:column;align-items:center;gap:var(--s-4);padding:var(--s-3) var(--s-5) var(--s-4);overflow-y:auto}
 .share-stats-wrap{display:flex;flex-direction:column;gap:var(--s-2);width:100%}
-.share-stats-label{font-size:var(--fs-caption);line-height:var(--lh-caption);color:var(--text-secondary)}
-.share-stats{display:flex;flex-wrap:wrap;gap:var(--s-2);justify-content:center}
-.share-pills .share-pill,.share-stats .share-pill{height:var(--tap)}
-.share-stats .share-pill[disabled]{opacity:.4;cursor:default}
+.share-stats-label{font-size:var(--fs-caption);line-height:var(--lh-caption);color:var(--text-secondary);text-align:center}
+/* Equal-width cells on a fixed grid: the last row lines up with the ones above it instead of
+   leaving a lone chip floating in the middle. */
+.share-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--s-2)}
+.share-stats .share-pill{height:var(--tap);width:100%;justify-content:center;padding:0 var(--s-2);
+  font-size:var(--fs-caption);overflow:hidden;text-overflow:ellipsis}
+.share-stats .share-pill[disabled]{opacity:.45;cursor:default}
+@media (max-width:360px){.share-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
 /* The preview declares the card's exact aspect and must not be shrunk by the column flexbox —
    a squashed box used to stretch the canvas with it, which is what distorted the photo. */
-.share-canvas-wrap{position:relative;flex:0 0 auto;background:var(--media-bg);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-elevated);width:min(320px, 75vw);aspect-ratio:1080/1350;display:flex;align-items:center;justify-content:center}
+.share-canvas-wrap{position:relative;flex:0 0 auto;background:var(--media-bg);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-elevated);width:min(272px, 68vw);aspect-ratio:1080/1350;display:flex;align-items:center;justify-content:center}
 .share-canvas-wrap canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block}
 .share-canvas-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);font-size:var(--fs-caption);line-height:var(--lh-caption);font-weight:500;}
-.share-actions{flex:0 0 auto;display:flex;gap:var(--s-3);padding:var(--s-3) var(--s-5) calc(var(--s-5) + env(safe-area-inset-bottom));background:var(--bg-elevated)}
-.share-actions .btn, .share-actions .share-ig-btn{flex:1}
+.share-actions{flex:0 0 auto;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:var(--s-2);padding:var(--s-3) var(--s-5) calc(var(--s-5) + env(safe-area-inset-bottom));background:var(--bg-elevated);border-top:1px solid var(--border-subtle)}
+.share-actions .btn, .share-actions .share-ig-btn{min-width:0;width:100%;height:var(--tap)}
 .share-ig-btn{height:var(--tap);display:inline-flex;align-items:center;justify-content:center;gap:var(--s-2);border:0;border-radius:var(--r-md);background:var(--accent);color:var(--accent-text);font-family:var(--font-sans);font-size:var(--fs-body);font-weight:600;cursor:pointer;transition:var(--t-ui)}
 .share-ig-btn:active{opacity:.85}
 .share-ig-btn svg{width:16px;height:16px;stroke-width:2}
 .share-photo-controls{display:flex;gap:var(--s-2);justify-content:center;align-items:center;width:100%}
-.share-photo-btn{position:relative;height:var(--tap);display:flex;align-items:center;gap:var(--s-2);padding:0 var(--s-4);background:var(--fill);border:0;border-radius:var(--r-pill);color:var(--text-primary);font-family:var(--font-sans);font-size:var(--fs-caption);font-weight:500;cursor:pointer;transition:var(--t-ui)}
+.share-photo-btn{position:relative;flex:0 1 auto;min-width:0;height:var(--tap);display:flex;align-items:center;justify-content:center;gap:var(--s-2);padding:0 var(--s-4);background:transparent;border:0;border-radius:var(--r-pill);color:var(--text-secondary);font-family:var(--font-sans);font-size:var(--fs-caption);font-weight:500;white-space:nowrap;cursor:pointer;transition:var(--t-ui)}
 .share-photo-btn:hover{background:var(--fill-strong)}
 .share-photo-btn svg{width:16px;height:16px;stroke-width:2}
 .share-photo-btn.danger{color:var(--text-secondary)}
@@ -1837,7 +1847,13 @@ function renderDateNav(slotId){
 }
 
 function save(){
-  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+  try{
+    // A focus request in flight must never reach localStorage as `loading`. Any unrelated save()
+    // during the request would otherwise snapshot it, and a crash or a closed tab then left the
+    // card spinning for ever with nothing to retry it.
+    const snapshot = state.dailyFocus?.loading ? {...state, dailyFocus: null} : state;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+  }
   catch(e){ console.warn('Save failed:', e); }
 }
 
@@ -2394,6 +2410,9 @@ function load(){
     if(!state.coachStyle) state.coachStyle='friendly';
     if(!Array.isArray(state.artemisChat)) state.artemisChat=[];
     if(!state.meals||!Array.isArray(state.meals)) state.meals=JSON.parse(JSON.stringify(DEFAULT_MEALS));
+    // A focus stored mid-request (from a build that could persist it) would otherwise spin for
+    // ever: drop it so the card asks again.
+    if(state.dailyFocus?.loading) state.dailyFocus = null;
     initializePlan();
     save();
     applyTheme();
@@ -2666,6 +2685,12 @@ function renderTodayFocusCard(){
     </div>`;
     return;
   }
+  if(f && f.error){
+    // Some API messages already end in a full stop; don't hand the user a double one.
+    const why = String(f.text || 'unknown error').replace(/\s*\.\s*$/, '');
+    card.innerHTML = `<div class="focus-empty">Couldn't generate focus — ${escapeHtml(why)}. <a onclick="refreshDashFocus()">Try again</a></div>`;
+    return;
+  }
   if(fresh && f.text){
     const styleLabel = (COACH_STYLES[state.coachStyle]?.name) || 'Coach';
     card.innerHTML = `
@@ -2677,10 +2702,6 @@ function renderTodayFocusCard(){
           Refresh
         </button>
       </div>`;
-    return;
-  }
-  if(f && f.error){
-    card.innerHTML = `<div class="focus-empty">Couldn't generate focus: ${escapeHtml(f.text || 'unknown error')}. <a onclick="refreshDashFocus()">Try again</a></div>`;
     return;
   }
   // Stale or missing — kick off a refresh and show loading
@@ -3135,28 +3156,47 @@ async function sendArtemisMessage(prefilled){
   }
 }
 
-async function refreshDailyFocus(){
+// Several render paths ask for the focus; they share one request rather than each starting their own.
+let focusInFlight = null;
+const FOCUS_TIMEOUT_MS = 25000;
+function withTimeout(promise, ms, message){
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(message)), ms); })
+  ]).finally(() => clearTimeout(timer));
+}
+function focusIsFresh(f){
+  return !!f && f.date === todayKey() && f.style === state.coachStyle && !f.error && !f.loading;
+}
+async function refreshDailyFocus(force){
   if(!getApiKey()){ toast('Set up API key first'); return; }
-  const today = todayKey();
-  // Already cached for today + this style?
-  if(state.dailyFocus && state.dailyFocus.date===today && state.dailyFocus.style===state.coachStyle && !arguments[0]){
+  if(!force && focusIsFresh(state.dailyFocus)){
     renderArtemis(); renderTodayFocusCard(); return;
   }
+  if(focusInFlight) return focusInFlight;
+  const today = todayKey();
   state.dailyFocus = {date:today, style:state.coachStyle, text:null, loading:true};
   renderArtemis();
   renderTodayFocusCard();
-  try{
-    const prompt = `In 3-4 sentences max (under 60 words), give me my single most important focus for today based on my current data. Be specific to my exact numbers and today's session. No greeting, no sign-off.`;
-    // Daily focus is read-only — skip tools so the model doesn't try to propose changes
-    const data = await callArtemis(prompt, {skipHistory:true, maxTokens:200, skipTools:true});
-    const text = (data.content || []).find(b => b.type === 'text')?.text || '';
-    state.dailyFocus = {date:today, style:state.coachStyle, text, loading:false};
-    save();
-  }catch(e){
-    state.dailyFocus = {date:today, style:state.coachStyle, text:`(${e.message})`, loading:false, error:true};
-  }
-  renderArtemis();
-  renderTodayFocusCard();
+  focusInFlight = (async () => {
+    try{
+      const prompt = `In 3-4 sentences max (under 60 words), give me my single most important focus for today based on my current data. Be specific to my exact numbers and today's session. No greeting, no sign-off.`;
+      // Daily focus is read-only — skip tools so the model doesn't try to propose changes
+      const data = await withTimeout(
+        callArtemis(prompt, {skipHistory:true, maxTokens:200, skipTools:true}),
+        FOCUS_TIMEOUT_MS, `The coach didn't answer within ${FOCUS_TIMEOUT_MS / 1000}s`);
+      const text = (data.content || []).find(b => b.type === 'text')?.text || '';
+      state.dailyFocus = {date:today, style:state.coachStyle, text, loading:false};
+    }catch(e){
+      // Keep the real message — a status code or the API's own words — so the card can show it.
+      state.dailyFocus = {date:today, style:state.coachStyle, text: e?.message || String(e), loading:false, error:true};
+    }
+    save();                       // both outcomes persist, and neither is `loading`
+    renderArtemis();
+    renderTodayFocusCard();
+  })();
+  try{ await focusInFlight; } finally { focusInFlight = null; }
 }
 
 function clearArtemisChat(){
@@ -6812,6 +6852,9 @@ const Cards = {
       {id:'toplift',  label:'Top lift',   get(){ const t = statsToday(); return t.topLift.weight ? {value: Cards.lbs(t.topLift.weight)} : null; }},
       {id:'duration', label:'Duration',   get(){ const t = statsToday(); if(t.isRest) return null;
                                                  const m = estimateWorkoutMinutes(getTodayDayIdx()); return m ? {value: Cards.duration(m)} : null; }},
+      {id:'volume',   label:'Volume',     get(){ const v = Cards.sessionVolume(); return v ? {value: `${v.toLocaleString('en-US')} lbs`} : null; }},
+      {id:'exercises',label:'Exercises',  get(){ const n = Cards.sessionExercises(); return n ? {value: String(n)} : null; }},
+      {id:'protein',  label:'Protein',    get(){ const p = Cards.proteinToday(); return p ? {value: `${p} g`} : null; }},
       {id:'week',     label:'Week',       get(){ return {value: `${getWeekNum()} / ${programWeeks(getActiveProgram())}`}; }},
     ],
     week: [
@@ -6829,6 +6872,23 @@ const Cards = {
       {id:'date',     label:'Date',       get(){ const p = Cards.prDetail(); return p && p.date ? {value: Cards.shortDate(p.date)} : null; }},
       {id:'reps',     label:'Reps',       get(){ const p = Cards.prDetail(); return p && p.reps ? {value: String(p.reps)} : null; }},
     ],
+  },
+  // Total weight moved today: reps × weight over every logged set.
+  sessionVolume(){
+    const dk = todayKey(), dayIdx = getTodayDayIdx();
+    let v = 0;
+    Object.values(state.setLog?.[dk]?.[dayIdx] || {}).forEach(sets =>
+      Object.values(sets || {}).forEach(c => { v += (+c.reps || 0) * (+c.weight || 0); }));
+    return Math.round(v) || null;
+  },
+  // How many exercises today's session holds.
+  sessionExercises(){
+    const t = statsToday();
+    return t.isRest ? null : (getWorkout(getTodayDayIdx(), todayKey())?.exercises || []).length || null;
+  },
+  proteinToday(){
+    const p = (state.foodLog?.[todayKey()] || []).reduce((a, b) => a + (b.prot || 0), 0);
+    return p > 0 ? Math.round(p) : null;
   },
   // Change across the weights logged in the current week.
   weightChange(){
@@ -6977,7 +7037,7 @@ const Cards = {
   renderPills(){
     const el = document.getElementById('share-pills');
     el.innerHTML = this.TYPES.map(t => `
-      <button class="share-pill ${t.id===this.current?'active':''}" onclick="Cards.setType('${t.id}')">${t.label}</button>
+      <button class="share-seg ${t.id===this.current?'active':''}" onclick="Cards.setType('${t.id}')">${t.label}</button>
     `).join('');
   },
 
@@ -7729,12 +7789,14 @@ const PlanOps = {
         else if(prog.library[item.exerciseId]) prog.library[item.exerciseId].name = v;
         else item.exerciseId = ensureLibraryEntry(prog.library, v, 'strength', {});
       }
-      else if(k === 'sets') item.sets = parseInt(v) || 0;
-      else if(k === 'reps') item.repsText = v;
+      // An explicit number takes the item off the phase schedule, exactly as a hand edit in the
+      // template editor does — otherwise the phase would silently overwrite what was approved.
+      else if(k === 'sets'){ item.sets = parseInt(v) || 0; delete item.phaseBased; }
+      else if(k === 'reps'){ item.repsText = v; delete item.phaseBased; }
       else if(k === 'rest') item.restText = v;
       else if(k === 'weight') item.weightText = v;
       else if(k === 'duration') item.durationSec = parseInt(v) || 0;
-      else if(k === 'detail') item.detail = v;
+      else if(k === 'detail'){ item.detail = v; delete item.durationByPhase; }
       else if(k === 'desc') item.cues = v;
     });
     if(!item.sets) delete item.sets;
