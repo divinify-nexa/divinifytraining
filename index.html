@@ -766,6 +766,19 @@ body.scanner-open{overflow:hidden}
 .hiit-info{flex:1;min-width:0}
 .hiit-row .icon-btn{margin-right:calc(-1 * var(--s-3))}
 .hiit-card{padding:var(--s-3) var(--s-4)}
+/* The progression suggestion: a quiet line under the prescription, with its own two targets. */
+.ex-suggest{display:flex;align-items:center;flex-wrap:wrap;gap:var(--s-1) var(--s-2);margin-top:var(--s-1)}
+.ex-suggest-text{flex:1;min-width:0;font-size:var(--fs-micro);line-height:var(--lh-micro);
+  letter-spacing:var(--ls-micro);color:var(--text-tertiary)}
+.ex-suggest-use,.ex-suggest-x{position:relative;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;
+  height:32px;background:var(--fill);border:0;border-radius:var(--r-sm);color:var(--text-primary);
+  font-family:var(--font-sans);font-size:var(--fs-micro);line-height:var(--lh-micro);font-weight:600;
+  cursor:pointer;transition:var(--t-ui)}
+.ex-suggest-use{padding:0 var(--s-3)}
+.ex-suggest-x{width:32px;padding:0;color:var(--text-tertiary);background:transparent}
+.ex-suggest-use::before,.ex-suggest-x::before{content:'';position:absolute;inset:-6px}   /* 44px hit area */
+.ex-suggest-x svg{width:14px;height:14px}
+.ex-target{color:var(--text-primary);font-weight:600}
 /* Recording a conditioning, cardio or sport session. The strip runs to the card's edges so the
    two 1–10 scales get the full width: ten targets across 335px at a 375px screen is 33.5px each,
    clear of the 32px floor, with no gap between tracks to eat into it. */
@@ -2938,8 +2951,13 @@ function buildArtemisSystemPrompt(){
     return `  - ${m.name}: ${bits}${m.note ? ` — "${m.note}"` : ''}`;
   }).join('\n');
   const condWeek = statsConditioningWeek();
+  // Any progression suggestions live on today's session, so the coach can talk about the jump the
+  // program is proposing instead of inventing one of its own.
+  const suggestions = Progression.todays(todayRes.session).map(s =>
+    `  - ${s.name}: last ${s.last.sets}x${s.last.reps} @ ${s.last.weight} lb → suggest ${s.weight} lb (+${s.increment}, ${s.side})${s.accepted != null ? ' [accepted]' : ''}`).join('\n');
   // Folded into one block so a week with nothing recorded adds nothing at all to the prompt.
   const condLines = [
+    suggestions ? `Progression suggestions for today (from this program's own rule):\n${suggestions}` : '',
     todayMetrics ? `Recorded today (conditioning / cardio / sport):\n${todayMetrics}` : '',
     condWeek.sessions ? `This week's conditioning: ${condWeek.minutes} min${condWeek.miles ? `, ${condWeek.miles} mi` : ''} across ${condWeek.sessions} session${condWeek.sessions === 1 ? '' : 's'}.` : '',
   ].filter(Boolean).join('\n');
@@ -3459,6 +3477,7 @@ function buildPlanV2(workouts, pool, meta){
   const prog = {
     id: LEGACY_PROGRAM_ID, name: meta.name || '16-Week Strength + Hypertrophy', weeks: 16,
     startDate: state.startDate, originDate: state.startDate, status: 'active', phases: legacyPhases(),
+    progression: {enabled: false, appliesTo: 'mainLifts', rules: []},   // the legacy program never had a rule
     library: {}, blocks: {}, templates: {},
     schedule: LEGACY_TEMPLATE_IDS.map(() => ({kind:'rest'})),
     conditioningPool: []
@@ -3657,6 +3676,8 @@ function seedHybrid190(){
     startDate: todayKey(), originDate: todayKey(), status: 'active',
     phases: JSON.parse(JSON.stringify(HYBRID_PHASES)),
     progressionNote: HYBRID_PROGRESSION,
+    progression: {enabled: true, appliesTo: 'mainLifts', rules: [{id: 'topOfRange', trigger: 'topOfRange',
+      categories: ['strength', 'hypertrophy'], increments: {upper: 5, lower: 10, default: 5}, requireAllSets: true}]},
     deloadWeeks: [{week: 4, setsMultiplier: 0.7}, {week: 8, setsMultiplier: 0.7}],
     library: {}, blocks: {}, templates: {}, schedule: [], conditioningPool: []
   };
@@ -4254,6 +4275,9 @@ const Session = {
       // Key-order-insensitive (a pulled snapshot comes back from jsonb with its keys reordered).
       const canon = v => Array.isArray(v) ? v.map(canon) : v && typeof v === 'object'
         ? Object.keys(v).sort().reduce((o, k) => (o[k] = canon(v[k]), o), {}) : v;
+      // Accepted and dismissed suggestions are about this session, not about the workout, so they
+      // ride across a rebuild rather than being thrown away with the old snapshot.
+      if(s.snapshot?.progression) next.progression = s.snapshot.progression;
       if(JSON.stringify(canon({...next, frozenAt: 0})) === JSON.stringify(canon({...s.snapshot, frozenAt: 0}))) return;
       s.snapshot = next; s.title = next.name || ''; s.updated_at = new Date().toISOString();
       s.snapshotDirty = true;
@@ -4723,6 +4747,215 @@ const Metrics = {
   },
 };
 
+// ===== Progression suggestions =====
+// "Add weight when every set hits the top of the range" is a coaching rule, not something the app
+// believes. It lives in program.progression, so a program that does not define it gets no
+// suggestions anywhere and nothing has to be special-cased for it.
+//
+//   progression = {enabled, appliesTo:'mainLifts'|'allStrength',
+//                  rules:[{id, trigger:'topOfRange', categories:[], increments:{upper,lower,default}, requireAllSets}]}
+//
+// Evaluation is strictly read-only: it reads session snapshots and logged sets and writes nothing,
+// materializes nothing. Only accepting or dismissing a suggestion writes, and then only to today's
+// own session snapshot.
+const Progression = {
+  LOOKBACK_DAYS: 60,
+  DEFAULT_RULE: {id: 'topOfRange', trigger: 'topOfRange', categories: ['strength', 'hypertrophy'],
+    increments: {upper: 5, lower: 10, default: 5}, requireAllSets: true},
+
+  // ----- config -----
+  config(prog){
+    const p = prog?.progression;
+    if(!p || !p.enabled || !Array.isArray(p.rules) || !p.rules.length) return null;
+    return p;
+  },
+  // Fills in what a stored config leaves out. A program that has been switched off keeps its rule
+  // (disabled), and one that never had increments falls back to the defaults, so turning
+  // suggestions on never lands the user on an empty form that refuses to save.
+  normalize(p){
+    const inc = p?.rules?.[0]?.increments || p?.increments || this.DEFAULT_RULE.increments;
+    return {
+      enabled: !!p?.enabled,
+      appliesTo: p?.appliesTo === 'allStrength' ? 'allStrength' : 'mainLifts',
+      rules: [{...this.DEFAULT_RULE,
+        categories: Array.isArray(p?.rules?.[0]?.categories) && p.rules[0].categories.length ? p.rules[0].categories : this.DEFAULT_RULE.categories,
+        increments: {upper: +inc.upper || 0, lower: +inc.lower || 0, default: +inc.default || 0},
+        requireAllSets: p?.rules?.[0]?.requireAllSets !== false}],
+    };
+  },
+  // Plain language, so the rule is readable without reading the fields.
+  summary(prog){
+    const cfg = this.config(prog);
+    if(!cfg) return '';
+    const r = cfg.rules[0], i = r.increments;
+    const where = cfg.appliesTo === 'allStrength' ? 'any strength or hypertrophy lift' : 'the main lifts';
+    const how = i.upper === i.lower
+      ? `add ${i.upper} lb`
+      : `add ${i.upper} lb upper body, ${i.lower} lb lower body`;
+    const when = r.requireAllSets ? 'every prescribed set reaches' : 'your sets reach';
+    return `On ${where}: when ${when} the top of the rep range, ${how} next time.`;
+  },
+
+  // ----- upper / lower -----
+  // The library entry's muscle text decides it: "Quads · Glutes" is lower, "Chest" is upper. When
+  // an entry has no muscle set, or its muscles point both ways, the exercise name gets a turn.
+  // Anything still undecided takes the `default` increment rather than guessing.
+  MUSCLE_LOWER: /quad|glute|hamstring|calf|calves|posterior chain|\bleg|hip|adductor|shin|ankle/i,
+  MUSCLE_UPPER: /chest|pec|\bback|lat\b|lats|delt|shoulder|trap|bicep|tricep|arm|grip|forearm/i,
+  NAME_LOWER: /squat|deadlift|lunge|hip thrust|step.?up|calf raise|leg curl|leg extension/i,
+  NAME_UPPER: /bench|overhead press|\brow\b|pull.?up|pulldown|curl|pushdown|lateral raise|shrug|carry|\bdip\b|fly/i,
+  side(entry){
+    const pick = (text, lo, hi) => {
+      const L = lo.test(text || ''), U = hi.test(text || '');
+      return L && !U ? 'lower' : U && !L ? 'upper' : null;
+    };
+    return pick(entry?.muscle, this.MUSCLE_LOWER, this.MUSCLE_UPPER)
+      || pick(entry?.name, this.NAME_LOWER, this.NAME_UPPER)
+      || 'default';
+  },
+  increment(rule, entry){
+    const side = this.side(entry);
+    const inc = rule.increments || {};
+    const n = inc[side];
+    return n > 0 ? {lbs: n, side} : {lbs: +inc.default || 0, side: 'default'};
+  },
+
+  // ----- rep ranges -----
+  // "6–8" → 8 · "6-10" → 10 · "8" → 8 · "10 per side" → 10. A time prescription ("30–45s"),
+  // an open-ended one ("AMRAP") and empty text all return null, and null means no suggestion:
+  // a rule about reaching the top of a range has nothing to say when there is no top.
+  topOfRange(repsText){
+    const s = String(repsText ?? '').trim();
+    if(!s || /amrap|max\b|fail/i.test(s)) return null;
+    if(/\d\s*(?:s\b|sec|min|hr|hour)/i.test(s)) return null;
+    const m = /(\d+(?:\.\d+)?)\s*(?:[–—-]\s*(\d+(?:\.\d+)?))?/.exec(s);
+    if(!m) return null;
+    const top = m[2] != null ? +m[2] : +m[1];
+    return isFinite(top) && top > 0 ? top : null;
+  },
+
+  // ----- which items a program's rule covers -----
+  entryFor(session, b, i){
+    const it = session?.snapshot?.blocks?.[b]?.items?.[i];
+    if(!it) return null;
+    return programForDate(session.date)?.library?.[it.exerciseId] || {name: it.name, muscle: null, category: null};
+  },
+  // `phaseBased` marks a main lift on the template, and snapshots deliberately do not copy it (they
+  // freeze the resolved sets and reps instead). So read it off the template the session came from.
+  isMainLift(session, b, i){
+    const it = session?.snapshot?.blocks?.[b]?.items?.[i];
+    const prog = programForDate(session?.date);
+    const tpl = prog?.templates?.[session?.template_id];
+    if(!it || !tpl) return false;
+    return resolveBlocks(prog, tpl.blocks).some(blk => (blk?.items || []).some(x => x.exerciseId === it.exerciseId && x.phaseBased));
+  },
+  covers(session, b, i){
+    const prog = programForDate(session?.date), cfg = this.config(prog);
+    if(!cfg) return false;
+    const it = session?.snapshot?.blocks?.[b]?.items?.[i];
+    if(!it || itemHidden(it) || !isSetItem(it)) return false;         // never a warm-up, mobility or tick row
+    const cat = prog?.library?.[it.exerciseId]?.category;
+    if(!cfg.rules[0].categories.includes(cat)) return false;          // never core, power, agility or conditioning
+    return cfg.appliesTo === 'allStrength' || this.isMainLift(session, b, i);
+  },
+
+  // ----- history -----
+  // The most recent completed session before today that logged this exercise, within the lookback.
+  // Read-only: state.sessions and state.sessionSets only, nothing is created.
+  lastPerformance(exerciseId, before = todayKey()){
+    const floor = shiftDateKey(before, -this.LOOKBACK_DAYS);
+    const rows = Object.values(state.sessions || {})
+      .filter(s => s.status === 'done' && s.date < before && s.date >= floor)
+      .sort((a, b) => b.date.localeCompare(a.date));
+    for(const s of rows){
+      const blocks = s.snapshot?.blocks || [];
+      for(let b = 0; b < blocks.length; b++){
+        const items = blocks[b]?.items || [];
+        for(let i = 0; i < items.length; i++){
+          const it = items[i];
+          if(it?.exerciseId !== exerciseId || itemHidden(it) || !isSetItem(it)) continue;
+          const cells = Object.entries(state.sessionSets?.[s.id]?.[b]?.[i] || {})
+            .map(([n, c]) => ({n: +n, ...c}))
+            .filter(c => Session.cellLogged(c) && c.reps != null);
+          if(!cells.length) continue;
+          return {session: s, date: s.date, b, i, item: it, cells,
+            prescribedSets: +it.sets || 0, top: this.topOfRange(it.repsText),
+            weight: cells.reduce((m, c) => Math.max(m, +c.weight || 0), 0)};
+        }
+      }
+    }
+    return null;
+  },
+
+  // ----- the suggestion itself -----
+  // Today's session only, never a completed or past one, never in a deload week.
+  suggestionFor(session, b, i){
+    if(!session || session.date !== todayKey() || session.status === 'done' || session.status === 'skipped') return null;
+    if(!this.covers(session, b, i)) return null;
+    const prog = programForDate(session.date), cfg = this.config(prog);
+    const deload = session.snapshot?.deload || deloadFor(getWeekNum(session.date), prog);
+    if(deload) return null;
+    const it = session.snapshot.blocks[b].items[i];
+    const store = session.snapshot.progression || {};
+    if((store.dismissed || []).includes(it.exerciseId)) return null;
+    const last = this.lastPerformance(it.exerciseId, session.date);
+    if(!last || last.top == null || !(last.weight > 0)) return null;
+    const hit = last.cells.filter(c => +c.reps >= last.top).length;
+    const missed = last.cells.length - hit;
+    const rule = cfg.rules[0];
+    if(!hit || missed > 0) return null;                                    // a set short of the top ends it
+    if(rule.requireAllSets && hit < last.prescribedSets) return null;      // and so does a set not done at all
+    const {lbs, side} = this.increment(rule, this.entryFor(session, b, i));
+    if(!(lbs > 0)) return null;
+    return {exerciseId: it.exerciseId, side, increment: lbs, weight: last.weight + lbs,
+      last: {date: last.date, sets: last.cells.length, reps: last.top, weight: last.weight},
+      accepted: store.accepted?.[it.exerciseId] ?? null};
+  },
+  acceptedWeight(session, b, i){
+    const id = session?.snapshot?.blocks?.[b]?.items?.[i]?.exerciseId;
+    return id ? session.snapshot?.progression?.accepted?.[id] ?? null : null;
+  },
+  // Every suggestion live on a date, for the coach and for the config editor's preview.
+  todays(session){
+    const out = [];
+    (session?.snapshot?.blocks || []).forEach((blk, b) => (blk?.items || []).forEach((it, i) => {
+      const s = this.suggestionFor(session, b, i);
+      if(s) out.push({name: it.name, ...s});
+    }));
+    return out;
+  },
+
+  // ----- writes (today's session snapshot only) -----
+  // A target, not a log: it changes what the row prescribes, never what was recorded. Same rules as
+  // Phase 12 metrics — no scope question, no template write, no renumbering — and it is queued
+  // before the push so a pull cannot land on top of it.
+  store(session){
+    const p = session.snapshot.progression ||= {};
+    p.accepted ||= {};
+    p.dismissed ||= [];
+    return p;
+  },
+  accept(session, b, i, weight){
+    const it = session?.snapshot?.blocks?.[b]?.items?.[i];
+    if(!it) return false;
+    const p = this.store(session);
+    p.accepted[it.exerciseId] = weight;
+    p.dismissed = p.dismissed.filter(x => x !== it.exerciseId);
+    Session.enqueue(session.id);
+    SessionEdit.saveSnapshot(session);
+    return true;
+  },
+  dismiss(session, b, i){
+    const it = session?.snapshot?.blocks?.[b]?.items?.[i];
+    if(!it) return false;
+    const p = this.store(session);
+    if(!p.dismissed.includes(it.exerciseId)) p.dismissed.push(it.exerciseId);
+    Session.enqueue(session.id);
+    SessionEdit.saveSnapshot(session);
+    return true;
+  },
+};
+
 // The scope question, as a modal over the page: it opens where you are looking, the moment the
 // exercise is chosen. Dismissing it (backdrop or X) cancels the edit — nothing is applied.
 let pendingScope = null;
@@ -4944,15 +5177,17 @@ const Programs = {
   editingSchedule: false,
 
   open(){ this.view = 'list'; this.progId = null; this.form = null; this.confirm = null; this.renaming = null; this.editingSchedule = false; Sheet.open(this, 'Programs'); this.render(); },
-  onSheetClose(){ this.view = 'list'; this.progId = null; this.form = null; this.confirm = null; this.renaming = null; this.draftPhases = null; this.editingSchedule = false; renderPlanSurfaces(); },
+  onSheetClose(){ this.view = 'list'; this.progId = null; this.form = null; this.confirm = null; this.renaming = null; this.draftPhases = null; this.editingSchedule = false; this.draftProg = null; this.progError = null; renderPlanSurfaces(); },
   prog(){ return this.progId ? state.plan?.programs?.[this.progId] : null; },
   back(){ this.view = 'list'; this.progId = null; this.confirm = null; this.renaming = null; this.draftPhases = null; this.phaseError = null; this.editingSchedule = false; this.render(); },
 
   render(){
     if(Sheet.owner !== this) return;
     document.getElementById('move-title').textContent =
-      this.view === 'new' ? 'New program' : this.view === 'phases' ? 'Phases' : this.view === 'program' ? 'Program' : 'Programs';
-    Sheet.body(this.view === 'new' ? this.newHtml() : this.view === 'phases' ? this.phasesHtml() : this.view === 'program' ? this.programHtml() : this.listHtml());
+      this.view === 'new' ? 'New program' : this.view === 'phases' ? 'Phases'
+        : this.view === 'progression' ? 'Suggestions' : this.view === 'program' ? 'Program' : 'Programs';
+    Sheet.body(this.view === 'new' ? this.newHtml() : this.view === 'phases' ? this.phasesHtml()
+      : this.view === 'progression' ? this.progressionHtml() : this.view === 'program' ? this.programHtml() : this.listHtml());
   },
 
   // ----- list -----
@@ -5127,6 +5362,7 @@ const Programs = {
         <button class="btn btn-secondary prog-new" onclick="Programs.startRename('${prog.id}')">Rename</button>
         <button class="btn btn-secondary prog-new" onclick="Programs.duplicate('${prog.id}')">Duplicate</button>
         <button class="btn btn-secondary prog-new" onclick="Programs.openPhases()">Edit phases &amp; deloads</button>
+        <button class="btn btn-secondary prog-new" onclick="Programs.openProgression()">Suggestions</button>
         ${canDelete ? `<button class="btn btn-danger prog-new" onclick="Programs.askDelete('${prog.id}')">Delete program</button>` : ''}
       </div>`;
   },
@@ -5274,6 +5510,75 @@ const Programs = {
     savePlan(); renderActivePage();
     this.view = 'program'; this.render();
     toast('Phases updated');
+  },
+
+  // ----- progression suggestions -----
+  openProgression(){
+    const prog = this.prog();
+    if(!prog) return;
+    this.draftProg = Progression.normalize(prog.progression);
+    this.view = 'progression';
+    this.render();
+  },
+  progressionHtml(){
+    const d = this.draftProg || Progression.normalize(null);
+    const r = d.rules[0], inc = r.increments;
+    const num = (label, key, val) => `<div class="pe-field"><span class="pe-field-label">${label}</span>
+      <input class="pe-input" type="number" min="0" max="100" step="1" value="${val ?? ''}" onchange="Programs.setProgression('${key}', this.value)"></div>`;
+    return `<div class="pe-section">
+        <button class="btn btn-ghost btn-sm prog-back" onclick="Programs.back()">← All programs</button>
+        <div class="prog-meta">Suggestions read your last completed session for a lift. With them off, this program never suggests anything.</div>
+        <div class="pe-field"><span class="pe-field-label">Suggestions</span>
+          <select class="pe-input" onchange="Programs.setProgression('enabled', this.value === 'on')">
+            <option value="on"${d.enabled ? ' selected' : ''}>On</option>
+            <option value="off"${d.enabled ? '' : ' selected'}>Off</option>
+          </select></div>
+        ${d.enabled ? `
+        <div class="pe-field"><span class="pe-field-label">Applies to</span>
+          <select class="pe-input" onchange="Programs.setProgression('appliesTo', this.value)">
+            <option value="mainLifts"${d.appliesTo === 'mainLifts' ? ' selected' : ''}>Main lifts only</option>
+            <option value="allStrength"${d.appliesTo === 'allStrength' ? ' selected' : ''}>All strength work</option>
+          </select></div>
+        <div class="pe-row cols-2">${num('Upper body (lb)', 'upper', inc.upper)}${num('Lower body (lb)', 'lower', inc.lower)}</div>
+        ${num('Anything else (lb)', 'default', inc.default)}
+        <div class="pe-field"><span class="pe-field-label">Trigger</span>
+          <select class="pe-input" onchange="Programs.setProgression('requireAllSets', this.value === 'all')">
+            <option value="all"${r.requireAllSets ? ' selected' : ''}>Every prescribed set hits the top of the range</option>
+            <option value="any"${r.requireAllSets ? '' : ' selected'}>The sets you logged hit the top of the range</option>
+          </select></div>` : ''}
+        ${this.progError ? `<div class="prog-error">${escapeHtml(this.progError)}</div>` : ''}
+        <p class="phase-note">${escapeHtml(this.draftSummary())}</p>
+      </div>
+      <div class="pe-section"><button class="btn btn-primary prog-new" onclick="Programs.saveProgression()">Save suggestions</button></div>`;
+  },
+  draftSummary(){
+    const d = this.draftProg;
+    return d?.enabled ? Progression.summary({progression: d}) : 'Off — this program suggests nothing.';
+  },
+  setProgression(field, value){
+    const d = this.draftProg;
+    if(!d) return;
+    if(field === 'enabled') d.enabled = !!value;
+    else if(field === 'appliesTo') d.appliesTo = value === 'allStrength' ? 'allStrength' : 'mainLifts';
+    else if(field === 'requireAllSets') d.rules[0].requireAllSets = !!value;
+    else d.rules[0].increments[field] = value === '' ? 0 : Math.max(0, parseFloat(value) || 0);
+    this.progError = null;
+    this.render();
+  },
+  saveProgression(){
+    const prog = this.prog(), d = this.draftProg;
+    if(!prog || !d) return;
+    const inc = d.rules[0].increments;
+    if(d.enabled && !(inc.upper > 0 || inc.lower > 0 || inc.default > 0)){
+      this.progError = 'Set at least one increment above 0, or turn suggestions off.';
+      this.render(); return;
+    }
+    // Switching off keeps the rule so the numbers are still there when it is switched back on.
+    prog.progression = {...Progression.normalize(d), enabled: d.enabled};
+    this.progError = null;
+    savePlan(); renderPlanSurfaces();
+    this.view = 'program'; this.render();
+    toast(d.enabled ? 'Suggestions updated' : 'Suggestions off');
   },
 
   // ----- new program -----
@@ -5912,12 +6217,17 @@ function renderBlockWorkout({day, blocks, session, dateKey, preview, actions, me
       }
       flushTicks();
       const dur = +item.durationSec > 0, grid = dur ? ' has-duration' : '';
+      // An accepted suggestion is the row's target from then on, so it reads as part of the
+      // prescription rather than as a note sitting under it.
+      const target = metricsOn ? Progression.acceptedWeight(metricsOn, b, i) : null;
       const meta = [`<span class="mono">${item.sets} × ${escapeHtml(item.repsText || '—')}</span>`, item.restText && `<span class="mono">${escapeHtml(item.restText)}</span>`,
-        dur && `<span class="mono">${item.durationSec}s</span>`, item.weightText && `<span>${escapeHtml(item.weightText)}</span>`].filter(Boolean).join('<span class="ex-meta-sep">·</span>');
+        dur && `<span class="mono">${item.durationSec}s</span>`,
+        target != null ? `<span class="ex-target">${target} lbs</span>` : item.weightText && `<span>${escapeHtml(item.weightText)}</span>`].filter(Boolean).join('<span class="ex-meta-sep">·</span>');
       const cue = `${activeDay}-${b}-${i}`;
       html += `<div class="ex-row">
         <div class="ex-head"><div class="ex-name-wrap"><div class="ex-name-display">${escapeHtml(item.name || '')}</div></div></div>
         <div class="ex-meta">${meta}</div>
+        ${canRecord ? suggestionHtml(metricsOn, b, i) : ''}
         ${item.cues ? `<details class="ex-cue" data-cue="${cue}" ontoggle="onCueToggle(this)"${openCues.has(cue) ? ' open' : ''}><summary>Form cue</summary><p>${escapeHtml(item.cues)}</p></details>` : ''}
         <div class="set-table set-head${grid}"><div class="set-th">Set</div><div class="set-th">Reps</div><div class="set-th">lbs</div>${dur ? '<div class="set-th">Sec</div>' : ''}<div></div></div>`;
       for(let s = 0; s < +item.sets; s++){
@@ -5925,7 +6235,7 @@ function renderBlockWorkout({day, blocks, session, dateKey, preview, actions, me
         html += `<div class="set-table editable-only${only}${grid}">
           <div class="set-num">${s + 1}</div>
           <input type="number" class="set-input" placeholder="${escapeHtml(String(item.repsText || '').split('–')[0])}" value="${c.reps ?? ''}" inputmode="numeric" onchange="logBlockSet(${activeDay},${b},${i},${s},'reps',this.value)">
-          <input type="number" class="set-input" placeholder="—" value="${c.weight ?? ''}" inputmode="decimal" step="0.5" onchange="logBlockSet(${activeDay},${b},${i},${s},'weight',this.value)">
+          <input type="number" class="set-input" placeholder="${target ?? '—'}" value="${c.weight ?? ''}" inputmode="decimal" step="0.5" onchange="logBlockSet(${activeDay},${b},${i},${s},'weight',this.value)">
           ${dur ? `<input type="number" class="set-input" placeholder="${item.durationSec}" value="${c.duration_sec ?? ''}" inputmode="numeric" onchange="logBlockSet(${activeDay},${b},${i},${s},'duration_sec',this.value)">` : ''}
           <button class="set-check ${c.done ? 'done' : ''}" onclick="toggleBlockSet(${activeDay},${b},${i},${s})">${CHECK_SVG}</button>
         </div>`;
@@ -6256,6 +6566,37 @@ async function toggleBlockTick(dayIdx, b, i){
   const cell = Session.cell(session, b, i, 0);
   cell.done = !cell.done;
   Session.commit(session, b, i, 0);
+  renderWorkoutContent();
+}
+
+// ----- Progression suggestions on the Train tab -----
+// One quiet line under the prescription, and only when the program's own rule produced it. It never
+// fills anything in on its own: the weight moves when the button is tapped, and not before.
+function suggestionHtml(session, b, i){
+  const s = Progression.suggestionFor(session, b, i);
+  // Once accepted the target is on the prescription line, so the offer has nothing left to say.
+  // The suggestion itself stays live for Artemis, which reports it as accepted.
+  if(!s || s.accepted != null) return '';
+  const last = `Last time: ${s.last.sets}×${s.last.reps} @ ${s.last.weight}`;
+  return `<div class="ex-suggest">
+    <span class="ex-suggest-text">${last} · try ${s.weight} today</span>
+    <button class="ex-suggest-use" onclick="acceptSuggestion(${activeDay},${b},${i})">Use ${s.weight}</button>
+    <button class="ex-suggest-x" aria-label="Dismiss this suggestion" title="Not today" onclick="dismissSuggestion(${activeDay},${b},${i})">${CLOSE_SVG}</button>
+  </div>`;
+}
+async function acceptSuggestion(dayIdx, b, i){
+  const session = await metricsSession(dayIdx);
+  if(!session) return;
+  const s = Progression.suggestionFor(session, b, i);
+  if(!s) return;
+  Progression.accept(session, b, i, s.weight);
+  renderWorkoutContent();
+  toast(`Target set to ${s.weight} lbs`);
+}
+async function dismissSuggestion(dayIdx, b, i){
+  const session = await metricsSession(dayIdx);
+  if(!session) return;
+  Progression.dismiss(session, b, i);
   renderWorkoutContent();
 }
 
@@ -7107,7 +7448,8 @@ function renderProgress(){
     ${row('Rest', ph.rest)}
     ${deload ? row('This week', 'Deload · reduced volume') : ''}
     <p class="phase-note">${ph.note ?? ''}</p>
-    ${prog?.progressionNote ? `<p class="phase-note">${prog.progressionNote}</p>` : ''}`;
+    ${(() => { const s = Progression.summary(prog);      // the live rule, not the note written about it
+      return s ? `<p class="phase-note">${escapeHtml(s)}</p>` : prog?.progressionNote ? `<p class="phase-note">${prog.progressionNote}</p>` : ''; })()}`;
 
   // What the conditioning and sport days added up to this week. Empty until something is recorded.
   const cond = statsConditioningWeek();
