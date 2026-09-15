@@ -436,9 +436,16 @@ body.share-open{overflow:hidden}
 .stat-chip[disabled]{background:transparent;border-color:var(--border-subtle);color:var(--text-tertiary);opacity:.55;cursor:default}
 @media (max-width:360px){.share-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
 /* The preview declares the card's exact aspect and must not be shrunk by the column flexbox —
-   a squashed box used to stretch the canvas with it, which is what distorted the photo. */
-.share-canvas-wrap{position:relative;flex:0 0 auto;background:var(--media-bg);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-elevated);width:min(272px, 68vw);aspect-ratio:1080/1350;display:flex;align-items:center;justify-content:center}
+   a squashed box used to stretch the canvas with it, which is what distorted the photo. When the
+   sheet is too short for it, Cards.fitPreview() narrows the width; the aspect never changes.
+   Every touch on it is a drag or pinch of the content group, so the browser gets none of them. */
+.share-canvas-wrap{position:relative;flex:0 0 auto;background:var(--media-bg);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-elevated);width:min(272px, 68vw);aspect-ratio:1080/1920;display:flex;align-items:center;justify-content:center;
+  touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;cursor:grab}
+.share-canvas-wrap.dragging{cursor:grabbing}
 .share-canvas-wrap canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block}
+.share-reset{position:absolute;z-index:1;top:var(--s-2);left:50%;transform:translateX(-50%);height:32px;padding:0 var(--s-3);display:inline-flex;align-items:center;background:var(--media-scrim);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);border:0;border-radius:var(--r-pill);color:var(--media-fg);font-family:var(--font-sans);font-size:var(--fs-micro);font-weight:600;white-space:nowrap;cursor:pointer;transition:var(--t-ui)}
+.share-reset::before{content:'';position:absolute;left:0;right:0;top:-6px;bottom:-6px}   /* 44px hit area */
+.share-reset:active{opacity:.7}
 .share-canvas-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);font-size:var(--fs-caption);line-height:var(--lh-caption);font-weight:500;}
 .share-actions{flex:0 0 auto;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:var(--s-2);padding:var(--s-3) var(--s-5) calc(var(--s-5) + env(safe-area-inset-bottom));background:var(--bg-elevated);border-top:1px solid var(--border-subtle)}
 .share-actions .btn, .share-actions .share-ig-btn{min-width:0;width:100%;height:var(--tap)}
@@ -1181,7 +1188,8 @@ body[data-theme="dark"] .theme-switch::after{transform:translateX(20px)}
   <div class="share-body">
     <div class="share-canvas-wrap">
       <div class="share-canvas-loading" id="share-loading">Rendering…</div>
-      <canvas id="share-canvas" width="1080" height="1350"></canvas>
+      <canvas id="share-canvas" width="1080" height="1920"></canvas>
+      <button class="share-reset" id="share-reset" onclick="Cards.resetTransform()" hidden>Reset position</button>
     </div>
     <div class="share-photo-controls" id="share-photo-controls">
       <input type="file" id="share-photo-input" accept="image/*" hidden onchange="Cards.handlePhotoSelect(this.files[0])">
@@ -7711,12 +7719,20 @@ function statsDiscipline(period = 30){
 // ===== Story-card renderer =====
 const Cards = {
   W: 1080,
-  H: 1350,
+  H: 1920,
   current: 'session',
   period: 'week', // for cards that need period (currently unused, reserved)
   fontsReady: false,
 
   photo: null, // HTMLImageElement when user has selected a photo
+
+  // Where the user has dragged and pinched the content group (title, stats and wordmark, as one
+  // unit): the offset of its centre in card pixels, and its scale. Module-level only — never
+  // saved — and back to the default on open, on a card-type change and whenever the photo changes.
+  xf: {x: 0, y: 0, s: 1},
+  MIN_SCALE: 0.6,
+  MAX_SCALE: 1.6,
+  groupBox: null,   // the group's untransformed bounds, from the last paint
 
   TYPES: [
     {id:'session', label:'Session', filename:'session'},
@@ -7904,6 +7920,8 @@ const Cards = {
     document.getElementById('share-backdrop').classList.add('open');
     document.getElementById('share-sheet').classList.add('open');
     document.body.classList.add('share-open');
+    this.bindPreview();
+    this.resetTransform(false);
     this.renderPills();
     this.renderStatPicker();
     this.render();
@@ -7916,6 +7934,7 @@ const Cards = {
   },
 
   setType(id){
+    if(id !== this.current) this.resetTransform(false);
     this.current = id;
     this.renderPills();
     this.renderStatPicker();
@@ -7930,6 +7949,7 @@ const Cards = {
       const img = new Image();
       img.onload = () => {
         this.photo = img;
+        this.resetTransform(false);
         this.updatePhotoControls();
         this.render();
       };
@@ -7944,6 +7964,7 @@ const Cards = {
     this.photo = null;
     const input = document.getElementById('share-photo-input');
     if(input) input.value = '';
+    this.resetTransform(false);
     this.updatePhotoControls();
     this.render();
   },
@@ -7971,31 +7992,63 @@ const Cards = {
     const loading = document.getElementById('share-loading');
     loading.style.display = 'flex';
     await this.ensureFonts();
+    this.paint();
+    loading.style.display = 'none';
+    this.fitPreview();
+  },
+  // Synchronous, so a gesture frame is one call. `backdrop` is the background pre-drawn once for
+  // the length of a gesture; at rest (and so for every export) the photo is drawn from its source.
+  paint(backdrop){
     const cv = document.getElementById('share-canvas');
     const ctx = cv.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, this.W, this.H);
-    if(this.photo) this.drawPhotoBackground(ctx);
+    if(backdrop) ctx.drawImage(backdrop, 0, 0);
+    else if(this.photo) this.drawPhotoBackground(ctx);
     else this.drawBackground(ctx);
     switch(this.current){
       case 'week': this.drawWeek(ctx); break;
       case 'pr':   this.drawPR(ctx);   break;
       default:     this.drawSession(ctx);
     }
-    loading.style.display = 'none';
+    this.updateResetControl();
+  },
+  backdrop(){
+    const c = document.createElement('canvas');
+    c.width = this.W; c.height = this.H;
+    const g = c.getContext('2d');
+    if(this.photo) this.drawPhotoBackground(g); else this.drawBackground(g);
+    return c;
+  },
+
+  // The preview keeps the card's exact aspect. When the sheet can't hold it at full size it gets
+  // narrower — never squashed — so nothing under it drops below the fold.
+  fitPreview(){
+    const wrap = document.querySelector('.share-canvas-wrap'), body = document.querySelector('.share-body');
+    if(!wrap || !body || !document.getElementById('share-sheet').classList.contains('open')) return;
+    wrap.style.width = '';
+    for(let i = 0; i < 3; i++){
+      const over = body.scrollHeight - body.clientHeight;
+      if(over <= 0) break;
+      const h = wrap.getBoundingClientRect().height - over;
+      wrap.style.width = `${Math.max(120, Math.floor(h * this.W / this.H))}px`;
+    }
   },
 
   // ===== Layout =====
   // One layout for every card: a centred group — title, then the chosen stats — sitting in the
   // upper-middle third, and a small wordmark at the foot. White on near-black, nothing else.
   PAD: 96,
-  // Safe band, proportional to the card height (the old 250/1670 of a 1920-tall story).
-  SAFE_TOP: 176,
-  SAFE_BOTTOM: 1174,
+  // Instagram Story safe area: IG covers the top ~250px and bottom ~250px of the 9:16 frame with
+  // its own UI. Everything readable lives between SAFE_TOP and SAFE_BOTTOM; the photo still runs
+  // full-bleed behind IG's chrome.
+  SAFE_TOP: 250,
+  SAFE_BOTTOM: 1670,
   BG: '#0A0A0B',
   TEXT: '#ffffff',
   TEXT_2: 'rgba(255,255,255,0.85)',
   TEXT_3: 'rgba(255,255,255,0.70)',
-  GROUP_CENTER: 534,            // optical centre of the content group
+  GROUP_CENTER: 760,            // optical centre of the title and stats
   TITLE_SIZE: 68,
   LABEL_SIZE: 28,
   VALUE_SIZE: 58,
@@ -8070,9 +8123,172 @@ const Cards = {
     return {...t, cols, rows, cellH, titleH, gridH, total, top, gridTop: top + titleH + this.TITLE_GAP};
   },
 
+  // The ink extents of everything the group draws — title, stats and wordmark — before the
+  // user's transform. This is the box the transform scales about and the clamps keep in bounds.
+  groupBounds(ctx, L, cells){
+    const cx = this.W / 2;
+    ctx.font = `700 ${L.size}px "Inter", sans-serif`;
+    let half = Math.max(0, ...L.lines.map(l => ctx.measureText(l).width / 2));
+    const colW = L.cols === 2 ? (this.W - this.PAD * 2) / 2 - 20 : this.W - this.PAD * 2;
+    cells.forEach((cell, i) => {
+      const x = L.cols === 2 ? cx + (i % 2 === 0 ? -this.COL_OFFSET : this.COL_OFFSET) : cx;
+      ctx.font = `500 ${this.LABEL_SIZE}px "Inter", sans-serif`;
+      const lw = ctx.measureText(this.ellipsize(ctx, cell.label, colW)).width;
+      ctx.font = `700 ${this.VALUE_SIZE}px "Inter", sans-serif`;
+      const vw = ctx.measureText(this.ellipsize(ctx, cell.value, colW)).width;
+      half = Math.max(half, Math.abs(x - cx) + Math.max(lw, vw) / 2);
+    });
+    ctx.font = `600 24px "Inter", sans-serif`;
+    if('letterSpacing' in ctx) ctx.letterSpacing = '0.22em';
+    half = Math.max(half, ctx.measureText('DIVINIFY').width / 2);
+    if('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+    return {x0: cx - half, x1: cx + half, y0: L.top, y1: this.SAFE_BOTTOM - 34 + 24};
+  },
+
+  // ----- the group's transform -----
+  isMoved(){ return this.xf.x !== 0 || this.xf.y !== 0 || this.xf.s !== 1; },
+  resetTransform(repaint = true){
+    this.xf = {x: 0, y: 0, s: 1};
+    this.updateResetControl();
+    if(repaint) this.paint();
+  },
+  updateResetControl(){
+    const b = document.getElementById('share-reset');
+    if(b) b.hidden = !this.isMoved();
+  },
+  // The group may never enter the story-chrome bands, so it can only grow until it fills the band
+  // between them: below MAX_SCALE for any group taller than (SAFE_BOTTOM − SAFE_TOP) / MAX_SCALE.
+  maxScale(){
+    const B = this.groupBox;
+    return B ? Math.min(this.MAX_SCALE, (this.SAFE_BOTTOM - this.SAFE_TOP) / (B.y1 - B.y0)) : this.MAX_SCALE;
+  },
+  clampScale(s){ return Math.min(this.maxScale(), Math.max(this.MIN_SCALE, s)); },
+  // One axis of the clamp, on the group's centre c for a box of length len. In priority order:
+  // (vertically) the whole box clear of the story-chrome bands, so nothing sits under Instagram's
+  // UI; at least 60% of the box inside the safe margins; and wholly on the card when it is small
+  // enough to be. A rule that can't be met alongside the ones before it is dropped.
+  clampAxis(c, len, safeA, safeB, size, chrome){
+    const h = len / 2;
+    // (at the scale cap the box exactly fills the band; rounding must not invert the range)
+    const mid = (safeA + safeB) / 2;
+    const rules = chrome ? [[Math.min(safeA + h, mid), Math.max(safeB - h, mid)]] : [];
+    rules.push(0.6 * len <= safeB - safeA ? [safeA + 0.1 * len, safeB - 0.1 * len] : [safeB - h, safeA + h]);
+    rules.push(len <= size ? [h, size - h] : [size - h, h]);
+    let lo = -Infinity, hi = Infinity;
+    for(const [a, b] of rules) if(Math.max(lo, a) <= Math.min(hi, b)){ lo = Math.max(lo, a); hi = Math.min(hi, b); }
+    return Math.min(hi, Math.max(lo, c));
+  },
+  clampXf(){
+    const B = this.groupBox;
+    if(!B) return;
+    const s = this.clampScale(this.xf.s);
+    const ox = (B.x0 + B.x1) / 2, oy = (B.y0 + B.y1) / 2;
+    const x = this.clampAxis(ox + this.xf.x, (B.x1 - B.x0) * s, this.PAD, this.W - this.PAD, this.W, false) - ox;
+    const y = this.clampAxis(oy + this.xf.y, (B.y1 - B.y0) * s, this.SAFE_TOP, this.SAFE_BOTTOM, this.H, true) - oy;
+    this.xf = {x, y, s};
+  },
+  // Moves the group so the card point `from` (where the gesture's anchor was, at transform `t0`)
+  // lands on `to` at scale s — a finger stays on the same bit of the group while it drags and pinches.
+  anchorTo(t0, from, to, s){
+    const B = this.groupBox;
+    if(!B) return;
+    const ox = (B.x0 + B.x1) / 2, oy = (B.y0 + B.y1) / 2;
+    const k = this.clampScale(s) / t0.s;
+    this.xf = {x: to.x - ox - k * (from.x - ox - t0.x), y: to.y - oy - k * (from.y - oy - t0.y), s: this.clampScale(s)};
+    this.clampXf();
+  },
+
+  // ----- gestures on the preview -----
+  // One finger (or a mouse) drags the group, two pinch it; the wheel or a trackpad pinch scales it.
+  // Card pixels come straight from the canvas's on-screen box, so what the preview shows is
+  // exactly what exports. A tap that doesn't move leaves everything as it was.
+  bindPreview(){
+    const wrap = document.querySelector('.share-canvas-wrap');
+    if(!wrap || wrap.dataset.bound) return;
+    wrap.dataset.bound = '1';
+    const pts = new Map();
+    let g = null, raf = 0, wheelEnd = 0;
+    const toCard = e => {
+      const r = document.getElementById('share-canvas').getBoundingClientRect(), k = this.W / r.width;
+      return {x: (e.clientX - r.left) * k, y: (e.clientY - r.top) * k};
+    };
+    const frame = () => { if(!raf) raf = requestAnimationFrame(() => { raf = 0; this.paint(g?.backdrop); }); };
+    const anchor = () => {
+      const [a, b] = [...pts.values()];
+      return b ? {x: (a.card.x + b.card.x) / 2, y: (a.card.y + b.card.y) / 2, d: Math.hypot(a.card.x - b.card.x, a.card.y - b.card.y)}
+               : {x: a.card.x, y: a.card.y, d: 0};
+    };
+    const rebase = () => { const a = anchor(); g.from = a; g.t0 = {...this.xf}; };
+    const end = () => {
+      cancelAnimationFrame(raf); raf = 0;
+      if(!g.pinched && g.travel < 4) this.xf = g.start;   // a tap, or a finger's jitter: no change
+      g = null;
+      wrap.classList.remove('dragging');
+      this.paint();
+    };
+    wrap.addEventListener('pointerdown', e => {
+      if(e.target.closest('button') || (e.pointerType === 'mouse' && e.button !== 0)) return;
+      e.preventDefault();
+      wrap.setPointerCapture?.(e.pointerId);
+      pts.set(e.pointerId, {card: toCard(e), x0: e.clientX, y0: e.clientY});
+      if(!g){ g = {start: {...this.xf}, travel: 0, pinched: false, backdrop: this.backdrop()}; wrap.classList.add('dragging'); }
+      if(pts.size > 1) g.pinched = true;
+      rebase();
+    });
+    wrap.addEventListener('pointermove', e => {
+      const p = pts.get(e.pointerId);
+      if(!p || !g) return;
+      e.preventDefault();
+      p.card = toCard(e);
+      g.travel = Math.max(g.travel, Math.hypot(e.clientX - p.x0, e.clientY - p.y0));
+      const a = anchor();
+      const s = g.from.d && a.d ? g.t0.s * a.d / g.from.d : g.t0.s;
+      this.anchorTo(g.t0, g.from, a, s);
+      frame();
+    });
+    const up = e => {
+      if(!pts.delete(e.pointerId) || !g) return;
+      if(pts.size) rebase(); else end();
+    };
+    wrap.addEventListener('pointerup', up);
+    wrap.addEventListener('pointercancel', up);
+    // iOS can still hand a touch to the sheet's scroller; the preview keeps every one of its own.
+    wrap.addEventListener('touchmove', e => e.preventDefault(), {passive: false});
+    wrap.addEventListener('wheel', e => {
+      e.preventDefault();
+      if(g && pts.size) return;
+      const at = toCard(e), px = e.deltaY * (e.deltaMode === 1 ? 16 : 1);
+      if(!g) g = {start: {...this.xf}, travel: Infinity, pinched: true, backdrop: this.backdrop()};
+      this.anchorTo({...this.xf}, at, at, this.xf.s * Math.exp(-px * (e.ctrlKey ? 0.01 : 0.002)));
+      frame();
+      clearTimeout(wheelEnd);
+      wheelEnd = setTimeout(() => { if(g && !pts.size) end(); }, 180);
+    }, {passive: false});
+    // Safari's own trackpad pinch on macOS. On iOS the same events come with touches, which the
+    // pointer handlers above already own.
+    let gs = null;
+    wrap.addEventListener('gesturestart', e => { e.preventDefault(); gs = pts.size ? null : {...this.xf}; });
+    wrap.addEventListener('gesturechange', e => {
+      e.preventDefault();
+      if(!gs || pts.size) return;
+      const at = toCard(e);
+      this.anchorTo(gs, at, at, gs.s * e.scale);
+      this.paint();
+    });
+    wrap.addEventListener('gestureend', e => { e.preventDefault(); gs = null; });
+    window.addEventListener('resize', () => this.fitPreview());
+  },
+
   drawCard(ctx, title, cells){
     const L = this.layout(ctx, title, cells);
     const cx = this.W / 2;
+    const B = this.groupBox = this.groupBounds(ctx, L, cells);
+    this.clampXf();
+    const ox = (B.x0 + B.x1) / 2, oy = (B.y0 + B.y1) / 2;
+    ctx.save();
+    ctx.translate(ox + this.xf.x, oy + this.xf.y);
+    ctx.scale(this.xf.s, this.xf.s);
+    ctx.translate(-ox, -oy);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     this.shadow(ctx, true);
@@ -8108,6 +8324,7 @@ const Cards = {
     if('letterSpacing' in ctx) ctx.letterSpacing = '0px';
     this.shadow(ctx, false);
     ctx.textAlign = 'left';
+    ctx.restore();
   },
 
   // ===== Per-card renderers =====
