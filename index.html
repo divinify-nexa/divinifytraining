@@ -390,6 +390,10 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 .readonly-banner a{color:var(--text-primary);font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
 .readonly-banner a:hover{text-decoration:underline}
 body[data-readonly="true"] .readonly-banner{display:flex}
+/* An unlocked past day: the Train banner stays up and takes the accent, so it never reads as today. */
+body[data-past-edit] #page-workout .readonly-banner{display:flex;background:color-mix(in srgb, var(--accent) 16%, transparent);color:var(--text-primary)}
+body[data-past-edit] #page-workout .readonly-banner svg{color:var(--accent)}
+body[data-past-edit] #page-workout .readonly-banner a{display:inline-flex;align-items:center;min-height:var(--tap);margin:calc(-1 * var(--s-3)) 0}
 body[data-readonly="true"] .editable-only{opacity:.55;pointer-events:none}
 body[data-readonly="true"] .editable-only :where(input,textarea){background:transparent;border-color:var(--border-subtle);color:var(--text-secondary)}
 body[data-readonly="true"] .editable-only :where(input,textarea)::placeholder{color:var(--text-tertiary);opacity:.6}
@@ -790,6 +794,7 @@ body.scanner-open{overflow:hidden}
 .ex-suggest-use::before,.ex-suggest-x::before{content:'';position:absolute;inset:-6px}   /* 44px hit area */
 .ex-suggest-x svg{width:14px;height:14px}
 .ex-target{color:var(--text-primary);font-weight:600}
+.ex-last{margin-top:var(--s-1);font-size:var(--fs-micro);line-height:var(--lh-micro);letter-spacing:var(--ls-micro);color:var(--text-tertiary)}
 /* Recording a conditioning, cardio or sport session. The strip runs to the card's edges so the
    two 1–10 scales get the full width: ten targets across 335px at a 375px screen is 33.5px each,
    clear of the 32px floor, with no gap between tracks to eat into it. */
@@ -965,7 +970,11 @@ body.scope-modal-open{overflow:hidden}
 .prog-deload{align-items:end}
 .prog-deload-x{grid-column:1/-1;height:var(--tap)}
 .move-list{display:flex;flex-direction:column}
-.move-list .row-value{text-align:right}
+.move-list .row-value{flex-shrink:1;min-width:0;text-align:right}
+.move-list .row-title{flex-shrink:0;white-space:nowrap}   /* the date stays on one line; a long workout name wraps instead */
+.move-list .move-swap .row-value{color:var(--text-primary)}
+.move-swap-actions{display:flex;gap:var(--s-2);margin-top:var(--s-4)}
+.move-swap-actions .btn{flex:1}
 .workout-meta-note{display:block;font-size:var(--fs-micro);line-height:var(--lh-micro);color:var(--text-tertiary)}
 /* The session no longer matches its schedule entry. Worth reading, so it takes the secondary text
    colour rather than the tertiary the quieter notes use, and wraps rather than truncating. */
@@ -1860,9 +1869,33 @@ function formatViewDateLabel(dateStr){
 const PLAN_AHEAD_DAYS = 28;
 function lastPlannableDate(){ return shiftDateKey(todayKey(), PLAN_AHEAD_DAYS); }
 function isViewingFuture(){ return viewDate > todayKey(); }
+// A past day's session can be unlocked to correct what was logged: reps, weights, ticks, metrics and
+// whether it was completed — never its structure. Module-level on purpose: the unlock lasts for this
+// visit to the date and ends when the date or the tab changes, or on reload.
+let pastEditDate = null;
+function canEditPastDay(date = viewDate){
+  const s = state.sessions?.[date];
+  return date < todayKey() && !!s && s.status !== 'skipped';
+}
+function isPastEditing(){ return pastEditDate !== null && pastEditDate === viewDate && canEditPastDay(); }
+// Logging is today's, plus a past day while it is unlocked.
+function isLoggable(){ return isViewingToday() || isPastEditing(); }
+function assertLoggable(actionLabel){ return isPastEditing() || assertEditable(actionLabel); }
+function startPastEdit(){
+  if(!canEditPastDay() || !isSessionDay(activeDay)) return;
+  pastEditDate = viewDate;
+  applyReadonlyMode();
+  renderWorkoutContent();
+}
+function endPastEdit(){
+  if(pastEditDate === null) return;
+  pastEditDate = null;
+  applyReadonlyMode();
+  renderActivePage();
+}
 function setViewDate(dateStr){
   if(dateStr > lastPlannableDate()) return;
-  if(dateStr !== viewDate){ closeScopeModal(); planUpdatedFor = null; }
+  if(dateStr !== viewDate){ closeScopeModal(); planUpdatedFor = null; pastEditDate = null; }
   viewDate = dateStr;
   // When navigating dates, snap workout view to that date's day-of-week
   activeDay = getViewDayIdx();
@@ -1873,11 +1906,15 @@ function goPrevDay(){ setViewDate(shiftDateKey(viewDate, -1)); }
 function goNextDay(){ if(viewDate < lastPlannableDate()) setViewDate(shiftDateKey(viewDate, 1)); }
 function goToday(){ setViewDate(todayKey()); }
 function applyReadonlyMode(){
-  document.body.setAttribute('data-readonly', isViewingToday() ? '' : 'true');
-  // Each page's banner keeps its own past-day wording; future days swap in the planning note.
+  const editing = isPastEditing();
+  document.body.setAttribute('data-readonly', isViewingToday() || editing ? '' : 'true');
+  document.body.toggleAttribute('data-past-edit', editing);
+  // Each page's banner keeps its own past-day wording; future days swap in the planning note, and
+  // an unlocked past day says so, with the way back out.
   document.querySelectorAll('.readonly-banner span').forEach(el => {
     if(!bannerPastText.has(el)) bannerPastText.set(el, el.innerHTML);
-    const text = isViewingFuture() ? 'Planning ahead · read-only. You can move or skip sessions here; <a onclick="goToday()">jump to today</a> to log.' : bannerPastText.get(el);
+    const text = editing ? `Editing ${formatViewDateLabel(viewDate)} · you're correcting what was logged. <a onclick="endPastEdit()">Done editing</a>`
+      : isViewingFuture() ? 'Planning ahead · read-only. You can move or skip sessions here; <a onclick="goToday()">jump to today</a> to log.' : bannerPastText.get(el);
     if(el.innerHTML !== text) el.innerHTML = text;
   });
 }
@@ -2250,6 +2287,15 @@ const Sync = {
       return true;
     } catch(e){ console.warn('pushSession failed:', e); return false; }
   },
+  // Several full rows in one request — one INSERT … ON CONFLICT statement, so all land or none do.
+  async pushSessions(sessions){
+    if(!this.ready) return false;
+    try {
+      const r = await this.client.from('training_sessions').upsert(sessions.map(s => this.sessionRow(s)), {onConflict:'id'});
+      if(r.error) throw r.error;
+      return true;
+    } catch(e){ console.warn('pushSessions failed:', e); return false; }
+  },
   async upsertSessionSets(rows){
     if(!this.ready) return false;
     if(!rows.length) return true;
@@ -2336,17 +2382,28 @@ const Sync = {
     })();
   },
 
-  pushPR(name, weight){
+  pushPR(name, weight, achievedOn = todayKey()){
     if(!this.ready) return;
     (async () => {
       try {
         const r = await this.client.from('training_prs').upsert({
           exercise_name:name, weight,
-          achieved_on: todayKey(),
+          achieved_on: achievedOn,
           updated_at: new Date().toISOString()
         });
         if(r.error) throw r.error;
       } catch(e){ console.warn('pushPR failed:', e); }
+    })();
+  },
+
+  // A PR whose only set was corrected away.
+  deletePR(name){
+    if(!this.ready) return;
+    (async () => {
+      try {
+        const r = await this.client.from('training_prs').delete().eq('exercise_name', name);
+        if(r.error) throw r.error;
+      } catch(e){ console.warn('deletePR failed:', e); }
     })();
   },
 
@@ -2618,6 +2675,8 @@ function toggleTheme(){
 }
 
 function showPage(id, btn){
+  // Leaving the Train tab re-locks an unlocked past day.
+  if(id !== 'workout' && pastEditDate !== null){ pastEditDate = null; applyReadonlyMode(); }
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('nav .nav-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('page-'+id).classList.add('active');
@@ -4335,6 +4394,37 @@ const Session = {
     save(); Sync.pushSessionStatus(s);
     return true;
   },
+  // Why two sessions can't trade dates, or null if they can. A completed session keeps the day it
+  // was done on; past days are not rescheduled at all.
+  swapRefusal(a, b){
+    if(!a || !b) return 'There is no session to swap with';
+    if(a.id === b.id || a.date === b.date) return 'The session is already on that day';
+    const done = [a, b].find(s => s.status === 'done' || (s.status === 'skipped' && s.completed_at));   // a skip over a completion still holds it
+    if(done) return `${done.title || 'That session'} on ${formatViewDateLabel(done.date)} is completed — completed sessions can't be swapped`;
+    if(![a, b].every(s => isPlannable(s.date))) return "Past days can't be rescheduled";
+    return null;
+  },
+  // Two sessions trade dates, each keeping its id, snapshot, sets (no row renumbered), metrics and
+  // status. Both projections leave their dates before either arrives, so no set-log cell is shared.
+  // The pair is queued together and flushed together — one request writes both rows — so neither
+  // the server nor a pull ever sees one moved without the other.
+  swap(idA, idB){
+    const a = this.byId(idA), b = this.byId(idB);
+    if(this.swapRefusal(a, b)) return false;
+    const da = a.date, db = b.date, now = new Date().toISOString();
+    this.unproject(a); this.unproject(b);
+    a.date = db; b.date = da;
+    state.sessions[db] = a; state.sessions[da] = b;
+    [[a, b], [b, a]].forEach(([s, other]) => {
+      s.updated_at = now; s.statusDirty = true; s.swapWith = other.id;
+      this.bump(s.id);
+      this.projectSession(s);
+      this.enqueue(s.id, {quiet: true});
+    });
+    save();
+    this.flush();
+    return true;
+  },
   skip(sessionId){
     const s = this.byId(sessionId);
     if(!s || s.status === 'skipped') return false;
@@ -4431,18 +4521,21 @@ const Session = {
     this.flushing = true;
     let failed = false;
     try {
+      const handled = new Set();
       for(const id of state.pendingSessionSync.slice()){
+        if(handled.has(id)) continue;
         const s = this.byId(id);
         if(!s){ state.pendingSessionSync = state.pendingSessionSync.filter(x => x !== id); save(); continue; }
-        const rev = this.rev[id] || 0, statusDirty = !!s.statusDirty, snapshotDirty = !!s.snapshotDirty;
-        const ok = await Sync.pushSession(s)
-          && (!snapshotDirty || await Sync.pushSession(s, {overwrite: true}))
-          && (!statusDirty || (await Sync.updateSessionStatus(s) && await Sync.setWorkoutDoneFlag(s.date, getDayIdxFromDate(s.date), s.status === 'done')))
-          && await Sync.upsertSessionSets(this.setRows(s));
+        // Swapped sessions are one unit: all their rows in one upsert, and all leave the queue or none do.
+        const group = this.swapGroup(s);
+        group.forEach(x => handled.add(x.id));
+        const revs = group.map(x => this.rev[x.id] || 0);
+        const ok = group.length > 1 ? await this.pushGroup(group) : await this.pushOne(s);
         if(!ok){ failed = true; break; }
-        if((this.rev[id] || 0) !== rev){ this.flushAgain = true; continue; }   // changed while in flight: go round again
-        delete s.statusDirty; delete s.snapshotDirty;
-        state.pendingSessionSync = state.pendingSessionSync.filter(x => x !== id);
+        if(group.some((x, n) => (this.rev[x.id] || 0) !== revs[n])){ this.flushAgain = true; continue; }   // changed while in flight: go round again
+        group.forEach(x => { delete x.statusDirty; delete x.snapshotDirty; delete x.swapWith; });
+        const ids = new Set(group.map(x => x.id));
+        state.pendingSessionSync = state.pendingSessionSync.filter(x => !ids.has(x));
         save();
       }
     } finally { this.flushing = false; }
@@ -4451,6 +4544,32 @@ const Session = {
     this.flushAgain = false;
     if(failed) this.warnIfStale();
     else if(again) return this.flush();
+  },
+  // Everything flush() re-sends for one queued session.
+  async pushOne(s){
+    const statusDirty = !!s.statusDirty, snapshotDirty = !!s.snapshotDirty;
+    return await Sync.pushSession(s)
+      && (!snapshotDirty || await Sync.pushSession(s, {overwrite: true}))
+      && (!statusDirty || (await Sync.updateSessionStatus(s) && await Sync.setWorkoutDoneFlag(s.date, getDayIdxFromDate(s.date), s.status === 'done')))
+      && await Sync.upsertSessionSets(this.setRows(s));
+  },
+  // A session and every unflushed swap it is linked to — a pair, or a chain if it was swapped again
+  // before the first swap reached the server.
+  swapGroup(s){
+    const group = [s];
+    for(let k = 0; k < group.length; k++){
+      const x = group[k];
+      [x.swapWith && this.byId(x.swapWith), ...Object.values(state.sessions || {}).filter(y => y.swapWith === x.id)]
+        .forEach(y => { if(y && !group.includes(y)) group.push(y); });
+    }
+    return group;
+  },
+  // Swapped sessions: every full row (dates, statuses, snapshots) in a single upsert — one statement,
+  // so the server holds all of the swap or none of it — then each date's completion flag and the sets.
+  async pushGroup(group){
+    if(!await Sync.pushSessions(group)) return false;
+    for(const x of group) if(!await Sync.setWorkoutDoneFlag(x.date, getDayIdxFromDate(x.date), x.status === 'done')) return false;
+    return await Sync.upsertSessionSets(group.flatMap(x => this.setRows(x)));
   },
   // No toast for a background failure — the not-synced indicator covers it — unless a session has waited over a day.
   warnIfStale(){
@@ -4466,6 +4585,10 @@ const Session = {
     return (state.pendingSessionSync || []).map(id => this.byId(id)).filter(Boolean).map(s => ({s, sets: state.sessionSets?.[s.id] || {}}));
   },
   restoreUnsynced(copy){
+    // The cloud may still have a queued session on its old date (a swap not yet flushed): drop the
+    // cloud's copy wherever it sits before this device's goes back on its own date.
+    const ids = new Set(copy.map(({s}) => s.id));
+    Object.entries(state.sessions || {}).forEach(([d, x]) => { if(ids.has(x?.id)) delete state.sessions[d]; });
     copy.forEach(({s, sets}) => {
       (state.sessions ||= {})[s.date] = s;
       const merged = state.sessionSets?.[s.id] || {};
@@ -4957,10 +5080,11 @@ const Progression = {
   },
 
   // ----- history -----
-  // The most recent completed session before today that logged this exercise, within the lookback.
+  // The most recent completed session before today that logged this exercise, within the lookback
+  // (lookback: null reaches back through all of history, for the Train tab's "Last time" line).
   // Read-only: state.sessions and state.sessionSets only, nothing is created.
-  lastPerformance(exerciseId, before = todayKey()){
-    const floor = shiftDateKey(before, -this.LOOKBACK_DAYS);
+  lastPerformance(exerciseId, before = todayKey(), {lookback = this.LOOKBACK_DAYS} = {}){
+    const floor = lookback == null ? '' : shiftDateKey(before, -lookback);
     const rows = Object.values(state.sessions || {})
       .filter(s => s.status === 'done' && s.date < before && s.date >= floor)
       .sort((a, b) => b.date.localeCompare(a.date));
@@ -5805,7 +5929,7 @@ function unskipViewedSession(){
   toast('Skip undone');
 }
 async function toggleOptionalDone(){
-  if(!assertEditable('Marking it done')) return;
+  if(!assertLoggable('Marking it done')) return;
   const s = await Session.materialize(viewKey(), {status: 'planned'});
   if(!s || s.kind !== 'sport') return;
   Session.setStatus(s, s.status === 'done' ? 'planned' : 'done');
@@ -5813,36 +5937,86 @@ async function toggleOptionalDone(){
 }
 const MoveSheet = {
   from: null,
+  swapTo: null,   // the date whose session the confirm step is offering to swap with
   open(){
     if(!assertPlannable(viewKey())) return;
     this.from = viewKey();
+    this.swapTo = null;
     Sheet.open(this, 'Move session');
     this.render();
   },
-  close(){ if(Sheet.owner === this) Sheet.close(); this.from = null; },
-  onSheetClose(){ this.from = null; },
+  close(){ if(Sheet.owner === this) Sheet.close(); this.from = null; this.swapTo = null; },
+  onSheetClose(){ this.from = null; this.swapTo = null; },
+  fromName(){ const f = this.from; return Session.resolve(f).session?.title || getWorkout(getDayIdxFromDate(f), f)?.name || 'session'; },
+  // A date with a stored session offers a swap; a completed one on either side says why it can't.
+  swapOffer(date){
+    const there = state.sessions?.[date];
+    if(!there) return null;
+    const mine = state.sessions?.[this.from] || {date: this.from, title: this.fromName(), status: 'planned', id: null};
+    return {there, why: Session.swapRefusal({...mine, id: mine.id || 'virtual'}, there)};
+  },
   render(){
-    const from = this.from, name = Session.resolve(from).session?.title || getWorkout(getDayIdxFromDate(from), from)?.name || 'session';
+    if(this.swapTo) return this.renderSwap();
+    const from = this.from, name = this.fromName();
     document.getElementById('move-title').textContent = `Move ${name}`;
     const body = html => Sheet.body(html);
-    let html = `<div class="note">Pick a day in the next ${PLAN_AHEAD_DAYS} days. Days that already have a session can't take another.</div><div class="move-list">`;
+    let html = `<div class="note">Pick a day in the next ${PLAN_AHEAD_DAYS} days. A day that already has a session can swap with this one; completed sessions stay where they are.</div><div class="move-list">`;
     for(let i = 0; i <= PLAN_AHEAD_DAYS; i++){
       const d = shiftDateKey(todayKey(), i);
       if(d === from) continue;
       const why = Session.moveRefusal({date: from}, d);
+      const swap = why ? this.swapOffer(d) : null;
       const there = Session.resolve(d).session;
-      const value = why ? (Session.hasLegacyLog(d, getDayIdxFromDate(d)) && !state.sessions?.[d] ? 'Has a logged session' : 'Has a session')
+      const off = why && (!swap || swap.why);
+      const value = swap ? (swap.why ? `${escapeHtml(swap.there.title || 'Session')} · completed, can't swap` : `Swap with ${escapeHtml(swap.there.title || 'session')}`)
+        : why ? (Session.hasLegacyLog(d, getDayIdxFromDate(d)) && !state.sessions?.[d] ? 'Has a logged session' : 'Has a session')
         : !there || there.kind === 'rest' ? 'Rest day' : `Replaces ${escapeHtml(there.title || 'session')}`;
-      html += `<button class="row row-btn" type="button" ${why ? 'disabled' : ''} onclick="MoveSheet.pick('${d}')">
+      html += `<button class="row row-btn${swap && !swap.why ? ' move-swap' : ''}" type="button" ${off ? 'disabled' : ''} onclick="MoveSheet.pick('${d}')">
         <span class="row-title">${formatViewDateLabel(d)}${i === 0 ? ' · Today' : ''}</span><span class="row-value">${value}</span>
       </button>`;
     }
     body(html + '</div>');
   },
+  // The confirm step: both sessions named on the days they are going to, and what travels with them.
+  renderSwap(){
+    const other = state.sessions?.[this.swapTo], name = this.fromName();
+    if(!other){ this.swapTo = null; return this.render(); }
+    const b = escapeHtml(other.title || 'session'), a = escapeHtml(name);
+    document.getElementById('move-title').textContent = `Swap ${name}?`;
+    Sheet.body(`<div class="move-list">
+        <div class="row"><span class="row-title">${formatViewDateLabel(this.swapTo)}</span><span class="row-value">${a}</span></div>
+        <div class="row"><span class="row-title">${formatViewDateLabel(this.from)}</span><span class="row-value">${b}</span></div>
+      </div>
+      <div class="note">${a} and ${b} trade days. Each keeps its logged sets, notes and status.</div>
+      <div class="move-swap-actions">
+        <button class="btn btn-secondary" type="button" onclick="MoveSheet.cancelSwap()">Back</button>
+        <button class="btn btn-primary" type="button" onclick="MoveSheet.confirmSwap()">Swap days</button>
+      </div>`);
+  },
+  cancelSwap(){ this.swapTo = null; this.render(); },
+  async confirmSwap(){
+    const from = this.from, to = this.swapTo;
+    if(!from || !to || !assertPlannable(to)) return;
+    const other = state.sessions?.[to];
+    const why = this.swapOffer(to)?.why;
+    if(!other || why){ toast(why || 'That session has moved'); this.cancelSwap(); return; }
+    const s = await Session.materialize(from, {status: 'planned'});
+    if(!s || !Session.swap(s.id, other.id)){ toast(Session.swapRefusal(s, other) || "Those sessions can't be swapped"); return; }
+    this.close();
+    setViewDate(to);
+    toast(`Swapped with ${other.title || 'session'} · now on ${formatViewDateLabel(from)}`);
+  },
   async pick(date){
     const from = this.from;
     if(!from || !assertPlannable(date)) return;
     const why = Session.moveRefusal({date: from}, date);
+    const swap = why ? this.swapOffer(date) : null;
+    if(swap){
+      if(swap.why){ toast(swap.why); return; }
+      this.swapTo = date;
+      this.renderSwap();
+      return;
+    }
     if(why){ toast(why); return; }
     const s = await Session.materialize(from, {status: 'planned'});
     if(!s || !Session.move(s.id, date)){ toast(Session.moveRefusal(s, date) || "That session can't be moved"); return; }
@@ -6061,7 +6235,7 @@ function isHiitDone(dayIdx, name){
   return !!state.hiitLog?.[dk]?.[dayIdx]?.[name];
 }
 async function toggleHiitDone(dayIdx, name){
-  if(!assertEditable('Marking HIIT') || !assertSessionDay(dayIdx)) return;
+  if(!assertLoggable('Marking HIIT') || !assertSessionDay(dayIdx)) return;
   const session = await Session.begin(viewKey());
   if(!session) return;
   const cb = Session.blockIdx(session, 'conditioning');
@@ -6235,6 +6409,13 @@ function resetToScheduled(){
   renderPlanSurfaces();
   toast(`Reset to ${to}`);
 }
+// The meta row's Edit: the workout editor on today and ahead; on a past day with a session, the
+// unlock for correcting what was logged (and, once unlocked, the way back out).
+function workoutEditBtn(){
+  if(isPastEditing()) return `<button class="btn btn-primary btn-sm past-edit-done" onclick="endPastEdit()" aria-pressed="true" title="Lock this day again">Done</button>`;
+  if(canEditPastDay() && isSessionDay(activeDay)) return `<button class="btn btn-secondary btn-sm past-edit-btn" onclick="startPastEdit()" title="Correct what was logged on this day">Edit</button>`;
+  return `<button class="btn btn-ghost btn-sm editable-only" onclick="PlanEditor.open(${activeDay})" title="Edit workout">Edit</button>`;
+}
 function snapshotNote(session){
   return `<span class="workout-meta-note">Snapshot · frozen ${formatViewDateLabel(localDateKey(new Date(session.snapshot?.frozenAt || session.started_at || session.date + 'T00:00:00')))}</span>`;
 }
@@ -6269,7 +6450,7 @@ function deloadNote(session, dateKey){
 // the strip for, so a sport session never shows the same strip twice.
 function renderBlockWorkout({day, blocks, session, dateKey, preview, actions, metaNote, metricsOn = session, omitMetrics = null}){
   const flat = flattenBlocks(blocks);
-  const canRecord = !preview && isViewingToday() && isSessionDay(activeDay) && !!metricsOn && metricsOn.status !== 'skipped';
+  const canRecord = !preview && isLoggable() && isSessionDay(activeDay) && !!metricsOn && metricsOn.status !== 'skipped';
   const stripFor = (b, i) => canRecord && Metrics.appliesTo(metricsOn, b, i)
     && !(omitMetrics && omitMetrics.b === b && omitMetrics.i === i) ? metricsStripHtml(metricsOn, b, i) : '';
   const legacyCells = (b, i, item) => {
@@ -6283,7 +6464,7 @@ function renderBlockWorkout({day, blocks, session, dateKey, preview, actions, me
   let html = `<div class="workout-meta${scheduleDivergenceNote(session, dateKey) ? ' has-diverged' : ''}">
       <span class="workout-meta-time">~${estimateWorkoutMinutes(activeDay, day, session)} min</span>
       <span class="workout-meta-info">${itemCount} exercise${itemCount === 1 ? '' : 's'} · ${blocks.length} block${blocks.length === 1 ? '' : 's'}${metaNote}${session && Session.isUnsynced(session.id) ? UNSYNCED_NOTE : ''}</span>
-      <button class="btn btn-ghost btn-sm editable-only" onclick="PlanEditor.open(${activeDay})" title="Edit workout">Edit</button>
+      ${workoutEditBtn()}
       <button class="btn btn-ghost btn-sm" onclick="Programs.open()" title="Programs">Programs</button>
     </div>${actions}`;
   const editable = !!session && Session.isLive(session) && !preview && isViewingToday();
@@ -6324,7 +6505,7 @@ function renderBlockWorkout({day, blocks, session, dateKey, preview, actions, me
       html += `<div class="ex-row">
         <div class="ex-head"><div class="ex-name-wrap"><div class="ex-name-display">${escapeHtml(item.name || '')}</div></div></div>
         <div class="ex-meta">${meta}</div>
-        ${canRecord ? suggestionHtml(metricsOn, b, i) : ''}
+        ${(canRecord && suggestionHtml(metricsOn, b, i)) || lastTimeHtml(item, blk, dateKey)}
         ${item.cues ? `<details class="ex-cue" data-cue="${cue}" ontoggle="onCueToggle(this)"${openCues.has(cue) ? ' open' : ''}><summary>Form cue</summary><p>${escapeHtml(item.cues)}</p></details>` : ''}
         <div class="set-table set-head${grid}"><div class="set-th">Set</div><div class="set-th">Reps</div><div class="set-th">lbs</div>${dur ? '<div class="set-th">Sec</div>' : ''}<div></div></div>`;
       for(let s = 0; s < +item.sets; s++){
@@ -6345,10 +6526,7 @@ function renderBlockWorkout({day, blocks, session, dateKey, preview, actions, me
     html += `</div>`;
   });
   if(editable) html += addBlockBtn();
-  html += `<button class="btn btn-primary btn-lg btn-full editable-only${only} workout-done" onclick="markWorkoutDone()">
-      <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-      Mark session complete
-    </button>`;
+  html += workoutDoneBtn(session, only);
   return html;
 }
 
@@ -6398,19 +6576,22 @@ function renderWorkoutContent(){
     // played, how far you covered, how hard it was, how the tank felt. It records against the
     // session's own sport item where there is one, so the row below never repeats the strip.
     const sportRef = Metrics.sportRef(shown) || {b: null, i: null};
-    html=`<div class="rest-state">
+    const sportFlat = flattenBlocks(viewBlocks);
+    // A bare optional session has no meta row of its own, so a past one carries the Edit control here.
+    const bare = !(sportFlat.sets.length + sportFlat.ticks.length);
+    html = bare && session && (canEditPastDay() || isPastEditing()) ? `<div class="workout-meta"><span class="workout-meta-info"></span>${workoutEditBtn()}</div>` : '';
+    html+=`<div class="rest-state">
       <div class="rest-title">${day.name || 'Optional session'}</div>
       <div class="rest-desc">${day.desc || 'No sets to log.'}</div>
       <div class="rest-sub">${doneNow ? 'Done · counts as a session.' : "Optional · skipping it won't break your streak."}</div>
-      ${isViewingToday() ? `<div class="rest-actions"><button class="btn ${doneNow ? 'btn-secondary' : 'btn-primary'}" aria-pressed="${doneNow}" onclick="toggleOptionalDone()">
+      ${isLoggable() ? `<div class="rest-actions"><button class="btn ${doneNow ? 'btn-secondary' : 'btn-primary'}" aria-pressed="${doneNow}" onclick="toggleOptionalDone()">
         <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="${doneNow ? 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' : 'M5 13l4 4L19 7'}"/></svg>
         ${doneNow ? 'Did it · undo' : 'Did it'}</button></div>` : ''}
-      ${isViewingToday() && shown.status !== 'skipped' ? metricsStripHtml(shown, sportRef.b, sportRef.i) : ''}
+      ${isLoggable() && shown.status !== 'skipped' ? metricsStripHtml(shown, sportRef.b, sportRef.i) : ''}
     </div>${actions}`;
     // An optional session with a workout behind it (a warm-up, a drill list) shows it below the
     // card. A bare one — just a name — keeps the single "Did it" card it has always had.
-    const sportFlat = flattenBlocks(viewBlocks);
-    if(sportFlat.sets.length + sportFlat.ticks.length)
+    if(!bare)
       html += renderBlockWorkout({day, blocks: viewBlocks, session, dateKey, preview, actions: '', metricsOn: shown, omitMetrics: sportRef,
         metaNote: deloadNote(session, dateKey) + planUpdatedNote(session) + scheduleDivergenceNote(session, dateKey)});
   } else if(day.rest){
@@ -6435,7 +6616,7 @@ function renderWorkoutContent(){
     html+=`<div class="workout-meta${scheduleDivergenceNote(session, dateKey) ? ' has-diverged' : ''}">
       <span class="workout-meta-time">~${estMin} min</span>
       <span class="workout-meta-info">${parts.join(' · ')}${metaNote}${session && Session.isUnsynced(session.id) ? UNSYNCED_NOTE : ''}</span>
-      <button class="btn btn-ghost btn-sm editable-only" onclick="PlanEditor.open(${activeDay})" title="Edit workout">Edit</button>
+      ${workoutEditBtn()}
       <button class="btn btn-ghost btn-sm" onclick="Programs.open()" title="Programs">Programs</button>
     </div>${actions}`;
     const editable = !!session && Session.isLive(session) && !preview && isViewingToday();
@@ -6467,7 +6648,7 @@ function renderWorkoutContent(){
           <div class="ex-head">
             <div class="ex-name-wrap">${nameUI}</div>
           </div>
-          <div class="ex-meta"><span class="mono">${ex.sets} × ${ex.reps}</span><span class="ex-meta-sep">·</span><span class="mono">${ex.rest}</span><span class="ex-meta-sep">·</span><span>${ex.weight}</span></div>
+          <div class="ex-meta"><span class="mono">${ex.sets} × ${ex.reps}</span><span class="ex-meta-sep">·</span><span class="mono">${ex.rest}</span><span class="ex-meta-sep">·</span><span>${ex.weight}</span></div>${lastTimeHtml(session ? viewBlocks[sb]?.items?.[ei] : flattenBlocks(viewBlocks).sets[ei]?.item, viewBlocks[sb], dateKey)}
           <details class="ex-cue" data-cue="${activeDay}-${ei}" ontoggle="onCueToggle(this)"${openCues.has(`${activeDay}-${ei}`)?' open':''}><summary>Form cue</summary><p>${ex.desc}</p></details>
           <div class="set-table set-head">
             <div class="set-th">Set</div>
@@ -6585,79 +6766,97 @@ function renderWorkoutContent(){
     }
 
     if(editable) html += addBlockBtn();
-    html+=`<button class="btn btn-primary btn-lg btn-full editable-only${preview?' session-only':''} workout-done" onclick="markWorkoutDone()">
-      <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-      Mark session complete
-    </button>`;
+    html += workoutDoneBtn(session, preview ? ' session-only' : '');
   }
 
   document.getElementById('workout-content').innerHTML=html;
 }
 
+// ----- PRs -----
+// A PR follows the logs both ways. A weight above it raises it, as logging always has. Correcting the
+// set that held it — lowering or clearing that weight, on a past day or today — lets it fall to the
+// heaviest weight still logged for the exercise anywhere, or removes it when nothing is left. Any
+// other edit leaves it alone, so a lowered set never takes a PR set somewhere else down with it.
+const PRs = {
+  // The heaviest logged weight for an exercise name, and the date it was logged on. Sessions are
+  // read by their own snapshot's names; the legacy set log only for dates with no session row
+  // (where one exists, the set log is just its projection).
+  best(name){
+    let top = {weight: 0, date: null};
+    const see = (w, date) => { if(+w > top.weight) top = {weight: +w, date}; };
+    Object.values(state.sessions || {}).forEach(sess => (sess.snapshot?.blocks || []).forEach((blk, b) => (blk?.items || []).forEach((it, i) => {
+      if(it?.name === name) Object.values(state.sessionSets?.[sess.id]?.[b]?.[i] || {}).forEach(c => see(c?.weight, sess.date));
+    })));
+    Object.entries(state.setLog || {}).forEach(([date, days]) => {
+      if(state.sessions?.[date]) return;
+      Object.entries(days || {}).forEach(([d, exs]) => Object.entries(exs || {}).forEach(([ei, sets]) => {
+        const vals = Object.values(sets || {}).filter(v => v?.weight != null);
+        if(vals.length && getExName(+d, +ei, date) === name) vals.forEach(v => see(v.weight, date));
+      }));
+    });
+    return top;
+  },
+  // before/after: the edited set's weight either side of the edit; date: the day it was logged on.
+  afterWeightEdit(name, before, after, date){
+    if(!name) return;
+    const prs = state.prs ||= {};
+    const cur = +prs[name] || 0;
+    if(after > cur){ prs[name] = after; save(); Sync.pushPR(name, after, date); return; }
+    if(!(before > 0) || before < cur || (after || 0) >= before) return;   // this set didn't hold the PR, or wasn't lowered
+    const top = this.best(name);
+    if(top.weight >= cur) return;                                          // another set still holds it
+    if(top.weight > 0){ prs[name] = top.weight; Sync.pushPR(name, top.weight, top.date); }
+    else { delete prs[name]; Sync.deletePR(name); }
+    save();
+  },
+};
+
 // The first write on a day creates its session locally (synced in the background); sets push fire-and-forget.
 async function logSet(dayIdx, exIdx, setIdx, field, value){
-  if(!assertEditable('Logging sets') || !assertSessionDay(dayIdx)) return;
+  if(!assertLoggable('Logging sets') || !assertSessionDay(dayIdx)) return;
   const session = await Session.begin(viewKey());
   if(!session) return;
   const sb = Session.blockIdx(session, 'strength');
-  Session.cell(session, sb, exIdx, setIdx)[field] = numOrNull(value);
-
-  let prChanged = null;
-  if(field==='weight'){
-    const exName = session.snapshot?.blocks?.[sb]?.items?.[exIdx]?.name;
-    if(exName){
-      if(!state.prs) state.prs={};
-      const w = parseFloat(value);
-      if(w && (!state.prs[exName]||w>state.prs[exName])){
-        state.prs[exName]=w;
-        prChanged = {name: exName, weight: w};
-      }
-    }
-  }
+  const cell = Session.cell(session, sb, exIdx, setIdx), before = +cell.weight || 0;
+  cell[field] = numOrNull(value);
   Session.commit(session, sb, exIdx, setIdx);
-  if(prChanged) Sync.pushPR(prChanged.name, prChanged.weight);
+  if(field === 'weight') PRs.afterWeightEdit(session.snapshot?.blocks?.[sb]?.items?.[exIdx]?.name, before, +cell.weight || 0, session.date);
 }
 
 async function toggleSet(dayIdx, exIdx, setIdx){
-  if(!assertEditable('Marking sets') || !assertSessionDay(dayIdx)) return;
+  if(!assertLoggable('Marking sets') || !assertSessionDay(dayIdx)) return;
   const session = await Session.begin(viewKey());
   if(!session) return;
   const sb = Session.blockIdx(session, 'strength');
   const cell = Session.cell(session, sb, exIdx, setIdx);
   cell.done = !cell.done;
   Session.commit(session, sb, exIdx, setIdx);
-  if(cell.done) RestTimer.startFor(session.snapshot?.blocks?.[sb]?.items?.[exIdx]);
+  if(cell.done && isViewingToday()) RestTimer.startFor(session.snapshot?.blocks?.[sb]?.items?.[exIdx]);
   renderWorkoutContent();
 }
 
 // Block-addressed writes (block view). Same rules as logSet / toggleSet.
 async function logBlockSet(dayIdx, b, i, s, field, value){
-  if(!assertEditable('Logging sets') || !assertSessionDay(dayIdx)) return;
+  if(!assertLoggable('Logging sets') || !assertSessionDay(dayIdx)) return;
   const session = await Session.begin(viewKey());
   if(!session) return;
-  Session.cell(session, b, i, s)[field] = numOrNull(value);
-  let prChanged = null;
-  const exName = session.snapshot?.blocks?.[b]?.items?.[i]?.name;
-  if(field === 'weight' && exName){
-    const w = parseFloat(value);
-    if(!state.prs) state.prs = {};
-    if(w && (!state.prs[exName] || w > state.prs[exName])){ state.prs[exName] = w; prChanged = {name: exName, weight: w}; }
-  }
+  const cell = Session.cell(session, b, i, s), before = +cell.weight || 0;
+  cell[field] = numOrNull(value);
   Session.commit(session, b, i, s);
-  if(prChanged) Sync.pushPR(prChanged.name, prChanged.weight);
+  if(field === 'weight') PRs.afterWeightEdit(session.snapshot?.blocks?.[b]?.items?.[i]?.name, before, +cell.weight || 0, session.date);
 }
 async function toggleBlockSet(dayIdx, b, i, s){
-  if(!assertEditable('Marking sets') || !assertSessionDay(dayIdx)) return;
+  if(!assertLoggable('Marking sets') || !assertSessionDay(dayIdx)) return;
   const session = await Session.begin(viewKey());
   if(!session) return;
   const cell = Session.cell(session, b, i, s);
   cell.done = !cell.done;
   Session.commit(session, b, i, s);
-  if(cell.done) RestTimer.startFor(session.snapshot?.blocks?.[b]?.items?.[i]);
+  if(cell.done && isViewingToday()) RestTimer.startFor(session.snapshot?.blocks?.[b]?.items?.[i]);
   renderWorkoutContent();
 }
 async function toggleBlockTick(dayIdx, b, i){
-  if(!assertEditable('Marking complete') || !assertSessionDay(dayIdx)) return;
+  if(!assertLoggable('Marking complete') || !assertSessionDay(dayIdx)) return;
   const session = await Session.begin(viewKey());
   if(!session) return;
   const cell = Session.cell(session, b, i, 0);
@@ -6674,12 +6873,34 @@ function suggestionHtml(session, b, i){
   // Once accepted the target is on the prescription line, so the offer has nothing left to say.
   // The suggestion itself stays live for Artemis, which reports it as accepted.
   if(!s || s.accepted != null) return '';
-  const last = `Last time: ${s.last.sets}×${s.last.reps} @ ${s.last.weight}`;
+  const last = `Last time: ${s.last.sets}×${s.last.reps} @ ${s.last.weight}${lastTimeWhen(s.last.date, todayKey())}`;
   return `<div class="ex-suggest">
     <span class="ex-suggest-text">${last} · try ${s.weight} today</span>
     <button class="ex-suggest-use" onclick="acceptSuggestion(${activeDay},${b},${i})">Use ${s.weight}</button>
     <button class="ex-suggest-x" aria-label="Dismiss this suggestion" title="Not today" onclick="dismissSuggestion(${activeDay},${b},${i})">${CLOSE_SVG}</button>
   </div>`;
+}
+// ----- "Last time" -----
+// What was done for a strength item the last time it appeared in a completed session, on today's
+// and upcoming days. It is the suggestion line's first half, so where a suggestion shows, it shows
+// instead of this. Read-only: Progression.lastPerformance only reads state, so rendering it creates
+// no session and issues no write. Tick rows and warm-up, mobility, agility and conditioning blocks
+// never look anything up.
+const LAST_TIME_BLOCKS_SKIP = new Set(['warmup', 'mobility', 'agility', 'conditioning', 'cooldown', 'sport']);
+const LAST_TIME_RECENT_DAYS = 10;
+// Recent enough needs no date; anything older says when.
+function lastTimeWhen(date, ref){
+  if(!date || date >= shiftDateKey(ref, -LAST_TIME_RECENT_DAYS)) return '';
+  const d = new Date(date + 'T00:00:00');
+  return ' · ' + d.toLocaleDateString('en-US', {month: 'short', day: 'numeric', ...(d.getFullYear() !== new Date().getFullYear() ? {year: 'numeric'} : {})});
+}
+function lastTimeHtml(item, blk, dateKey){
+  if(!item?.exerciseId || !isSetItem(item) || itemHidden(item) || LAST_TIME_BLOCKS_SKIP.has(blk?.type) || dateKey < todayKey()) return '';
+  const last = Progression.lastPerformance(item.exerciseId, dateKey, {lookback: null});
+  if(!last) return '';
+  const reps = last.cells.map(c => +c.reps);
+  const shape = reps.every(r => r === reps[0]) ? `${reps.length}×${reps[0]}` : reps.join('/');
+  return `<div class="ex-last">Last time: ${shape}${last.weight > 0 ? ` @ ${last.weight}` : ''}${lastTimeWhen(last.date, dateKey)}</div>`;
 }
 async function acceptSuggestion(dayIdx, b, i){
   const session = await metricsSession(dayIdx);
@@ -6701,7 +6922,7 @@ async function dismissSuggestion(dayIdx, b, i){
 // The session to record into. An optional sport day takes no set logs, so it materializes the way
 // "Did it" does; everything else goes through the normal start-on-first-write path.
 async function metricsSession(dayIdx){
-  if(!assertEditable('Recording this session') || !assertSessionDay(dayIdx)) return null;
+  if(!assertLoggable('Recording this session') || !assertSessionDay(dayIdx)) return null;
   const date = viewKey();
   if(Session.resolve(date).session?.kind === 'sport') return Session.materialize(date, {status: 'planned'});
   return Session.begin(date);
@@ -6778,7 +6999,8 @@ function metricsStripHtml(session, b, i, {editable = true} = {}){
 }
 
 async function markWorkoutDone(){
-  if(!assertEditable('Marking session complete') || !assertSessionDay(activeDay)) return;
+  if(!assertLoggable('Marking session complete') || !assertSessionDay(activeDay)) return;
+  if(isPastEditing()){ setPastDayDone(true); return; }
   const session = await Session.begin(viewKey());
   if(!session) return;
   // Dual-write: the stats helpers and story cards read the legacy completion flag.
@@ -6786,6 +7008,29 @@ async function markWorkoutDone(){
   if(session.status !== 'done') Session.setStatus(session, 'done');
   else { Session.setLegacyDone(session, true); save(); }
   showSessionCelebration();
+}
+
+// Correcting a past day includes whether it happened. Un-completing it goes back to in progress when
+// anything was recorded, else to planned — either way the stats count it as missed, as they would
+// have had it never been ticked.
+function setPastDayDone(done){
+  const s = isPastEditing() ? state.sessions?.[viewKey()] : null;
+  if(!s) return;
+  if(done && s.status !== 'done') Session.setStatus(s, 'done');
+  if(!done && s.status === 'done') Session.setStatus(s, Session.hasStartedWork(s) ? 'in_progress' : 'planned');
+  renderWorkoutContent();
+  toast(`${formatViewDateLabel(s.date)} marked ${done ? 'done' : 'not done'}`);
+}
+// The foot of the session. On an unlocked past day that is already done it offers the reverse.
+function workoutDoneBtn(session, only){
+  if(isPastEditing() && session?.status === 'done') return `<button class="btn btn-secondary btn-lg btn-full workout-done" onclick="setPastDayDone(false)">
+      <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      Mark not done
+    </button>`;
+  return `<button class="btn btn-primary btn-lg btn-full editable-only${only} workout-done" onclick="markWorkoutDone()">
+      <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+      Mark session complete
+    </button>`;
 }
 
 function showSessionCelebration(){
