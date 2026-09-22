@@ -2118,6 +2118,7 @@ const Sync = {
       if(synced || Object.keys(st).length) state.sessionSets = st;
     }
     Session.restoreUnsynced(unsynced);   // the cloud doesn't have these yet — keep this device's copy
+    Session.reconcileLegacyDone();   // a completion the cloud's row lost, but the legacy flag kept
     Session.projectAll();   // legacy-shaped copy of session sets for the stats helpers
     save();
     // Tables that did load are applied above; the pull still counts as failed, so "Synced" is never shown.
@@ -2258,15 +2259,20 @@ const Sync = {
       return true;
     } catch(e){ console.warn('pushSessionSet failed:', e); return false; }
   },
+  // An UPDATE that matches no row is not an error — PostgREST reports success for zero rows. That
+  // is why a completion could vanish: the row had never been inserted, the status was reported as
+  // pushed, nothing retried, and the next pull replaced "done" with the cloud's copy. Ask for the
+  // updated rows back and treat "no rows" as a failure, so afterPush queues the session and the
+  // flush inserts the row before re-sending the status. Anything unrecognised counts as a failure.
   async updateSessionStatus(session){
     if(!this.ready) return false;
     try {
       const r = await this.client.from('training_sessions').update({
         status:session.status, started_at:session.started_at ?? null, completed_at:session.completed_at ?? null, date:session.date,
         sort_order:session.sort_order ?? 0, updated_at:session.updated_at || new Date().toISOString()
-      }).eq('id', session.id);
+      }).eq('id', session.id).select('id');
       if(r.error) throw r.error;
-      return true;
+      return Array.isArray(r.data) && r.data.length > 0;
     } catch(e){ console.warn('pushSessionStatus failed:', e); return false; }
   },
   async setWorkoutDoneFlag(date, dayIdx, done){
@@ -2502,10 +2508,13 @@ async function resyncFromCloud(){
   const btn = document.getElementById('resync-btn');
   if(btn) btn.disabled = true;
   toast('Syncing from cloud…');
+  // Declared outside the try so the catch can put it back: a failed resync must not leave the
+  // flag set. While it is set, pull() accepts empty cloud values, so one failed resync would
+  // otherwise arm every later pull to wipe local sessions, sets and completions with nothing.
+  const wasInitialized = state.syncInitialized;
   try {
     // Force overwrite by pretending we've synced before — pull will then accept
     // even empty cloud values. We restore the original flag if the pull failed.
-    const wasInitialized = state.syncInitialized;
     state.syncInitialized = true;
     await Sync.pull();
     save();
@@ -2514,6 +2523,8 @@ async function resyncFromCloud(){
     state.syncInitialized = true;
   } catch(e){
     console.warn('resyncFromCloud failed:', e);
+    state.syncInitialized = wasInitialized;
+    save();
     toast('Sync failed: ' + (e.message || 'unknown error'));
   } finally {
     if(btn) btn.disabled = false;
@@ -4170,11 +4181,16 @@ const Session = {
     if(s && s.status === 'planned') this.setStatus(s, 'in_progress');
     return s;
   },
-  // Local write of one set (plus its legacy-shaped copy), then a fire-and-forget push.
+  // Local write of one set (plus its legacy-shaped copy), then a push.
+  // Queue the session before the push, not just on failure (the Phase 11 rule, same as
+  // Metrics.commitSnapshot): a push that never resolves — the tab closed, the app backgrounded
+  // mid-request — reports neither success nor failure, so without the queue this set lives only
+  // on this device and the next pull replaces it with the cloud's copy.
   commit(session, b, i, s){
     const cell = this.cell(session, b, i, s);
     this.project(session, b, i, s);
     this.bump(session.id);
+    this.enqueue(session.id, {quiet: true});
     save();
     Sync.pushSessionSet(session.id, b, i, s, session.snapshot?.blocks?.[b]?.items?.[i]?.exerciseId ?? null, cell);
   },
@@ -4211,8 +4227,26 @@ const Session = {
     if(done && !has){ state.workoutsCompleted.push(key); Sync.pushWorkoutDone(session.date, d, report); }
     if(!done && has){ state.workoutsCompleted = state.workoutsCompleted.filter(k => k !== key); Sync.pushWorkoutUndone(session.date, d, report); }
   },
+  // A completion is written twice — the session row's status and the legacy flag, in separate
+  // requests to separate tables. When only the status push was lost, the cloud returns a row that
+  // is not done while the flag still says it is, and resolve() prefers the row: the checkmark is
+  // gone. The flag is a positive record that the session was completed, so it wins here and the
+  // status is re-pushed. Only an unfinished session is upgraded — a skip keeps its own status, and
+  // a day with no flag is left exactly as the cloud sent it.
+  reconcileLegacyDone(){
+    (state.workoutsCompleted || []).forEach(key => {
+      const date = key.slice(0, 10), dayIdx = +key.slice(11);
+      const s = state.sessions?.[date];
+      if(!s || !Number.isInteger(dayIdx) || getDayIdxFromDate(date) !== dayIdx) return;
+      if(s.status === 'done' || s.status === 'skipped') return;
+      this.setStatus(s, 'done');
+    });
+  },
   // Change a session's status locally (plus the legacy flag) and push it. statusDirty tells a later
   // flush to re-send both, so a change made offline still reaches a row another device created.
+  // Queued before the push for the same reason as commit(): statusDirty alone has no retry path
+  // once the queue is empty, and a "done" that never reached the cloud is the one the next pull
+  // quietly undoes.
   setStatus(s, status){
     const now = new Date().toISOString();
     s.status = status;
@@ -4223,6 +4257,7 @@ const Session = {
     s.statusDirty = true;
     this.bump(s.id);
     this.setLegacyDone(s, status === 'done');
+    this.enqueue(s.id, {quiet: true});
     save();
     Sync.pushSessionStatus(s);
   },
@@ -4368,12 +4403,17 @@ const Session = {
   // Runs after a successful pull, on 'online', at boot, and after any successful session write.
   bump(id){ this.rev[id] = (this.rev[id] || 0) + 1; },
   isUnsynced(id){ return (state.pendingSessionSync || []).includes(id); },
-  enqueue(id){
+  // quiet: join the queue without showing the not-synced note. Used by the writers that queue
+  // before every push (commit, setStatus), where the queue is insurance against a request that
+  // never resolves and the entry usually clears within the same second. The note stays what it
+  // was — a sign that a push actually failed — rather than flickering on every tap. A quiet
+  // entry that does not clear still surfaces: the next failure or render calls renderSyncState.
+  enqueue(id, {quiet = false} = {}){
     const q = state.pendingSessionSync ||= [];
     if(!id || q.includes(id)) return;
     q.push(id);
     save();
-    this.renderSyncState();
+    if(!quiet) this.renderSyncState();
   },
   afterPush(id, ok){
     if(!ok) this.enqueue(id);
