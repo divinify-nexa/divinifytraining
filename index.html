@@ -309,6 +309,7 @@ input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-
 .pill.active.done::after{background:var(--accent-text);opacity:.8}
 .pill.skipped{color:var(--text-tertiary);text-decoration:line-through;text-decoration-thickness:1px}
 .pill.is-today{box-shadow:inset 0 0 0 1px var(--border-subtle);color:var(--text-primary)}
+.pill:disabled{opacity:.3;cursor:not-allowed}   /* past the planning window */
 
 /* --- Chips (filters, multi-select) --- */
 .share-pill,.wiz-chip{
@@ -802,9 +803,11 @@ body.scanner-open{overflow:hidden}
 .ex-suggest-x svg{width:14px;height:14px}
 .ex-target{color:var(--text-primary);font-weight:600}
 .ex-last{margin-top:var(--s-1);font-size:var(--fs-micro);line-height:var(--lh-micro);letter-spacing:var(--ls-micro);color:var(--text-tertiary)}
-/* Last time's figure for this set, on its own line under the reps and lbs inputs: the row keeps its
-   four columns at 375px and the number sits right under the one it is compared with. */
-.set-last{grid-column:2 / -2;margin-top:calc(-1 * var(--s-1));text-align:center;font-family:var(--font-mono);font-size:var(--fs-micro);line-height:var(--lh-micro);color:var(--text-tertiary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Last time's figures for this set, each centred under the input it is compared with — reps under
+   Reps, weight under lbs — on one quiet line, so the row keeps its columns and tap targets at 375px. */
+.set-last{min-width:0;margin-top:calc(-1 * var(--s-1));text-align:center;font-family:var(--font-mono);font-size:var(--fs-micro);line-height:var(--lh-micro);color:var(--text-tertiary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.set-last-reps{grid-column:2}
+.set-last-lbs{grid-column:3}
 /* How a past session ended, where today's "Mark session complete" sits. */
 .workout-state{display:flex;align-items:center;justify-content:center;gap:var(--s-2);min-height:var(--tap);margin-top:var(--s-6);padding:0 var(--s-4);border-radius:var(--r-md);background:var(--fill);font-size:var(--fs-caption);line-height:var(--lh-caption);font-weight:600;color:var(--text-secondary)}
 .workout-state svg{width:16px;height:16px;stroke-width:3}
@@ -1007,9 +1010,6 @@ body.scope-modal-open{overflow:hidden}
   color:var(--text-primary);font-size:var(--fs-micro);line-height:var(--lh-micro);font-weight:600;text-decoration:underline;
   text-underline-offset:2px;white-space:nowrap}
 /* Another day's plan viewed today: session controls read as disabled (same treatment as past days) */
-#workout-content[data-preview] .session-only{opacity:.55;pointer-events:none}
-#workout-content[data-preview] .session-only :where(input){background:transparent;border-color:var(--border-subtle);color:var(--text-secondary)}
-#workout-content[data-preview] .session-only:where(.btn-primary){background:var(--fill);color:var(--text-tertiary)}
 .workout-meta .btn{margin-right:calc(-1 * var(--s-3))}
 .workout-done{margin-top:var(--s-6)}
 
@@ -1901,7 +1901,7 @@ function isPastEditing(){ return pastEditDate !== null && pastEditDate === viewD
 function isLoggable(){ return isViewingToday() || isPastEditing(); }
 function assertLoggable(actionLabel){ return isPastEditing() || assertEditable(actionLabel); }
 function startPastEdit(){
-  if(!canEditPastDay() || !isSessionDay(activeDay)) return;
+  if(!canEditPastDay()) return;
   pastEditDate = viewDate;
   applyReadonlyMode();
   renderWorkoutContent();
@@ -1916,8 +1916,6 @@ function setViewDate(dateStr){
   if(dateStr > lastPlannableDate()) return;
   if(dateStr !== viewDate){ closeScopeModal(); planUpdatedFor = null; pastEditDate = null; }
   viewDate = dateStr;
-  // When navigating dates, snap workout view to that date's day-of-week
-  activeDay = getViewDayIdx();
   applyReadonlyMode();
   renderActivePage();
 }
@@ -6047,11 +6045,14 @@ const MoveSheet = {
   }
 };
 
-// Session writes belong to the viewed date's own weekday; other day pills preview the plan.
+// A handler's dayIdx is the weekday of the date it was rendered for. The Train tab only ever shows the
+// viewed date, so a mismatch means the control is stale (the date changed under it); the plan
+// editor also uses this to tell the viewed date's weekday from another schedule row.
 function isSessionDay(dayIdx){ return dayIdx === getDayIdxFromDate(viewKey()); }
 function assertSessionDay(dayIdx){
   if(isSessionDay(dayIdx)) return true;
-  toast(`Log sets on ${DAY_LABELS[getDayIdxFromDate(viewKey())]}'s session — other days are a preview`);
+  toast(`That control belongs to another day — showing ${formatViewDateLabel(viewKey())}`);
+  renderWorkoutContent();
   return false;
 }
 
@@ -6334,17 +6335,14 @@ function saveNewMeal(){
   save(); renderNutrition(); toast('Added');
 }
 
-let activeDay = 0;
-
 // The Train header names the workout you are looking at: which program and week, the session's
 // own name, and what state that day is in.
 function trainHeaderParts(){
-  const dateKey = viewKey(), dayIdx = activeDay;
+  const dateKey = viewKey(), dayIdx = getViewDayIdx();
   const prog = programForDate(dateKey);
-  const live = isSessionDay(dayIdx);
-  const res = live ? Session.resolve(dateKey) : null;
-  const session = res?.source === 'row' ? res.session : null;
-  const day = live ? (session ? Session.toLegacyWorkout(session) : getWorkout(dayIdx, dateKey)) : getWorkout(dayIdx, dateKey);
+  const res = Session.resolve(dateKey);
+  const session = res.source === 'row' ? res.session : null;
+  const day = session ? Session.toLegacyWorkout(session) : getWorkout(dayIdx, dateKey);
   const covered = !session && res?.spec?.coveredBy;
   const doneNow = session ? session.status === 'done' : (state.workoutsCompleted || []).includes(`${dateKey}-${dayIdx}`);
   const rest = !!day?.rest || !!covered;
@@ -6352,8 +6350,7 @@ function trainHeaderParts(){
   const eyebrow = [prog?.name, `Week ${getWeekNum(dateKey)}`].filter(Boolean).join(' · ');
   const dateLabel = isViewingToday() ? 'Today' : formatViewDateLabel(dateKey);
   let state_ = 'Tap sets to mark complete';
-  if(!live) state_ = 'Plan preview';
-  else if(session?.status === 'skipped') state_ = 'Skipped';
+  if(session?.status === 'skipped') state_ = 'Skipped';
   else if(doneNow) state_ = 'Session complete';
   else if(rest) state_ = 'Rest day';
   else if(res?.spec?.kind === 'sport') state_ = res?.spec?.optional ? 'Optional session' : 'Sport session';
@@ -6366,28 +6363,39 @@ function renderTrainHeader(){
   const set = (id, text) => { const el = document.getElementById(id); if(el) el.textContent = text; };
   set('train-eyebrow', eyebrow); set('train-title', title); set('train-sub', sub);
 }
-// Day pills: the three-letter label only. State is shown, not spelled out — a dot for a completed
-// session, a struck label for a skipped one, a ring on the real today when it isn't the one selected.
+// Day pills: the viewed date's week, Monday first. Each pill is that weekday's date, so tapping one
+// navigates exactly as the date nav does; the selected pill is always the viewed day. State is
+// shown, not spelled out — a dot for a completed session, a struck label for a skipped one, a ring
+// on the real today when it isn't the one selected. A date past the planning window is disabled.
+function dayPillDate(i){ return shiftDateKey(viewKey(), i - getViewDayIdx()); }
 function dayPillState(i){
-  const date = shiftDateKey(viewKey(), i - getViewDayIdx());
+  const date = dayPillDate(i);
   const r = Session.resolve(date);
   const dayIdx = getDayIdxFromDate(date);
   const doneLegacy = (state.workoutsCompleted || []).includes(`${date}-${dayIdx}`);
   const cls = [];
   if(r.session?.status === 'skipped') cls.push('skipped');
   else if(r.session?.status === 'done' || (r.source === 'legacy' && doneLegacy)) cls.push('done');
-  if(date === todayKey() && i !== activeDay) cls.push('is-today');
+  if(date === todayKey() && i !== getViewDayIdx()) cls.push('is-today');
   return cls.join(' ');
 }
 function renderWorkout(){
   renderDateNav('date-nav-workout');
   renderTrainHeader();
-  const pills = getPlanWorkouts().map((d,i)=>`<button class="pill ${i===activeDay?'active':''} ${dayPillState(i)}" onclick="setDay(${i})" title="${escapeHtml(d?.name || 'Rest')}">${d.label}</button>`).join('');
+  const view = getViewDayIdx();
+  const pills = DAY_LABELS.map((label, i) => {
+    const date = dayPillDate(i), out = date > lastPlannableDate();
+    return `<button class="pill ${i === view ? 'active' : ''} ${out ? '' : dayPillState(i)}" onclick="pickDay(${i})"${out ? ' disabled' : ''}
+      ${i === view ? 'aria-current="date" ' : ''}aria-label="${formatViewDateLabel(date)}" title="${formatViewDateLabel(date)}">${label}</button>`;
+  }).join('');
   document.getElementById('day-pills').innerHTML=pills;
   renderWorkoutContent();
 }
 
-function setDay(i){ activeDay=i; renderWorkout(); }
+function pickDay(i){
+  const date = dayPillDate(i);
+  if(date !== viewKey() && date <= lastPlannableDate()) setViewDate(date);
+}
 
 // A schedule or template change moves every surface that reads the plan, not just the one on
 // screen: the Train header, day pills and content, and the Today hero. Repaint them all, so
@@ -6434,8 +6442,8 @@ function resetToScheduled(){
 // unlock for correcting what was logged (and, once unlocked, the way back out).
 function workoutEditBtn(){
   if(isPastEditing()) return `<button class="btn btn-primary btn-sm past-edit-done" onclick="endPastEdit()" aria-pressed="true" title="Lock this day again">Done</button>`;
-  if(canEditPastDay() && isSessionDay(activeDay)) return `<button class="btn btn-secondary btn-sm past-edit-btn" onclick="startPastEdit()" title="Correct what was logged on this day">Edit</button>`;
-  return `<button class="btn btn-ghost btn-sm editable-only" onclick="PlanEditor.open(${activeDay})" title="Edit workout">Edit</button>`;
+  if(canEditPastDay()) return `<button class="btn btn-secondary btn-sm past-edit-btn" onclick="startPastEdit()" title="Correct what was logged on this day">Edit</button>`;
+  return `<button class="btn btn-ghost btn-sm editable-only" onclick="PlanEditor.open(${getViewDayIdx()})" title="Edit workout">Edit</button>`;
 }
 function snapshotNote(session){
   return `<span class="workout-meta-note">Snapshot · frozen ${formatViewDateLabel(localDateKey(new Date(session.snapshot?.frozenAt || session.started_at || session.date + 'T00:00:00')))}</span>`;
@@ -6450,15 +6458,15 @@ function itemToolsHtml(session, b, i, {canUp, canDown, sets}){
   if(Session.isItemLocked(session, b, i))
     return `<div class="item-tools"><button class="icon-btn" disabled title="Logged — locked for this session">${LOCK_SVG}</button></div>`;
   return `<div class="item-tools">
-    ${sets ? `<button class="btn btn-ghost btn-sm" onclick="sessionAddSet(${activeDay},${b},${i})">+ Set</button>` : ''}
-    <button class="icon-btn" title="Swap exercise" onclick="sessionSwapItem(${activeDay},${b},${i})">${SWAP_SVG}</button>
-    <button class="icon-btn" title="Move up"${canUp ? '' : ' disabled'} onclick="sessionMoveItem(${activeDay},${b},${i},-1)">${ARROW_UP}</button>
-    <button class="icon-btn" title="Move down"${canDown ? '' : ' disabled'} onclick="sessionMoveItem(${activeDay},${b},${i},1)">${ARROW_DOWN}</button>
-    <button class="icon-btn danger" title="Remove from this session" onclick="sessionRemoveItem(${activeDay},${b},${i})">${CLOSE_SVG}</button>
+    ${sets ? `<button class="btn btn-ghost btn-sm" onclick="sessionAddSet(${getViewDayIdx()},${b},${i})">+ Set</button>` : ''}
+    <button class="icon-btn" title="Swap exercise" onclick="sessionSwapItem(${getViewDayIdx()},${b},${i})">${SWAP_SVG}</button>
+    <button class="icon-btn" title="Move up"${canUp ? '' : ' disabled'} onclick="sessionMoveItem(${getViewDayIdx()},${b},${i},-1)">${ARROW_UP}</button>
+    <button class="icon-btn" title="Move down"${canDown ? '' : ' disabled'} onclick="sessionMoveItem(${getViewDayIdx()},${b},${i},1)">${ARROW_DOWN}</button>
+    <button class="icon-btn danger" title="Remove from this session" onclick="sessionRemoveItem(${getViewDayIdx()},${b},${i})">${CLOSE_SVG}</button>
   </div>`;
 }
-function addItemBtn(b){ return `<button class="btn btn-secondary btn-sm session-add editable-only" onclick="sessionAddItem(${activeDay},${b})">+ Add exercise</button>`; }
-function addBlockBtn(){ return `<button class="btn btn-ghost session-add editable-only" onclick="sessionAddBlock(${activeDay})">+ Add block</button>`; }
+function addItemBtn(b){ return `<button class="btn btn-secondary btn-sm session-add editable-only" onclick="sessionAddItem(${getViewDayIdx()},${b})">+ Add exercise</button>`; }
+function addBlockBtn(){ return `<button class="btn btn-ghost session-add editable-only" onclick="sessionAddBlock(${getViewDayIdx()})">+ Add block</button>`; }
 
 // A deload week says so on the Train tab. A session reads its own frozen snapshot, so one built
 // in a deload week keeps the note even after the program moves on.
@@ -6469,31 +6477,30 @@ function deloadNote(session, dateKey){
 // metricsOn is the session a duration/sport row records into — the stored row, or today's virtual
 // one, which the first write materializes. omitMetrics is the item a "Did it" card already carries
 // the strip for, so a sport session never shows the same strip twice.
-function renderBlockWorkout({day, blocks, session, dateKey, preview, actions, metaNote, metricsOn = session, omitMetrics = null}){
+function renderBlockWorkout({day, blocks, session, dateKey, actions, metaNote, metricsOn = session, omitMetrics = null}){
   const flat = flattenBlocks(blocks);
-  const canRecord = !preview && isLoggable() && isSessionDay(activeDay) && !!metricsOn && metricsOn.status !== 'skipped';
+  const canRecord = isLoggable() && !!metricsOn && metricsOn.status !== 'skipped';
   // A locked past day shows what was recorded, read-only; a row with nothing recorded shows nothing.
-  const pastRecord = !canRecord && !preview && !!session && isSessionDay(activeDay) && dateKey < todayKey();
+  const pastRecord = !canRecord && !!session && dateKey < todayKey();
   const stripFor = (b, i) => {
     if(omitMetrics && omitMetrics.b === b && omitMetrics.i === i) return '';
     if(canRecord) return Metrics.appliesTo(metricsOn, b, i) ? metricsStripHtml(metricsOn, b, i) : '';
     return pastRecord && Metrics.appliesTo(session, b, i) && Metrics.any(session, b, i) ? metricsStripHtml(session, b, i, {editable: false}) : '';
   };
   const legacyCells = (b, i, item) => {
-    if(!isSetItem(item)) return {0: {done: isHiitDone(activeDay, item.name)}};
+    if(!isSetItem(item)) return {0: {done: isHiitDone(getViewDayIdx(), item.name)}};
     const k = flat.sets.findIndex(x => x.b === b && x.i === i);
-    return state.setLog?.[dateKey]?.[activeDay]?.[k] || {};
+    return state.setLog?.[dateKey]?.[getViewDayIdx()]?.[k] || {};
   };
   const cellsFor = (b, i, item) => session ? Session.sets(session, b, i) : legacyCells(b, i, item);
   const itemCount = flat.sets.length + flat.ticks.length;
-  const only = preview ? ' session-only' : '';
   let html = `<div class="workout-meta${scheduleDivergenceNote(session, dateKey) ? ' has-diverged' : ''}">
-      <span class="workout-meta-time">~${estimateWorkoutMinutes(activeDay, day, session)} min</span>
+      <span class="workout-meta-time">~${estimateWorkoutMinutes(getViewDayIdx(), day, session)} min</span>
       <span class="workout-meta-info">${itemCount} exercise${itemCount === 1 ? '' : 's'} · ${blocks.length} block${blocks.length === 1 ? '' : 's'}${metaNote}${session && Session.isUnsynced(session.id) ? UNSYNCED_NOTE : ''}</span>
       ${workoutEditBtn()}
       <button class="btn btn-ghost btn-sm" onclick="Programs.open()" title="Programs">Programs</button>
     </div>${actions}`;
-  const editable = !!session && Session.isLive(session) && !preview && isViewingToday();
+  const editable = !!session && Session.isLive(session) && isViewingToday();
   visibleBlocks(blocks).forEach(({blk, b}) => {
     const items = visibleItems(blk);
     const complete = items.filter(({item, i}) => {
@@ -6515,7 +6522,7 @@ function renderBlockWorkout({day, blocks, session, dateKey, preview, actions, me
         ticks.push(`<div class="hiit-row ${done ? 'done' : ''}">
           <div class="hiit-num">${String(n + 1).padStart(2, '0')}</div>
           <div class="hiit-info"><div class="hiit-name">${escapeHtml(item.name || '')}</div>${detail ? `<div class="hiit-detail">${escapeHtml(detail)}</div>` : ''}</div>
-          <button class="set-check ${done ? 'done' : ''}${only}" title="Mark complete" onclick="toggleBlockTick(${activeDay},${b},${i})">${CHECK_SVG}</button>
+          <button class="set-check ${done ? 'done' : ''}" title="Mark complete" onclick="toggleBlockTick(${getViewDayIdx()},${b},${i})">${CHECK_SVG}</button>
         </div>${stripFor(b, i)}${editable ? itemToolsHtml(session, b, i, {canUp: n > 0, canDown: n < items.length - 1, sets: false}) : ''}`);
         return;
       }
@@ -6527,7 +6534,7 @@ function renderBlockWorkout({day, blocks, session, dateKey, preview, actions, me
       const meta = [`<span class="mono">${item.sets} × ${escapeHtml(item.repsText || '—')}</span>`, item.restText && `<span class="mono">${escapeHtml(item.restText)}</span>`,
         dur && `<span class="mono">${item.durationSec}s</span>`,
         target != null ? `<span class="ex-target">${target} lbs</span>` : item.weightText && `<span>${escapeHtml(item.weightText)}</span>`].filter(Boolean).join('<span class="ex-meta-sep">·</span>');
-      const cue = `${activeDay}-${b}-${i}`;
+      const cue = `${getViewDayIdx()}-${b}-${i}`;
       const last = lastTimeFor(item, blk, dateKey);
       html += `<div class="ex-row">
         <div class="ex-head"><div class="ex-name-wrap"><div class="ex-name-display">${escapeHtml(item.name || '')}</div></div></div>
@@ -6537,12 +6544,12 @@ function renderBlockWorkout({day, blocks, session, dateKey, preview, actions, me
         <div class="set-table set-head${grid}"><div class="set-th">Set</div><div class="set-th">Reps</div><div class="set-th">lbs</div>${dur ? '<div class="set-th">Sec</div>' : ''}<div></div></div>`;
       for(let s = 0; s < +item.sets; s++){
         const c = cells[s] || {};
-        html += `<div class="set-table editable-only${only}${grid}">
+        html += `<div class="set-table editable-only${grid}">
           <div class="set-num">${s + 1}</div>
-          <input type="number" class="set-input" placeholder="${escapeHtml(String(item.repsText || '').split('–')[0])}" value="${c.reps ?? ''}" inputmode="numeric" onchange="logBlockSet(${activeDay},${b},${i},${s},'reps',this.value)">
-          <input type="number" class="set-input" placeholder="${target ?? '—'}" value="${c.weight ?? ''}" inputmode="decimal" step="0.5" onchange="logBlockSet(${activeDay},${b},${i},${s},'weight',this.value)">
-          ${dur ? `<input type="number" class="set-input" placeholder="${item.durationSec}" value="${c.duration_sec ?? ''}" inputmode="numeric" onchange="logBlockSet(${activeDay},${b},${i},${s},'duration_sec',this.value)">` : ''}
-          <button class="set-check ${c.done ? 'done' : ''}" onclick="toggleBlockSet(${activeDay},${b},${i},${s})">${CHECK_SVG}</button>
+          <input type="number" class="set-input" placeholder="${escapeHtml(String(item.repsText || '').split('–')[0])}" value="${c.reps ?? ''}" inputmode="numeric" onchange="logBlockSet(${getViewDayIdx()},${b},${i},${s},'reps',this.value)">
+          <input type="number" class="set-input" placeholder="${target ?? '—'}" value="${c.weight ?? ''}" inputmode="decimal" step="0.5" onchange="logBlockSet(${getViewDayIdx()},${b},${i},${s},'weight',this.value)">
+          ${dur ? `<input type="number" class="set-input" placeholder="${item.durationSec}" value="${c.duration_sec ?? ''}" inputmode="numeric" onchange="logBlockSet(${getViewDayIdx()},${b},${i},${s},'duration_sec',this.value)">` : ''}
+          <button class="set-check ${c.done ? 'done' : ''}" onclick="toggleBlockSet(${getViewDayIdx()},${b},${i},${s})">${CHECK_SVG}</button>
           ${setLastHtml(last, s)}
         </div>`;
       }
@@ -6554,53 +6561,50 @@ function renderBlockWorkout({day, blocks, session, dateKey, preview, actions, me
     html += `</div>`;
   });
   if(editable) html += addBlockBtn();
-  html += workoutDoneBtn(session, only);
+  html += workoutDoneBtn(session);
   return html;
 }
 
 function renderWorkoutContent(){
-  const dateKey = viewKey();
-  // The viewed date's own weekday shows its session: a stored one renders from its snapshot and
-  // session sets; otherwise the current plan with any legacy logs. Other day pills preview the plan.
-  const live = isSessionDay(activeDay);
-  const res = live ? Session.resolve(dateKey) : null;
-  const session = res?.source === 'row' ? res.session : null;
+  const dateKey = viewKey(), dayIdx = getViewDayIdx();
+  // The viewed date's session: a stored one renders from its snapshot and session sets; otherwise
+  // the current plan with any legacy logs.
+  const res = Session.resolve(dateKey);
+  const session = res.source === 'row' ? res.session : null;
   // Completed sessions, and any session whose day has passed, no longer follow plan edits — hide the item edit controls.
   const frozen = !!session && (session.status === 'done' || session.date !== todayKey());
-  const preview = !live && isViewingToday();
   const shown = res?.session || null;   // the stored or virtual session (null when legacy logs render from the plan)
   const covered = !session && res?.spec?.coveredBy;   // a flex day whose group another day this week has claimed
   const day = session ? Session.toLegacyWorkout(session)
-    : covered ? {label: DAY_LABELS[activeDay], name: 'Rest', desc: res.spec.desc, exercises: [], hiit: [], rest: true}
-    : getWorkout(activeDay, dateKey);
-  const doneNow = shown ? shown.status === 'done' : (state.workoutsCompleted || []).includes(`${dateKey}-${activeDay}`);
-  // Blocks on screen: the session's snapshot, else the plan's workout for this pill. The original
+    : covered ? {label: DAY_LABELS[dayIdx], name: 'Rest', desc: res.spec.desc, exercises: [], hiit: [], rest: true}
+    : getWorkout(dayIdx, dateKey);
+  const doneNow = shown ? shown.status === 'done' : (state.workoutsCompleted || []).includes(`${dateKey}-${dayIdx}`);
+  // Blocks on screen: the session's snapshot, else the plan's workout for this date. The original
   // two-bucket shape keeps its original markup below; anything else renders block by block.
-  const viewBlocks = (session || shown)?.snapshot?.blocks || Session.buildSnapshot(live ? res?.spec : getSessionSpecForDay(activeDay, dateKey), dateKey).blocks;
+  const viewBlocks = (session || shown)?.snapshot?.blocks || Session.buildSnapshot(res.spec, dateKey).blocks;
   // Schedule actions for the date's own session, today or ahead (logging itself stays today-only).
-  const actions = live && isPlannable(dateKey) && !day.rest && !doneNow && shown?.status !== 'skipped' ? `<div class="session-actions">
+  const actions = isPlannable(dateKey) && !day.rest && !doneNow && shown?.status !== 'skipped' ? `<div class="session-actions">
       <button class="btn btn-secondary btn-sm" onclick="MoveSheet.open()">Move to…</button>
       <button class="btn btn-ghost btn-sm" onclick="skipViewedSession()">Skip</button>
     </div>` : '';
   const sb = session ? Session.blockIdx(session, 'strength') : 0, cb = session ? Session.blockIdx(session, 'conditioning') : 1;
   // (Creating the empty legacy containers is long-standing behaviour the restore banner's emptiness check relies on.)
   if(!state.setLog[dateKey]) state.setLog[dateKey]={};
-  if(!state.setLog[dateKey][activeDay]) state.setLog[dateKey][activeDay]={};
-  const dayLog = session ? (state.sessionSets?.[session.id]?.[sb] || {}) : state.setLog[dateKey][activeDay];
-  document.getElementById('workout-content').toggleAttribute('data-preview', preview);
+  if(!state.setLog[dateKey][dayIdx]) state.setLog[dateKey][dayIdx]={};
+  const dayLog = session ? (state.sessionSets?.[session.id]?.[sb] || {}) : state.setLog[dateKey][dayIdx];
   document.getElementById('workout-content').toggleAttribute('data-past', dateKey < todayKey());   // read-only past rows style as a record
   if(session) document.getElementById('workout-content').dataset.session = session.id;
   else delete document.getElementById('workout-content').dataset.session;
 
   let html='';
-  if(live && shown?.status === 'skipped'){
+  if(shown?.status === 'skipped'){
     html=`<div class="rest-state">
       <div class="rest-title">Skipped</div>
       <div class="rest-desc">${day.name || 'Session'}${day.desc ? ' · ' + day.desc : ''}</div>
       <div class="rest-sub">Skipped sessions don't count against your streak.</div>
       ${isPlannable(dateKey) ? `<div class="rest-actions"><button class="btn btn-secondary" onclick="unskipViewedSession()">Undo skip</button></div>` : ''}
     </div>`;
-  } else if(live && shown?.kind === 'sport'){
+  } else if(shown?.kind === 'sport'){
     // "Did it" is the whole log for an optional session, so the strip belongs on it: how long you
     // played, how far you covered, how hard it was, how the tank felt. It records against the
     // session's own sport item where there is one, so the row below never repeats the strip.
@@ -6622,7 +6626,7 @@ function renderWorkoutContent(){
     // An optional session with a workout behind it (a warm-up, a drill list) shows it below the
     // card. A bare one — just a name — keeps the single "Did it" card it has always had.
     if(!bare)
-      html += renderBlockWorkout({day, blocks: viewBlocks, session, dateKey, preview, actions: '', metricsOn: shown, omitMetrics: sportRef,
+      html += renderBlockWorkout({day, blocks: viewBlocks, session, dateKey, actions: '', metricsOn: shown, omitMetrics: sportRef,
         metaNote: deloadNote(session, dateKey) + planUpdatedNote(session) + scheduleDivergenceNote(session, dateKey)});
   } else if(day.rest){
     html=`<div class="rest-state">
@@ -6631,25 +6635,23 @@ function renderWorkoutContent(){
       <div class="rest-sub">Recovery is when growth happens.</div>
     </div>`;
   } else if(!isLegacyShape(viewBlocks)){
-    html = renderBlockWorkout({day, blocks: viewBlocks, session, dateKey, preview, actions, metricsOn: shown,
-      metaNote: pastStateNote(session, dateKey) + (session?.status === 'done' ? snapshotNote(session) : preview ? `<span class="workout-meta-note">Plan preview · today's session is ${DAY_LABELS[getDayIdxFromDate(dateKey)]}</span>` : '') + deloadNote(session, dateKey) + planUpdatedNote(session) + scheduleDivergenceNote(session, dateKey)});
+    html = renderBlockWorkout({day, blocks: viewBlocks, session, dateKey, actions, metricsOn: shown,
+      metaNote: pastStateNote(session, dateKey) + (session?.status === 'done' ? snapshotNote(session) : '') + deloadNote(session, dateKey) + planUpdatedNote(session) + scheduleDivergenceNote(session, dateKey)});
   } else {
-    const estMin = estimateWorkoutMinutes(activeDay, day);
+    const estMin = estimateWorkoutMinutes(dayIdx, day);
     const exCount = day.exercises.length;
     const hiitCount = day.hiit.length;
     const parts = [];
     if(exCount) parts.push(`${exCount} exercise${exCount===1?'':'s'}`);
     if(hiitCount) parts.push(`${hiitCount} HIIT`);
-    const metaNote = pastStateNote(session, dateKey) + (session?.status === 'done'
-      ? snapshotNote(session)
-      : preview ? `<span class="workout-meta-note">Plan preview · today's session is ${DAY_LABELS[getDayIdxFromDate(dateKey)]}</span>` : '') + deloadNote(session, dateKey) + planUpdatedNote(session) + scheduleDivergenceNote(session, dateKey);
+    const metaNote = pastStateNote(session, dateKey) + (session?.status === 'done' ? snapshotNote(session) : '') + deloadNote(session, dateKey) + planUpdatedNote(session) + scheduleDivergenceNote(session, dateKey);
     html+=`<div class="workout-meta${scheduleDivergenceNote(session, dateKey) ? ' has-diverged' : ''}">
       <span class="workout-meta-time">~${estMin} min</span>
       <span class="workout-meta-info">${parts.join(' · ')}${metaNote}${session && Session.isUnsynced(session.id) ? UNSYNCED_NOTE : ''}</span>
       ${workoutEditBtn()}
       <button class="btn btn-ghost btn-sm" onclick="Programs.open()" title="Programs">Programs</button>
     </div>${actions}`;
-    const editable = !!session && Session.isLive(session) && !preview && isViewingToday();
+    const editable = !!session && Session.isLive(session) && isViewingToday();
     // For a session, walk the snapshot's own items so a hidden or reordered item keeps its storage index.
     const exRows = session
       ? visibleItems(viewBlocks[sb]).map(({item, i}) => ({ex: {name: item.name, sets: item.sets, reps: item.repsText, rest: item.restText, weight: item.weightText, desc: item.cues}, ei: i}))
@@ -6658,21 +6660,21 @@ function renderWorkoutContent(){
       html+=`<div class="section-label">Lifting · ${day.desc}</div>`;
       exRows.forEach(({ex, ei}, n)=>{
         if(!session && !dayLog[ei]) dayLog[ei]={};
-        const currentName = session ? (ex.name || '') : getExName(activeDay, ei, dateKey);
-        const defaultName = getDefaultExercise(activeDay, ei, dateKey)?.name;
-        const customized = session ? !!(currentName && defaultName && currentName !== defaultName) : isExCustomized(activeDay, ei, dateKey);
+        const currentName = session ? (ex.name || '') : getExName(dayIdx, ei, dateKey);
+        const defaultName = getDefaultExercise(dayIdx, ei, dateKey)?.name;
+        const customized = session ? !!(currentName && defaultName && currentName !== defaultName) : isExCustomized(dayIdx, ei, dateKey);
         const safeName = currentName.replace(/"/g,'&quot;');
-        const isEditing = editingExKey === `${activeDay}-${ei}` && !frozen;
+        const isEditing = editingExKey === `${dayIdx}-${ei}` && !frozen;
         const last = lastTimeFor(session ? viewBlocks[sb]?.items?.[ei] : flattenBlocks(viewBlocks).sets[ei]?.item, viewBlocks[sb], dateKey);
         const nameUI = isEditing
-          ? `<input class="ex-name-edit" data-ex-edit="${activeDay}-${ei}" type="text" value="${safeName}" spellcheck="false"
-              onblur="finishEditExName(${activeDay},${ei},this.value)"
+          ? `<input class="ex-name-edit" data-ex-edit="${dayIdx}-${ei}" type="text" value="${safeName}" spellcheck="false"
+              onblur="finishEditExName(${dayIdx},${ei},this.value)"
               onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">`
           : frozen ? `<div class="ex-name-display ${customized?'customized':''}">${currentName}</div>`
           : `<div class="ex-name-display ${customized?'customized':''}">${currentName}</div>
-             <button class="icon-btn" title="Edit exercise" onclick="startEditExName(${activeDay},${ei})">
+             <button class="icon-btn" title="Edit exercise" onclick="startEditExName(${dayIdx},${ei})">
                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-             </button>${customized?`<button class="icon-btn" title="Reset to default" onclick="resetExName(${activeDay},${ei})">
+             </button>${customized?`<button class="icon-btn" title="Reset to default" onclick="resetExName(${dayIdx},${ei})">
                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
              </button>`:''}`;
         html+=`<div class="ex-row">
@@ -6680,7 +6682,7 @@ function renderWorkoutContent(){
             <div class="ex-name-wrap">${nameUI}</div>
           </div>
           <div class="ex-meta"><span class="mono">${ex.sets} × ${ex.reps}</span><span class="ex-meta-sep">·</span><span class="mono">${ex.rest}</span><span class="ex-meta-sep">·</span><span>${ex.weight}</span></div>${lastTimeHtml(last)}
-          <details class="ex-cue" data-cue="${activeDay}-${ei}" ontoggle="onCueToggle(this)"${openCues.has(`${activeDay}-${ei}`)?' open':''}><summary>Form cue</summary><p>${ex.desc}</p></details>
+          <details class="ex-cue" data-cue="${dayIdx}-${ei}" ontoggle="onCueToggle(this)"${openCues.has(`${dayIdx}-${ei}`)?' open':''}><summary>Form cue</summary><p>${ex.desc}</p></details>
           <div class="set-table set-head">
             <div class="set-th">Set</div>
             <div class="set-th">Reps</div>
@@ -6690,11 +6692,11 @@ function renderWorkoutContent(){
         for(let s=0;s<ex.sets;s++){
           const sLog = dayLog[ei]?.[s]||{};
           const done = sLog.done||false;
-          html+=`<div class="set-table editable-only${preview?' session-only':''}">
+          html+=`<div class="set-table editable-only">
             <div class="set-num">${s+1}</div>
-            <input type="number" class="set-input" placeholder="${ex.reps.split('–')[0]}" value="${sLog.reps||''}" inputmode="numeric" onchange="logSet(${activeDay},${ei},${s},'reps',this.value)">
-            <input type="number" class="set-input" placeholder="—" value="${sLog.weight||''}" inputmode="decimal" step="0.5" onchange="logSet(${activeDay},${ei},${s},'weight',this.value)">
-            <button class="set-check ${done?'done':''}" onclick="toggleSet(${activeDay},${ei},${s})">
+            <input type="number" class="set-input" placeholder="${ex.reps.split('–')[0]}" value="${sLog.reps||''}" inputmode="numeric" onchange="logSet(${dayIdx},${ei},${s},'reps',this.value)">
+            <input type="number" class="set-input" placeholder="—" value="${sLog.weight||''}" inputmode="decimal" step="0.5" onchange="logSet(${dayIdx},${ei},${s},'weight',this.value)">
+            <button class="set-check ${done?'done':''}" onclick="toggleSet(${dayIdx},${ei},${s})">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
             </button>
             ${setLastHtml(last, s)}
@@ -6706,7 +6708,7 @@ function renderWorkoutContent(){
     }
     if(editable) html += addItemBtn(sb);
 
-    const dayHiit = session ? day.hiit : getDayHiit(activeDay, dateKey);
+    const dayHiit = session ? day.hiit : getDayHiit(dayIdx, dateKey);
     if(dayHiit.length || !day.rest){
       const title = day.fullHiit ? 'Conditioning · 5 rounds' : 'HIIT finisher · 10 min';
       html+=`<div class="section"><div class="section-label">${title}</div>
@@ -6716,22 +6718,22 @@ function renderWorkoutContent(){
         html+=`<div class="empty">No HIIT selected for today</div>`;
       } else {
         dayHiit.forEach((h,i)=>{
-          const done = session ? !!Session.sets(session, cb, i)[0]?.done : isHiitDone(activeDay, h.name);
+          const done = session ? !!Session.sets(session, cb, i)[0]?.done : isHiitDone(dayIdx, h.name);
           const safeName = h.name.replace(/'/g,"\\'");
           html+=`<div class="hiit-row ${done?'done':''}">
             <div class="hiit-num">${String(i+1).padStart(2,'0')}</div>
             <div class="hiit-info"><div class="hiit-name">${h.name}</div><div class="hiit-detail">${h.detail}</div></div>
-            <button class="set-check ${done?'done':''}${preview?' session-only':''}" title="Mark complete" onclick="toggleHiitDone(${activeDay},'${safeName}')">
+            <button class="set-check ${done?'done':''}" title="Mark complete" onclick="toggleHiitDone(${dayIdx},'${safeName}')">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
             </button>${frozen ? '' : `
-            <button class="icon-btn danger" title="Remove" onclick="removeHiitItem(${activeDay},${i})">
+            <button class="icon-btn danger" title="Remove" onclick="removeHiitItem(${dayIdx},${i})">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
             </button>`}
           </div>`;
         });
       }
-      const open = !!hiitPickerOpen[activeDay] && !frozen;
-      if(!frozen) html+=`<button class="hiit-add-btn" onclick="toggleHiitPicker(${activeDay})">
+      const open = !!hiitPickerOpen[dayIdx] && !frozen;
+      if(!frozen) html+=`<button class="hiit-add-btn" onclick="toggleHiitPicker(${dayIdx})">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="${open?'M19 9l-7 7-7-7':'M12 6v6m0 0v6m0-6h6m-6 0H6'}"/></svg>
         ${open?'Close picker':'Add HIIT exercise'}
       </button>`;
@@ -6754,7 +6756,7 @@ function renderWorkoutContent(){
           const sel = dayHiit.some(h => h.name === p.name);
           const safeName = p.name.replace(/'/g, "\\'");
           html+=`<div class="hiit-pool-item ${sel?'selected':''}">
-            <div class="hiit-pool-toggle" onclick="toggleHiitItem(${activeDay},'${safeName}')">
+            <div class="hiit-pool-toggle" onclick="toggleHiitItem(${dayIdx},'${safeName}')">
               <div class="hiit-pool-check">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
               </div>
@@ -6798,7 +6800,7 @@ function renderWorkoutContent(){
     }
 
     if(editable) html += addBlockBtn();
-    html += workoutDoneBtn(session, preview ? ' session-only' : '');
+    html += workoutDoneBtn(session);
   }
 
   document.getElementById('workout-content').innerHTML=html;
@@ -6908,8 +6910,8 @@ function suggestionHtml(session, b, i){
   // The set rows carry last time's numbers, so the line keeps only the date and the recommendation.
   return `<div class="ex-suggest">
     <span class="ex-suggest-text">Top of the range on ${formatViewDateLabel(s.last.date)} · try ${s.weight} today</span>
-    <button class="ex-suggest-use" onclick="acceptSuggestion(${activeDay},${b},${i})">Use ${s.weight}</button>
-    <button class="ex-suggest-x" aria-label="Dismiss this suggestion" title="Not today" onclick="dismissSuggestion(${activeDay},${b},${i})">${CLOSE_SVG}</button>
+    <button class="ex-suggest-use" onclick="acceptSuggestion(${getViewDayIdx()},${b},${i})">Use ${s.weight}</button>
+    <button class="ex-suggest-x" aria-label="Dismiss this suggestion" title="Not today" onclick="dismissSuggestion(${getViewDayIdx()},${b},${i})">${CLOSE_SVG}</button>
   </div>`;
 }
 // ----- "Last time" -----
@@ -6927,13 +6929,15 @@ function lastTimeFor(item, blk, dateKey){
 function lastTimeHtml(last){
   return last ? `<div class="ex-last">Last time · ${formatViewDateLabel(last.date)}</div>` : '';
 }
-// Last time's figure for set s, under that row's inputs. A set last time didn't reach shows nothing;
-// sets beyond today's count are never asked for.
+// Last time's figures for set s: the reps under the Reps input, the weight under the lbs input (none
+// for a set done without weight). A set last time didn't reach shows nothing; sets beyond today's
+// count are never asked for.
 function setLastHtml(last, s){
   const c = last?.perSet?.[s];
   if(!c) return '';
-  const text = c.weight > 0 ? `${c.reps} × ${c.weight}` : `${c.reps} reps`;
-  return `<div class="set-last" title="Set ${s + 1} last time: ${text}">${text}</div>`;
+  const said = `Set ${s + 1} last time: ${c.reps} reps${c.weight > 0 ? ` at ${c.weight} lbs` : ''}`;
+  return `<div class="set-last set-last-reps" title="${said}">${c.reps}</div>`
+    + (c.weight > 0 ? `<div class="set-last set-last-lbs" title="${said}">${c.weight}</div>` : '');
 }
 async function acceptSuggestion(dayIdx, b, i){
   const session = await metricsSession(dayIdx);
@@ -7011,29 +7015,29 @@ function metricsStripHtml(session, b, i, {editable = true} = {}){
         <div class="metrics-q" id="scale-${key}-${sc.id}">${sc.q}</div>
         <div class="scale-row" role="group" aria-labelledby="scale-${key}-${sc.id}">${
           Array.from({length: 10}, (_, n) => `<button type="button" class="scale-btn${v[sc.id] === n + 1 ? ' on' : ''}"${dis}
-            aria-pressed="${v[sc.id] === n + 1}" onclick="setMetricScale(${activeDay},${b},${i},'${sc.id}',${n + 1},this)">${n + 1}</button>`).join('')}</div>
+            aria-pressed="${v[sc.id] === n + 1}" onclick="setMetricScale(${getViewDayIdx()},${b},${i},'${sc.id}',${n + 1},this)">${n + 1}</button>`).join('')}</div>
         <div class="scale-ends"><span>${sc.lo}</span><span>${sc.hi}</span></div>
       </div>`).join('');
   const noteOpen = openNotes.has(key) || !!v.note;
   return `<div class="metrics-strip${editable ? '' : ' is-record'}" data-metrics="${key}">
     <div class="metrics-line">
       <label class="metrics-field"><span>Duration</span>
-        <select class="pe-input"${dis} onchange="setMetricDuration(${activeDay},${b},${i},this.value)">${opts}</select></label>
+        <select class="pe-input"${dis} onchange="setMetricDuration(${getViewDayIdx()},${b},${i},this.value)">${opts}</select></label>
       ${Metrics.offersDistance(session, b, i) ? `<label class="metrics-field"><span>Distance</span>
         <input class="pe-input" type="number" inputmode="decimal" step="0.1" min="0" placeholder="mi"${dis}
-          value="${v.distanceMi ?? ''}" onchange="setMetricDistance(${activeDay},${b},${i},this.value)"></label>` : ''}
+          value="${v.distanceMi ?? ''}" onchange="setMetricDistance(${getViewDayIdx()},${b},${i},this.value)"></label>` : ''}
     </div>
     ${scales}
     ${editable || v.note ? `<div class="metrics-note${noteOpen ? ' open' : ''}">
       <button type="button" class="metrics-note-btn"${dis} onclick="openMetricNote(this,'${key}')">+ Add note</button>
       <input class="pe-input metrics-note-input" type="text" maxlength="140" placeholder="How did it go?"${dis}
-        value="${escapeAttr(v.note)}" onchange="setMetricNote(${activeDay},${b},${i},this.value)">
+        value="${escapeAttr(v.note)}" onchange="setMetricNote(${getViewDayIdx()},${b},${i},this.value)">
     </div>` : ''}
   </div>`;
 }
 
 async function markWorkoutDone(){
-  if(!assertLoggable('Marking session complete') || !assertSessionDay(activeDay)) return;
+  if(!assertLoggable('Marking session complete')) return;
   if(isPastEditing()){ setPastDayDone(true); return; }
   const session = await Session.begin(viewKey());
   if(!session) return;
@@ -7056,12 +7060,12 @@ function setPastDayDone(done){
   toast(`${formatViewDateLabel(s.date)} marked ${done ? 'done' : 'not done'}`);
 }
 // How a locked past day's session ended: done, under way but never marked complete, or not begun.
-// Null on any other day, an unlocked one, or another weekday's preview pill. A day with no session
+// Null on any other day or an unlocked one. A day with no session
 // row reads the legacy completion flag and logs, as the rest of the legacy render does.
 function pastState(session, dateKey){
-  if(!(dateKey < todayKey()) || isPastEditing() || !isSessionDay(activeDay)) return null;
-  if(session ? session.status === 'done' : (state.workoutsCompleted || []).includes(`${dateKey}-${activeDay}`)) return {done: true, label: 'Completed'};
-  const started = session ? Session.hasStartedWork(session) || session.status === 'in_progress' : Session.hasLegacyLog(dateKey, activeDay);
+  if(!(dateKey < todayKey()) || isPastEditing()) return null;
+  if(session ? session.status === 'done' : (state.workoutsCompleted || []).includes(`${dateKey}-${getViewDayIdx()}`)) return {done: true, label: 'Completed'};
+  const started = session ? Session.hasStartedWork(session) || session.status === 'in_progress' : Session.hasLegacyLog(dateKey, getViewDayIdx());
   return {done: false, label: started ? 'In progress · not marked complete' : 'Not started'};
 }
 function pastStateNote(session, dateKey){
@@ -7070,14 +7074,14 @@ function pastStateNote(session, dateKey){
 }
 // The foot of the session. On an unlocked past day that is already done it offers the reverse; on a
 // locked one it says how the day ended instead of offering a dimmed button that reads the same either way.
-function workoutDoneBtn(session, only){
+function workoutDoneBtn(session){
   if(isPastEditing() && session?.status === 'done') return `<button class="btn btn-secondary btn-lg btn-full workout-done" onclick="setPastDayDone(false)">
       <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
       Mark not done
     </button>`;
   const past = pastState(session, viewKey());
   if(past) return `<div class="workout-state${past.done ? ' done' : ''}">${past.done ? CHECK_SVG : ''}${past.label}</div>`;
-  return `<button class="btn btn-primary btn-lg btn-full editable-only${only} workout-done" onclick="markWorkoutDone()">
+  return `<button class="btn btn-primary btn-lg btn-full editable-only workout-done" onclick="markWorkoutDone()">
       <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
       Mark session complete
     </button>`;
@@ -7085,8 +7089,8 @@ function workoutDoneBtn(session, only){
 
 function showSessionCelebration(){
   const session = state.sessions?.[viewKey()];
-  const day = session ? Session.toLegacyWorkout(session) : getWorkout(activeDay, viewKey());
-  const dayLog = state.setLog?.[viewKey()]?.[activeDay] || {};
+  const day = session ? Session.toLegacyWorkout(session) : getWorkout(getViewDayIdx(), viewKey());
+  const dayLog = state.setLog?.[viewKey()]?.[getViewDayIdx()] || {};
   let setsLogged = 0, setsTotal = 0;
   if(session) ({logged: setsLogged, total: setsTotal} = Session.progress(session));
   else (day.exercises || []).forEach((ex, ei) => {
@@ -10426,7 +10430,6 @@ const Profile = {
 };
 
 load();
-activeDay = getViewDayIdx();
 applyReadonlyMode();
 renderDashboard();
 attachFoodSearchListener();
