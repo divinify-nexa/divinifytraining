@@ -402,6 +402,13 @@ body[data-readonly="true"] .editable-only :where(.btn-primary){background:var(--
 body[data-readonly="true"] .editable-only input,
 body[data-readonly="true"] .editable-only button,
 body[data-readonly="true"] .editable-only textarea{cursor:not-allowed}
+/* A locked past day is a record, not a form waiting for input: what was logged reads at full strength
+   and an unlogged cell is simply empty. Dimmed like the form above, a logged "8" sat at 1.8:1 against
+   the "10" placeholder beside it, and a finished day read as a blank one. Unticked checks stay quiet. */
+body[data-readonly="true"] #workout-content[data-past] .set-table.editable-only{opacity:1}
+body[data-readonly="true"] #workout-content[data-past] .set-table.editable-only .set-input{color:var(--text-primary)}
+body[data-readonly="true"] #workout-content[data-past] .set-table.editable-only .set-input::placeholder{color:transparent}
+body[data-readonly="true"] #workout-content[data-past] .set-table.editable-only .set-check:not(.done){opacity:.55}
 
 /* ===== Share / Story-card modal ===== */
 .share-backdrop{position:fixed;inset:0;background:var(--overlay);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);z-index:200;opacity:0;pointer-events:none;transition:opacity var(--dur-base) var(--ease)}
@@ -795,6 +802,18 @@ body.scanner-open{overflow:hidden}
 .ex-suggest-x svg{width:14px;height:14px}
 .ex-target{color:var(--text-primary);font-weight:600}
 .ex-last{margin-top:var(--s-1);font-size:var(--fs-micro);line-height:var(--lh-micro);letter-spacing:var(--ls-micro);color:var(--text-tertiary)}
+/* Last time's figure for this set, on its own line under the reps and lbs inputs: the row keeps its
+   four columns at 375px and the number sits right under the one it is compared with. */
+.set-last{grid-column:2 / -2;margin-top:calc(-1 * var(--s-1));text-align:center;font-family:var(--font-mono);font-size:var(--fs-micro);line-height:var(--lh-micro);color:var(--text-tertiary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* How a past session ended, where today's "Mark session complete" sits. */
+.workout-state{display:flex;align-items:center;justify-content:center;gap:var(--s-2);min-height:var(--tap);margin-top:var(--s-6);padding:0 var(--s-4);border-radius:var(--r-md);background:var(--fill);font-size:var(--fs-caption);line-height:var(--lh-caption);font-weight:600;color:var(--text-secondary)}
+.workout-state svg{width:16px;height:16px;stroke-width:3}
+.workout-state.done{color:var(--text-primary)}
+.workout-meta-note.workout-meta-state{color:var(--text-secondary);font-weight:600}
+.workout-meta-note.workout-meta-state.done{color:var(--text-primary)}
+/* A past day's recorded metrics, read-only: the chosen values stay at full strength. */
+.metrics-strip.is-record .scale-btn.on[disabled]{opacity:1}
+.metrics-strip.is-record .pe-input:disabled{opacity:1;color:var(--text-primary);-webkit-text-fill-color:var(--text-primary)}
 /* Recording a conditioning, cardio or sport session. The strip runs to the card's edges so the
    two 1–10 scales get the full width: ten targets across 335px at a 375px screen is 33.5px each,
    clear of the 32px floor, with no gap between tracks to eat into it. */
@@ -5099,9 +5118,11 @@ const Progression = {
             .map(([n, c]) => ({n: +n, ...c}))
             .filter(c => Session.cellLogged(c) && c.reps != null);
           if(!cells.length) continue;
+          // perSet: set index → what was done there (sparse — a set left unlogged has no entry).
           return {session: s, date: s.date, b, i, item: it, cells,
             prescribedSets: +it.sets || 0, top: this.topOfRange(it.repsText),
-            weight: cells.reduce((m, c) => Math.max(m, +c.weight || 0), 0)};
+            weight: cells.reduce((m, c) => Math.max(m, +c.weight || 0), 0),
+            perSet: cells.reduce((a, c) => { a[c.n] = {reps: +c.reps, weight: +c.weight || 0}; return a; }, [])};
         }
       }
     }
@@ -6451,8 +6472,13 @@ function deloadNote(session, dateKey){
 function renderBlockWorkout({day, blocks, session, dateKey, preview, actions, metaNote, metricsOn = session, omitMetrics = null}){
   const flat = flattenBlocks(blocks);
   const canRecord = !preview && isLoggable() && isSessionDay(activeDay) && !!metricsOn && metricsOn.status !== 'skipped';
-  const stripFor = (b, i) => canRecord && Metrics.appliesTo(metricsOn, b, i)
-    && !(omitMetrics && omitMetrics.b === b && omitMetrics.i === i) ? metricsStripHtml(metricsOn, b, i) : '';
+  // A locked past day shows what was recorded, read-only; a row with nothing recorded shows nothing.
+  const pastRecord = !canRecord && !preview && !!session && isSessionDay(activeDay) && dateKey < todayKey();
+  const stripFor = (b, i) => {
+    if(omitMetrics && omitMetrics.b === b && omitMetrics.i === i) return '';
+    if(canRecord) return Metrics.appliesTo(metricsOn, b, i) ? metricsStripHtml(metricsOn, b, i) : '';
+    return pastRecord && Metrics.appliesTo(session, b, i) && Metrics.any(session, b, i) ? metricsStripHtml(session, b, i, {editable: false}) : '';
+  };
   const legacyCells = (b, i, item) => {
     if(!isSetItem(item)) return {0: {done: isHiitDone(activeDay, item.name)}};
     const k = flat.sets.findIndex(x => x.b === b && x.i === i);
@@ -6502,10 +6528,11 @@ function renderBlockWorkout({day, blocks, session, dateKey, preview, actions, me
         dur && `<span class="mono">${item.durationSec}s</span>`,
         target != null ? `<span class="ex-target">${target} lbs</span>` : item.weightText && `<span>${escapeHtml(item.weightText)}</span>`].filter(Boolean).join('<span class="ex-meta-sep">·</span>');
       const cue = `${activeDay}-${b}-${i}`;
+      const last = lastTimeFor(item, blk, dateKey);
       html += `<div class="ex-row">
         <div class="ex-head"><div class="ex-name-wrap"><div class="ex-name-display">${escapeHtml(item.name || '')}</div></div></div>
         <div class="ex-meta">${meta}</div>
-        ${(canRecord && suggestionHtml(metricsOn, b, i)) || lastTimeHtml(item, blk, dateKey)}
+        ${(canRecord && suggestionHtml(metricsOn, b, i)) || lastTimeHtml(last)}
         ${item.cues ? `<details class="ex-cue" data-cue="${cue}" ontoggle="onCueToggle(this)"${openCues.has(cue) ? ' open' : ''}><summary>Form cue</summary><p>${escapeHtml(item.cues)}</p></details>` : ''}
         <div class="set-table set-head${grid}"><div class="set-th">Set</div><div class="set-th">Reps</div><div class="set-th">lbs</div>${dur ? '<div class="set-th">Sec</div>' : ''}<div></div></div>`;
       for(let s = 0; s < +item.sets; s++){
@@ -6516,6 +6543,7 @@ function renderBlockWorkout({day, blocks, session, dateKey, preview, actions, me
           <input type="number" class="set-input" placeholder="${target ?? '—'}" value="${c.weight ?? ''}" inputmode="decimal" step="0.5" onchange="logBlockSet(${activeDay},${b},${i},${s},'weight',this.value)">
           ${dur ? `<input type="number" class="set-input" placeholder="${item.durationSec}" value="${c.duration_sec ?? ''}" inputmode="numeric" onchange="logBlockSet(${activeDay},${b},${i},${s},'duration_sec',this.value)">` : ''}
           <button class="set-check ${c.done ? 'done' : ''}" onclick="toggleBlockSet(${activeDay},${b},${i},${s})">${CHECK_SVG}</button>
+          ${setLastHtml(last, s)}
         </div>`;
       }
       if(editable) html += itemToolsHtml(session, b, i, {canUp: n > 0, canDown: n < items.length - 1, sets: true});
@@ -6560,6 +6588,7 @@ function renderWorkoutContent(){
   if(!state.setLog[dateKey][activeDay]) state.setLog[dateKey][activeDay]={};
   const dayLog = session ? (state.sessionSets?.[session.id]?.[sb] || {}) : state.setLog[dateKey][activeDay];
   document.getElementById('workout-content').toggleAttribute('data-preview', preview);
+  document.getElementById('workout-content').toggleAttribute('data-past', dateKey < todayKey());   // read-only past rows style as a record
   if(session) document.getElementById('workout-content').dataset.session = session.id;
   else delete document.getElementById('workout-content').dataset.session;
 
@@ -6587,7 +6616,8 @@ function renderWorkoutContent(){
       ${isLoggable() ? `<div class="rest-actions"><button class="btn ${doneNow ? 'btn-secondary' : 'btn-primary'}" aria-pressed="${doneNow}" onclick="toggleOptionalDone()">
         <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="${doneNow ? 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' : 'M5 13l4 4L19 7'}"/></svg>
         ${doneNow ? 'Did it · undo' : 'Did it'}</button></div>` : ''}
-      ${isLoggable() && shown.status !== 'skipped' ? metricsStripHtml(shown, sportRef.b, sportRef.i) : ''}
+      ${isLoggable() && shown.status !== 'skipped' ? metricsStripHtml(shown, sportRef.b, sportRef.i)
+        : session && dateKey < todayKey() && Metrics.any(session, sportRef.b, sportRef.i) ? metricsStripHtml(session, sportRef.b, sportRef.i, {editable: false}) : ''}
     </div>${actions}`;
     // An optional session with a workout behind it (a warm-up, a drill list) shows it below the
     // card. A bare one — just a name — keeps the single "Did it" card it has always had.
@@ -6602,7 +6632,7 @@ function renderWorkoutContent(){
     </div>`;
   } else if(!isLegacyShape(viewBlocks)){
     html = renderBlockWorkout({day, blocks: viewBlocks, session, dateKey, preview, actions, metricsOn: shown,
-      metaNote: (session?.status === 'done' ? snapshotNote(session) : preview ? `<span class="workout-meta-note">Plan preview · today's session is ${DAY_LABELS[getDayIdxFromDate(dateKey)]}</span>` : '') + deloadNote(session, dateKey) + planUpdatedNote(session) + scheduleDivergenceNote(session, dateKey)});
+      metaNote: pastStateNote(session, dateKey) + (session?.status === 'done' ? snapshotNote(session) : preview ? `<span class="workout-meta-note">Plan preview · today's session is ${DAY_LABELS[getDayIdxFromDate(dateKey)]}</span>` : '') + deloadNote(session, dateKey) + planUpdatedNote(session) + scheduleDivergenceNote(session, dateKey)});
   } else {
     const estMin = estimateWorkoutMinutes(activeDay, day);
     const exCount = day.exercises.length;
@@ -6610,7 +6640,7 @@ function renderWorkoutContent(){
     const parts = [];
     if(exCount) parts.push(`${exCount} exercise${exCount===1?'':'s'}`);
     if(hiitCount) parts.push(`${hiitCount} HIIT`);
-    const metaNote = (session?.status === 'done'
+    const metaNote = pastStateNote(session, dateKey) + (session?.status === 'done'
       ? snapshotNote(session)
       : preview ? `<span class="workout-meta-note">Plan preview · today's session is ${DAY_LABELS[getDayIdxFromDate(dateKey)]}</span>` : '') + deloadNote(session, dateKey) + planUpdatedNote(session) + scheduleDivergenceNote(session, dateKey);
     html+=`<div class="workout-meta${scheduleDivergenceNote(session, dateKey) ? ' has-diverged' : ''}">
@@ -6633,6 +6663,7 @@ function renderWorkoutContent(){
         const customized = session ? !!(currentName && defaultName && currentName !== defaultName) : isExCustomized(activeDay, ei, dateKey);
         const safeName = currentName.replace(/"/g,'&quot;');
         const isEditing = editingExKey === `${activeDay}-${ei}` && !frozen;
+        const last = lastTimeFor(session ? viewBlocks[sb]?.items?.[ei] : flattenBlocks(viewBlocks).sets[ei]?.item, viewBlocks[sb], dateKey);
         const nameUI = isEditing
           ? `<input class="ex-name-edit" data-ex-edit="${activeDay}-${ei}" type="text" value="${safeName}" spellcheck="false"
               onblur="finishEditExName(${activeDay},${ei},this.value)"
@@ -6648,7 +6679,7 @@ function renderWorkoutContent(){
           <div class="ex-head">
             <div class="ex-name-wrap">${nameUI}</div>
           </div>
-          <div class="ex-meta"><span class="mono">${ex.sets} × ${ex.reps}</span><span class="ex-meta-sep">·</span><span class="mono">${ex.rest}</span><span class="ex-meta-sep">·</span><span>${ex.weight}</span></div>${lastTimeHtml(session ? viewBlocks[sb]?.items?.[ei] : flattenBlocks(viewBlocks).sets[ei]?.item, viewBlocks[sb], dateKey)}
+          <div class="ex-meta"><span class="mono">${ex.sets} × ${ex.reps}</span><span class="ex-meta-sep">·</span><span class="mono">${ex.rest}</span><span class="ex-meta-sep">·</span><span>${ex.weight}</span></div>${lastTimeHtml(last)}
           <details class="ex-cue" data-cue="${activeDay}-${ei}" ontoggle="onCueToggle(this)"${openCues.has(`${activeDay}-${ei}`)?' open':''}><summary>Form cue</summary><p>${ex.desc}</p></details>
           <div class="set-table set-head">
             <div class="set-th">Set</div>
@@ -6666,6 +6697,7 @@ function renderWorkoutContent(){
             <button class="set-check ${done?'done':''}" onclick="toggleSet(${activeDay},${ei},${s})">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
             </button>
+            ${setLastHtml(last, s)}
           </div>`;
         }
         if(editable) html += itemToolsHtml(session, sb, ei, {canUp: n > 0, canDown: n < exRows.length - 1, sets: true});
@@ -6873,34 +6905,35 @@ function suggestionHtml(session, b, i){
   // Once accepted the target is on the prescription line, so the offer has nothing left to say.
   // The suggestion itself stays live for Artemis, which reports it as accepted.
   if(!s || s.accepted != null) return '';
-  const last = `Last time: ${s.last.sets}×${s.last.reps} @ ${s.last.weight}${lastTimeWhen(s.last.date, todayKey())}`;
+  // The set rows carry last time's numbers, so the line keeps only the date and the recommendation.
   return `<div class="ex-suggest">
-    <span class="ex-suggest-text">${last} · try ${s.weight} today</span>
+    <span class="ex-suggest-text">Top of the range on ${formatViewDateLabel(s.last.date)} · try ${s.weight} today</span>
     <button class="ex-suggest-use" onclick="acceptSuggestion(${activeDay},${b},${i})">Use ${s.weight}</button>
     <button class="ex-suggest-x" aria-label="Dismiss this suggestion" title="Not today" onclick="dismissSuggestion(${activeDay},${b},${i})">${CLOSE_SVG}</button>
   </div>`;
 }
 // ----- "Last time" -----
 // What was done for a strength item the last time it appeared in a completed session, on today's
-// and upcoming days. It is the suggestion line's first half, so where a suggestion shows, it shows
-// instead of this. Read-only: Progression.lastPerformance only reads state, so rendering it creates
-// no session and issues no write. Tick rows and warm-up, mobility, agility and conditioning blocks
-// never look anything up.
+// and upcoming days, set by set: each set row shows that set's figure from last time, and the line
+// above the rows dates it (or, where a suggestion shows, the suggestion does). Read-only:
+// Progression.lastPerformance only reads state, so rendering it creates no session and issues no
+// write. Tick rows and warm-up, mobility, agility and conditioning blocks never look anything up.
 const LAST_TIME_BLOCKS_SKIP = new Set(['warmup', 'mobility', 'agility', 'conditioning', 'cooldown', 'sport']);
-const LAST_TIME_RECENT_DAYS = 10;
-// Recent enough needs no date; anything older says when.
-function lastTimeWhen(date, ref){
-  if(!date || date >= shiftDateKey(ref, -LAST_TIME_RECENT_DAYS)) return '';
-  const d = new Date(date + 'T00:00:00');
-  return ' · ' + d.toLocaleDateString('en-US', {month: 'short', day: 'numeric', ...(d.getFullYear() !== new Date().getFullYear() ? {year: 'numeric'} : {})});
+function lastTimeFor(item, blk, dateKey){
+  if(!item?.exerciseId || !isSetItem(item) || itemHidden(item) || LAST_TIME_BLOCKS_SKIP.has(blk?.type) || dateKey < todayKey()) return null;
+  return Progression.lastPerformance(item.exerciseId, dateKey, {lookback: null});
 }
-function lastTimeHtml(item, blk, dateKey){
-  if(!item?.exerciseId || !isSetItem(item) || itemHidden(item) || LAST_TIME_BLOCKS_SKIP.has(blk?.type) || dateKey < todayKey()) return '';
-  const last = Progression.lastPerformance(item.exerciseId, dateKey, {lookback: null});
-  if(!last) return '';
-  const reps = last.cells.map(c => +c.reps);
-  const shape = reps.every(r => r === reps[0]) ? `${reps.length}×${reps[0]}` : reps.join('/');
-  return `<div class="ex-last">Last time: ${shape}${last.weight > 0 ? ` @ ${last.weight}` : ''}${lastTimeWhen(last.date, dateKey)}</div>`;
+// The numbers themselves sit on each set row (setLastHtml), so this line says only when they were done.
+function lastTimeHtml(last){
+  return last ? `<div class="ex-last">Last time · ${formatViewDateLabel(last.date)}</div>` : '';
+}
+// Last time's figure for set s, under that row's inputs. A set last time didn't reach shows nothing;
+// sets beyond today's count are never asked for.
+function setLastHtml(last, s){
+  const c = last?.perSet?.[s];
+  if(!c) return '';
+  const text = c.weight > 0 ? `${c.reps} × ${c.weight}` : `${c.reps} reps`;
+  return `<div class="set-last" title="Set ${s + 1} last time: ${text}">${text}</div>`;
 }
 async function acceptSuggestion(dayIdx, b, i){
   const session = await metricsSession(dayIdx);
@@ -6967,7 +7000,8 @@ function openMetricNote(el, key){
 // they read as a pair, and a note behind a small affordance. Every field is optional.
 function metricsStripHtml(session, b, i, {editable = true} = {}){
   const v = Metrics.values(session, b, i);
-  const shown = v.durationMin ?? Metrics.prescribedMin(Metrics.item(session, b, i));
+  // A read-only strip is a record: it never fills in the prescribed duration as if it had been logged.
+  const shown = v.durationMin ?? (editable ? Metrics.prescribedMin(Metrics.item(session, b, i)) : null);
   const key = `${b}-${i}`;
   const dis = editable ? '' : ' disabled';
   const opts = [`<option value=""${shown == null ? ' selected' : ''}>—</option>`]
@@ -6981,7 +7015,7 @@ function metricsStripHtml(session, b, i, {editable = true} = {}){
         <div class="scale-ends"><span>${sc.lo}</span><span>${sc.hi}</span></div>
       </div>`).join('');
   const noteOpen = openNotes.has(key) || !!v.note;
-  return `<div class="metrics-strip" data-metrics="${key}">
+  return `<div class="metrics-strip${editable ? '' : ' is-record'}" data-metrics="${key}">
     <div class="metrics-line">
       <label class="metrics-field"><span>Duration</span>
         <select class="pe-input"${dis} onchange="setMetricDuration(${activeDay},${b},${i},this.value)">${opts}</select></label>
@@ -6990,11 +7024,11 @@ function metricsStripHtml(session, b, i, {editable = true} = {}){
           value="${v.distanceMi ?? ''}" onchange="setMetricDistance(${activeDay},${b},${i},this.value)"></label>` : ''}
     </div>
     ${scales}
-    <div class="metrics-note${noteOpen ? ' open' : ''}">
+    ${editable || v.note ? `<div class="metrics-note${noteOpen ? ' open' : ''}">
       <button type="button" class="metrics-note-btn"${dis} onclick="openMetricNote(this,'${key}')">+ Add note</button>
       <input class="pe-input metrics-note-input" type="text" maxlength="140" placeholder="How did it go?"${dis}
         value="${escapeAttr(v.note)}" onchange="setMetricNote(${activeDay},${b},${i},this.value)">
-    </div>
+    </div>` : ''}
   </div>`;
 }
 
@@ -7021,12 +7055,28 @@ function setPastDayDone(done){
   renderWorkoutContent();
   toast(`${formatViewDateLabel(s.date)} marked ${done ? 'done' : 'not done'}`);
 }
-// The foot of the session. On an unlocked past day that is already done it offers the reverse.
+// How a locked past day's session ended: done, under way but never marked complete, or not begun.
+// Null on any other day, an unlocked one, or another weekday's preview pill. A day with no session
+// row reads the legacy completion flag and logs, as the rest of the legacy render does.
+function pastState(session, dateKey){
+  if(!(dateKey < todayKey()) || isPastEditing() || !isSessionDay(activeDay)) return null;
+  if(session ? session.status === 'done' : (state.workoutsCompleted || []).includes(`${dateKey}-${activeDay}`)) return {done: true, label: 'Completed'};
+  const started = session ? Session.hasStartedWork(session) || session.status === 'in_progress' : Session.hasLegacyLog(dateKey, activeDay);
+  return {done: false, label: started ? 'In progress · not marked complete' : 'Not started'};
+}
+function pastStateNote(session, dateKey){
+  const p = pastState(session, dateKey);
+  return p ? `<span class="workout-meta-note workout-meta-state${p.done ? ' done' : ''}">${p.label}</span>` : '';
+}
+// The foot of the session. On an unlocked past day that is already done it offers the reverse; on a
+// locked one it says how the day ended instead of offering a dimmed button that reads the same either way.
 function workoutDoneBtn(session, only){
   if(isPastEditing() && session?.status === 'done') return `<button class="btn btn-secondary btn-lg btn-full workout-done" onclick="setPastDayDone(false)">
       <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
       Mark not done
     </button>`;
+  const past = pastState(session, viewKey());
+  if(past) return `<div class="workout-state${past.done ? ' done' : ''}">${past.done ? CHECK_SVG : ''}${past.label}</div>`;
   return `<button class="btn btn-primary btn-lg btn-full editable-only${only} workout-done" onclick="markWorkoutDone()">
       <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
       Mark session complete
